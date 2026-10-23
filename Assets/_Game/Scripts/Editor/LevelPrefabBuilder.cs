@@ -21,6 +21,9 @@ namespace BounJam.EditorTools
         public const string FirePath = "Assets/_Game/Prefabs/Level/Fire.prefab";
         public const string LevelPath = "Assets/_Game/Prefabs/Level/Level.prefab";
         public const string TreePath = "Assets/_Game/Prefabs/Level/Tree.prefab";
+        public const string PitPath = "Assets/_Game/Prefabs/Level/Pit.prefab";
+        public const string CrumblingPath = "Assets/_Game/Prefabs/Level/CrumblingGround.prefab";
+        public const string GroundPath = "Assets/_Game/Prefabs/Level/GroundBlock.prefab";
         const string ParticleMaterialPath = "Assets/_Game/Art/VFX/Fire_Particle.mat";
         const string UrpParticleMaterialPath = "Packages/com.unity.render-pipelines.universal/Runtime/Materials/ParticlesUnlit.mat";
 
@@ -40,6 +43,9 @@ namespace BounJam.EditorTools
             BuildPrefab(FirePath, new GameObject("Fire", typeof(LiquidTarget), typeof(Fire)), FillFire);
             BuildPrefab(LevelPath, new GameObject("Level", typeof(LevelManager)), FillLevel);
             BuildPrefab(TreePath, new GameObject("Tree", typeof(ChewableTree)), FillTree);
+            BuildPrefab(PitPath, new GameObject("Pit", typeof(BoxCollider), typeof(KillZone)), FillPit);
+            BuildPrefab(CrumblingPath, new GameObject("Crumbling Ground", typeof(BoxCollider), typeof(CrumblingGround)), FillCrumbling);
+            BuildPrefab(GroundPath, new GameObject("Ground Block"), FillGround);
             Debug.Log("[BounJam] Built level prefabs.");
         }
 
@@ -137,6 +143,70 @@ namespace BounJam.EditorTools
             float fallAngle = Mathf.Acos((canopyRadius - stumpHeight) / canopyHeight) * Mathf.Rad2Deg;
             BuilderUtility.SetValues(root.GetComponent<ChewableTree>(),
                 ("trunk", trunk), ("trunkRadius", trunkRadius), ("fallAngle", fallAngle), ("chips", chips));
+        }
+
+        // An invisible 6 x 2 x 6 m kill volume hanging below its origin: place the origin about 2 m under
+        // the gap in the ground and scale it to cover the gap.
+        static void FillPit(GameObject root)
+        {
+            root.layer = GameLayers.Trigger;
+            var box = root.GetComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.center = new Vector3(0f, -1f, 0f);
+            box.size = new Vector3(6f, 2f, 6f);
+
+            // Unlit black just under the ground, so the pit reads as a deep hole instead of showing the sky.
+            GameObject darkness = BuilderUtility.VisualPrimitive(PrimitiveType.Quad, "Darkness", root.transform,
+                new Vector3(0f, 0.8f, 0f), new Vector3(6f, 6f, 1f), AbyssMaterial());
+            darkness.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        }
+
+        // A 2 x 2 m slab whose top sits at the origin, with a trigger just above it to notice the beaver.
+        static void FillCrumbling(GameObject root)
+        {
+            root.layer = GameLayers.Trigger;
+            var trigger = root.GetComponent<BoxCollider>();
+            trigger.isTrigger = true;
+            trigger.center = new Vector3(0f, 0.25f, 0f);
+            trigger.size = new Vector3(1.9f, 0.5f, 1.9f);
+
+            GameObject slab = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            slab.name = "Slab";
+            slab.layer = GameLayers.Ground;
+            slab.transform.SetParent(root.transform, false);
+            slab.transform.localPosition = new Vector3(0f, -0.15f, 0f);
+            slab.transform.localScale = new Vector3(2f, 0.3f, 2f);
+            slab.GetComponent<MeshRenderer>().sharedMaterial =
+                BuilderUtility.FlatMaterial("Greybox_Crumbling", new Color(0.6f, 0.5f, 0.4f));
+            BuilderUtility.SetValues(root.GetComponent<CrumblingGround>(), ("slab", slab.transform));
+        }
+
+        // A 4 x 1 x 4 m floor piece whose top sits at the origin, for building levels with gaps in them.
+        static void FillGround(GameObject root)
+        {
+            root.layer = GameLayers.Ground;
+            root.isStatic = true;
+            GameObject block = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            block.name = "Block";
+            block.layer = GameLayers.Ground;
+            block.isStatic = true;
+            block.transform.SetParent(root.transform, false);
+            block.transform.localPosition = new Vector3(0f, -0.5f, 0f);
+            block.transform.localScale = new Vector3(4f, 1f, 4f);
+            block.GetComponent<MeshRenderer>().sharedMaterial =
+                BuilderUtility.FlatMaterial("Greybox_Ground", new Color(0.42f, 0.55f, 0.36f));
+        }
+
+        static Material AbyssMaterial()
+        {
+            const string path = "Assets/_Game/Art/Materials/Abyss.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material != null)
+                return material;
+            material = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "Abyss" };
+            material.SetColor("_BaseColor", Color.black);
+            AssetDatabase.CreateAsset(material, path);
+            return material;
         }
 
         static void TreePart(PrimitiveType shape, string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)

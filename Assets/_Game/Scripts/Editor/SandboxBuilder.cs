@@ -54,7 +54,11 @@ namespace BounJam.EditorTools
             Material accent = BuilderUtility.FlatMaterial("Greybox_Accent", new Color(0.85f, 0.55f, 0.30f));
 
             Transform environment = new GameObject("Environment").transform;
-            Block("Floor", environment, new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60), ground);
+            // The 60 x 60 m floor leaves a 6 x 6 m pit at x -16..-10, z -8..-2, west of the spawn point.
+            Block("Floor East", environment, new Vector3(10, -0.5f, 0), new Vector3(40, 1, 60), ground);
+            Block("Floor West", environment, new Vector3(-23, -0.5f, 0), new Vector3(14, 1, 60), ground);
+            Block("Floor South", environment, new Vector3(-13, -0.5f, -19), new Vector3(6, 1, 22), ground);
+            Block("Floor North", environment, new Vector3(-13, -0.5f, 14), new Vector3(6, 1, 32), ground);
             for (int i = 1; i <= 3; i++)
             {
                 float height = 0.5f * i;
@@ -87,6 +91,10 @@ namespace BounJam.EditorTools
             Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(1f, 0, -5f)).name = "Snack Tree";
             Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(-8f, 0, -4f));
             Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(7f, 0, 10f));
+            // The pit, with a path of crumbling slabs across it: keep running and you make it.
+            Place(LevelPrefabBuilder.PitPath, gameplay, new Vector3(-13f, -2f, -5f));
+            for (int i = 0; i < 3; i++)
+                Place(LevelPrefabBuilder.CrumblingPath, gameplay, new Vector3(-11f - 2f * i, 0f, -5f));
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddToBuildSettings();
