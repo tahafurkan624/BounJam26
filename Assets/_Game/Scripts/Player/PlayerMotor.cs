@@ -33,6 +33,8 @@ namespace BounJam.Player
 
         public Vector3 Velocity => velocity;
         public bool IsGrounded => controller.isGrounded;
+        /// <summary>A flat direction to face instead of the movement direction, e.g. while spraying.</summary>
+        public Vector3? FacingOverride { get; set; }
 
         void Awake()
         {
@@ -69,10 +71,11 @@ namespace BounJam.Player
             if ((hits & CollisionFlags.Above) != 0 && velocity.y > 0f)
                 velocity.y = 0f;
 
-            if (wishVelocity.sqrMagnitude > 0.01f)
+            Vector3 facing = FacingOverride ?? wishVelocity;
+            if (facing.sqrMagnitude > 0.01f)
             {
-                Quaternion facing = Quaternion.LookRotation(wishVelocity);
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, facing, turnSpeed * dt);
+                Quaternion rotation = Quaternion.LookRotation(facing);
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, rotation, turnSpeed * dt);
             }
         }
     }

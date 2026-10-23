@@ -14,6 +14,7 @@ namespace BounJam.Core
         public const int Tree = 10;         // standing and fallen trees; they block liquid
         public const int Interactable = 11; // buttons, fires and other things liquid acts on
         public const int Trigger = 12;      // pickups, kill zones and other trigger volumes
+        public const int LiquidHitbox = 13; // solid colliders that only liquid hits, e.g. around a fire
 
         public static readonly (int index, string name)[] Custom =
         {
@@ -24,10 +25,11 @@ namespace BounJam.Core
             (Tree, nameof(Tree)),
             (Interactable, nameof(Interactable)),
             (Trigger, nameof(Trigger)),
+            (LiquidHitbox, nameof(LiquidHitbox)),
         };
 
-        /// <summary>Everything physical except the player and trigger volumes: what aim rays and liquid hit.</summary>
-        public static readonly int Solid = MaskOf(Default, Ground, Enemy, Pushable, Tree, Interactable);
+        /// <summary>What liquid particles and the aiming ray hit: everything except the player and triggers.</summary>
+        public static readonly int Shootable = MaskOf(Default, Ground, Enemy, Pushable, Tree, Interactable, LiquidHitbox);
 
         public static int MaskOf(params int[] layers)
         {

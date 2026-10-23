@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b30abc641c4850c34b326b067986ebf1, type: 3}
+  m_Name: Bouncy
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.Liquids.LiquidType
+  displayName: Bouncy Goo
+  kind: 2
+  color: {r: 1, g: 0.4, b: 0.8, a: 0.9}
+  isInfinite: 0
+  capacity: 5
+  flowPerSecond: 1
+  particlesPerSecond: 50
+  launchSpeed: 13
+  gravityModifier: 0.8
+  particleSize: 0.28
+  pushPerUnit: 0

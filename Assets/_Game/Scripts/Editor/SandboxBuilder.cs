@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using BounJam.Core;
+using BounJam.Liquids;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -23,13 +24,20 @@ namespace BounJam.EditorTools
 
         internal static void Build()
         {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogError("[BounJam] Exit Play Mode before rebuilding the sandbox.");
+                return;
+            }
+            if (!File.Exists(PlayerPrefabBuilder.SpawnPath))
+                PlayerPrefabBuilder.Build();
+            if (!File.Exists(PlayerPrefabBuilder.SpawnPath))
+                return; // PlayerPrefabBuilder has logged why, e.g. it is waiting for the TextMeshPro import
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 Debug.Log("[BounJam] Sandbox not built. Use BounJam > Setup > Rebuild Sandbox Scene when ready.");
                 return;
             }
-            if (!File.Exists(PlayerPrefabBuilder.SpawnPath))
-                PlayerPrefabBuilder.Build();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
             // The player rig brings its own camera.
@@ -50,6 +58,13 @@ namespace BounJam.EditorTools
             Block("Ramp", environment, new Vector3(-6, 0.85f, 6), new Vector3(3, 0.3f, 8.25f), block, -14f);
             Block("Platform", environment, new Vector3(-6, 1, 13), new Vector3(3, 2, 6), block);
             Block("Target Wall", environment, new Vector3(4, 1.5f, 16), new Vector3(8, 3, 0.5f), accent);
+
+            // Things to spray at: two loose objects water pushes, and a post that logs the liquid it gets.
+            Material pushable = BuilderUtility.FlatMaterial("Greybox_Pushable", new Color(0.95f, 0.8f, 0.35f));
+            Transform props = new GameObject("Test Props").transform;
+            Pushable(PrimitiveType.Cube, "Pushable Cube", props, new Vector3(2.5f, 0.5f, -1f), 1f, pushable);
+            Pushable(PrimitiveType.Sphere, "Pushable Sphere", props, new Vector3(-2.5f, 0.4f, -1f), 0.8f, pushable);
+            LiquidProbe(props, new Vector3(0f, 0.75f, -2.5f), accent);
 
             Transform gameplay = new GameObject("Gameplay").transform;
             var spawn = (GameObject)PrefabUtility.InstantiatePrefab(
@@ -72,6 +87,31 @@ namespace BounJam.EditorTools
             go.transform.SetPositionAndRotation(position, Quaternion.Euler(pitch, 0, 0));
             go.transform.localScale = size;
             go.GetComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        static void Pushable(PrimitiveType shape, string name, Transform parent, Vector3 position, float size, Material material)
+        {
+            GameObject go = GameObject.CreatePrimitive(shape);
+            go.name = name;
+            go.layer = GameLayers.Pushable;
+            go.transform.SetParent(parent);
+            go.transform.position = position;
+            go.transform.localScale = Vector3.one * size;
+            go.GetComponent<MeshRenderer>().sharedMaterial = material;
+            go.AddComponent<Rigidbody>().mass = 1f;
+        }
+
+        // On the LiquidHitbox layer: liquid hits it, but the player walks straight through.
+        static void LiquidProbe(Transform parent, Vector3 position, Material material)
+        {
+            GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = "Liquid Probe";
+            go.layer = GameLayers.LiquidHitbox;
+            go.transform.SetParent(parent);
+            go.transform.position = position;
+            go.transform.localScale = new Vector3(0.6f, 0.75f, 0.6f);
+            go.GetComponent<MeshRenderer>().sharedMaterial = material;
+            go.AddComponent<LiquidHitProbe>();
         }
 
         static void AddToBuildSettings()

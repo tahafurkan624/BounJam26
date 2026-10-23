@@ -14,7 +14,8 @@ namespace BounJam.EditorTools
     /// Lets tools outside Unity (such as Claude Code) drive the open editor. Each *.cmd file dropped in
     /// Library/BounJamCommands holds one command; files run in name order and are deleted as they start.
     /// Commands: refresh | call Namespace.Type.Method | open Assets/Scene.unity | play | stop |
-    /// wait seconds | screenshot path | hierarchy. Results go to the Console and Editor.log.
+    /// wait seconds | screenshot path | hierarchy | where ObjectName | input InputSimulatorCommand
+    /// (e.g. "input hold &lt;Keyboard&gt;/w 1"; see InputSimulator.Execute). Results go to the Console and Editor.log.
     /// </summary>
     [InitializeOnLoad]
     static class ExternalCommands
@@ -36,6 +37,11 @@ namespace BounJam.EditorTools
                 || EditorApplication.isCompiling || EditorApplication.isUpdating)
                 return;
             nextPoll = now + 0.25;
+            if (!Directory.Exists(Folder))
+            {
+                Directory.CreateDirectory(Folder);
+                return;
+            }
 
             string file = Directory.GetFiles(Folder, "*.cmd").OrderBy(f => f, StringComparer.Ordinal).FirstOrDefault();
             if (file == null)
@@ -85,6 +91,15 @@ namespace BounJam.EditorTools
                     break;
                 case "hierarchy":
                     LogHierarchy();
+                    break;
+                case "input":
+                    InputSimulator.Execute(argument);
+                    break;
+                case "where":
+                    GameObject found = GameObject.Find(argument);
+                    Debug.Log(found != null
+                        ? $"[BounJam] {argument} is at {found.transform.position:F2}"
+                        : $"[BounJam] No active object named {argument}");
                     break;
                 default:
                     Debug.LogError($"[BounJam] Unknown external command '{verb}'.");

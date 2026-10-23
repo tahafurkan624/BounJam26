@@ -1,5 +1,7 @@
+using System.IO;
 using System.Linq;
 using BounJam.Core;
+using TMPro;
 using UnityEditor;
 using UnityEngine;
 
@@ -41,9 +43,18 @@ namespace BounJam.EditorTools
             int triggerContacts = GameLayers.MaskOf(GameLayers.Player, GameLayers.Enemy, GameLayers.Pushable);
             for (int layer = 0; layer < 32; layer++)
                 Physics.IgnoreLayerCollision(GameLayers.Trigger, layer, (triggerContacts & (1 << layer)) == 0);
+            // Liquid hitboxes only catch particles, which don't use this matrix; nothing else may touch them.
+            for (int layer = 0; layer < 32; layer++)
+                Physics.IgnoreLayerCollision(GameLayers.LiquidHitbox, layer, true);
 
             AssetDatabase.SaveAssets();
             Debug.Log("[BounJam] Layers and physics rules applied.");
         }
+
+        public static bool TextMeshProReady => File.Exists("Assets/TextMesh Pro/Resources/TMP Settings.asset");
+
+        /// <summary>Imports TextMeshPro's default font and settings, which the HUD text needs.</summary>
+        [MenuItem("BounJam/Setup/Import TextMeshPro Essentials")]
+        public static void ImportTextMeshProEssentials() => TMP_PackageResourceImporter.ImportResources(true, false, false);
     }
 }

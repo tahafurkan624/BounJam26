@@ -22,9 +22,13 @@ namespace BounJam.Player
         float yaw;
         float pitch;
         int framesToIgnoreLook;
+        bool clickCapturedCursor;
 
         /// <summary>The camera's heading without its pitch; movement input is relative to this.</summary>
         public Quaternion PlanarRotation => Quaternion.Euler(0f, yaw, 0f);
+
+        /// <summary>False while the click that captured the cursor is still held, so that click doesn't also spray.</summary>
+        public bool FireAllowed => !clickCapturedCursor;
 
         void Awake()
         {
@@ -46,11 +50,17 @@ namespace BounJam.Player
 
         void Update()
         {
+            if (clickCapturedCursor && !input.FireHeld)
+                clickCapturedCursor = false;
+
             // Esc frees the cursor in the editor; clicking back into the game captures it again.
             if (Cursor.lockState != CursorLockMode.Locked)
             {
                 if (input.FirePressed)
+                {
                     LockCursor();
+                    clickCapturedCursor = true;
+                }
             }
             else if (framesToIgnoreLook > 0)
             {
