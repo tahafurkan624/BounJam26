@@ -21,7 +21,7 @@ namespace BounJam.EditorTools
         const string BlobPrefabPath = "Assets/_Game/Prefabs/Blob.prefab";
         const string GridShaderName = "BounJam/Greybox Grid";
 
-        static readonly string[] GeneratedRoots = { "Level", "Blob", "CM FollowCam", "Game" };
+        static readonly string[] GeneratedRoots = { "Level", "Blob", "PaperShip", "CM FollowCam", "Game" };
         // Core resting on the floor, so the blob also sits on the ground in the editor.
         static readonly Vector3 SpawnPoint = new Vector3(0f, CoreRadius, -12f);
         static readonly Vector3 CameraOffset = new Vector3(0f, 9f, -7.5f);
@@ -29,10 +29,14 @@ namespace BounJam.EditorTools
         const float CoreRadius = 0.3f;
         const float BlobRadius = 0.5f;
         const string RestPreviewMeshPath = "Assets/_Game/Art/Models/Blob_RestPreview.asset";
+        const string ShipModelPath = "Assets/_Game/Art/Models/PaperShip.fbx";
+        const string ShipPrefabPath = "Assets/_Game/Prefabs/PaperShip.prefab";
+        // Dropped from just above the resting blob so it settles onto the jelly.
+        static readonly Vector3 ShipSpawnOffset = new Vector3(0f, 1.0f, 0f);
 
         struct Palette
         {
-            public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob;
+            public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob, Paper;
         }
 
         [MenuItem("BounJam/Build Sandbox Level")]
@@ -57,6 +61,11 @@ namespace BounJam.EditorTools
             if (blobPrefab == null) blobPrefab = BuildBlobPrefab(palette.Blob);
             var blob = (GameObject)PrefabUtility.InstantiatePrefab(blobPrefab);
             blob.transform.position = SpawnPoint;
+
+            GameObject shipPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ShipPrefabPath);
+            if (shipPrefab == null) shipPrefab = BuildShipPrefab(palette.Paper);
+            var ship = (GameObject)PrefabUtility.InstantiatePrefab(shipPrefab);
+            ship.transform.position = SpawnPoint + ShipSpawnOffset;
             BuildCamera(blob.transform);
             BuildGame(blob.transform);
 
@@ -85,6 +94,13 @@ namespace BounJam.EditorTools
             Grate = GridMaterial("Greybox_Grate", new Color(0.30f, 0.55f, 0.95f), new Color(0.12f, 0.25f, 0.55f), 0.2f),
             // The jelly shader's property defaults are the tuned look; the material only needs creating.
             Blob = LoadOrCreate($"{MaterialsFolder}/Blob_Jelly.mat", () => new Material(Shader.Find("BounJam/Jelly"))),
+            Paper = LoadOrCreate($"{MaterialsFolder}/PaperShip_Paper.mat", () =>
+            {
+                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                material.SetColor("_BaseColor", new Color(0.93f, 0.91f, 0.84f));
+                material.SetFloat("_Smoothness", 0.15f);
+                return material;
+            }),
         };
 
         static void BuildLevel(Palette m)
@@ -193,6 +209,60 @@ namespace BounJam.EditorTools
             skinSettings.ApplyModifiedPropertiesWithoutUndo();
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
+        /// <summary>Regenerates the PaperShip prefab from the imported model with code defaults.</summary>
+        [MenuItem("BounJam/Rebuild Ship Prefab")]
+        public static void RebuildShipPrefab()
+        {
+            BuildShipPrefab(CreatePalette().Paper);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[BounJam] Ship prefab rebuilt.");
+        }
+
+        static GameObject BuildShipPrefab(Material paper)
+        {
+            Mesh mesh = null;
+            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(ShipModelPath))
+                if (asset is Mesh found) mesh = found;
+            if (mesh == null) throw new System.InvalidOperationException($"No mesh in {ShipModelPath}; run Tools/Blender/make_paper_ship.py first.");
+
+            var root = new GameObject("PaperShip") { layer = LayerMask.NameToLayer("Ship") };
+            var model = new GameObject("Model") { layer = root.layer };
+            model.transform.SetParent(root.transform, false);
+            model.AddComponent<MeshFilter>().sharedMesh = mesh;
+            model.AddComponent<MeshRenderer>().sharedMaterial = paper;
+
+            // The boat's length should run along Z; turn the model if the export came out sideways.
+            Bounds bounds = mesh.bounds;
+            if (bounds.size.x > bounds.size.z)
+            {
+                model.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
+                bounds.size = new Vector3(bounds.size.z, bounds.size.y, bounds.size.x);
+            }
+            Debug.Log($"[BounJam] Ship model size {bounds.size.x:0.000} x {bounds.size.y:0.000} x {bounds.size.z:0.000}, bottom {bounds.min.y:0.000}");
+
+            var body = root.AddComponent<Rigidbody>();
+            body.mass = 0.25f;
+            body.interpolation = RigidbodyInterpolation.Interpolate;
+            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            body.angularDamping = 0.5f;
+
+            // Hull plus a slim sail box, so low ceilings and overhangs can knock the ship off the blob.
+            const float hullHeight = 0.14f;
+            var hull = root.AddComponent<BoxCollider>();
+            hull.center = new Vector3(0f, bounds.min.y + hullHeight * 0.5f, 0f);
+            hull.size = new Vector3(bounds.size.x, hullHeight, bounds.size.z * 0.9f);
+            float sailHeight = bounds.max.y - (bounds.min.y + hullHeight);
+            var sail = root.AddComponent<BoxCollider>();
+            sail.center = new Vector3(0f, bounds.min.y + hullHeight + sailHeight * 0.5f, 0f);
+            sail.size = new Vector3(0.05f, sailHeight, bounds.size.z * 0.35f);
+
+            root.AddComponent<ShipBuoyancy>();
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, ShipPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
         }

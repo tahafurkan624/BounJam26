@@ -110,6 +110,57 @@ namespace BounJam
         /// <summary>Current volume divided by rest volume.</summary>
         public float VolumeRatio { get; private set; } = 1f;
 
+        /// <summary>The blob's top surface at one spot, from <see cref="TrySampleSurface"/>.</summary>
+        public struct SurfaceSample
+        {
+            public float Height;
+            public Vector3 Velocity;
+            public Vector3 Normal;
+        }
+
+        /// <summary>
+        /// Finds the top of the skin straight above or below a point (only its x and z matter).
+        /// Returns false when the point is outside the blob's footprint.
+        /// </summary>
+        public bool TrySampleSurface(Vector3 point, out SurfaceSample sample)
+        {
+            sample = default;
+            if (!initialised) return false;
+
+            float reach = radius * 3f;
+            float dx = point.x - ShapeCenter.x, dz = point.z - ShapeCenter.z;
+            if (dx * dx + dz * dz > reach * reach) return false;
+
+            // Every skin triangle whose footprint covers the point; the highest one is the top surface.
+            float bestHeight = float.NegativeInfinity;
+            int bestFace = -1;
+            float bestA = 0f, bestB = 0f, bestC = 0f;
+            for (int f = 0; f < triangles.Length; f += 3)
+            {
+                Vector3 a = positions[triangles[f]], b = positions[triangles[f + 1]], c = positions[triangles[f + 2]];
+                float denominator = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+                if (Mathf.Abs(denominator) < 1e-8f) continue;
+                float wa = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / denominator;
+                float wb = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / denominator;
+                float wc = 1f - wa - wb;
+                if (wa < 0f || wb < 0f || wc < 0f) continue;
+
+                float height = wa * a.y + wb * b.y + wc * c.y;
+                if (height <= bestHeight) continue;
+                bestHeight = height;
+                bestFace = f;
+                bestA = wa; bestB = wb; bestC = wc;
+            }
+            if (bestFace < 0) return false;
+
+            int ia = triangles[bestFace], ib = triangles[bestFace + 1], ic = triangles[bestFace + 2];
+            Vector3 normal = Vector3.Cross(positions[ib] - positions[ia], positions[ic] - positions[ia]).normalized;
+            sample.Height = bestHeight;
+            sample.Velocity = velocities[ia] * bestA + velocities[ib] * bestB + velocities[ic] * bestC;
+            sample.Normal = normal.y >= 0f ? normal : -normal;
+            return true;
+        }
+
         void Awake()
         {
             motor = GetComponent<BlobMotor>();

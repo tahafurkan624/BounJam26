@@ -197,6 +197,8 @@ namespace BounJam.EditorTools
             }
             if (target.TryGetComponent(out BlobSkin skin))
                 result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
+            if (target.TryGetComponent(out ShipBuoyancy ship))
+                result += string.Format(CultureInfo.InvariantCulture, " floating={0} tilt={1:0.0}", ship.IsFloating, Vector3.Angle(target.transform.up, Vector3.up));
             return result;
         }
 
