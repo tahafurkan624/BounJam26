@@ -10,7 +10,7 @@ namespace BounJam.EditorTools
 {
     /// <summary>
     /// Shared building blocks for the level builders: materials, greybox shapes, crates, buttons, movers, hot plates,
-    /// the dock, the HUD, the player prefabs and the follow camera. Assets (materials, physics materials, prefabs)
+    /// water pools, the dock, the HUD, the player and water prefabs and the follow camera. Assets (materials, physics materials, prefabs)
     /// are only created when missing, so tweaks made in the editor survive a rebuild.
     /// </summary>
     public static class LevelKit
@@ -18,6 +18,7 @@ namespace BounJam.EditorTools
         public const string MaterialsFolder = "Assets/_Game/Art/Materials";
         public const string BlobPrefabPath = "Assets/_Game/Prefabs/Blob.prefab";
         public const string ShipPrefabPath = "Assets/_Game/Prefabs/PaperShip.prefab";
+        public const string WaterPrefabPath = "Assets/_Game/Prefabs/Water.prefab";
         const string ShipModelPath = "Assets/_Game/Art/Models/PaperShip.fbx";
         const string RestPreviewMeshPath = "Assets/_Game/Art/Models/Blob_RestPreview.asset";
         const string VolumeProfilePath = "Assets/Settings/SampleSceneProfile.asset";
@@ -33,7 +34,7 @@ namespace BounJam.EditorTools
         public struct Palette
         {
             public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob, Paper;
-            public Material Door, Lift, ButtonIdle, ButtonPressed, HotPlate, DockPad, DockPost;
+            public Material Door, Lift, ButtonIdle, ButtonPressed, HotPlate, DockPad, DockPost, Water;
             public PhysicsMaterial CratePhysics;
         }
 
@@ -55,6 +56,8 @@ namespace BounJam.EditorTools
             HotPlate = LitMaterial("Hazard_HotPlate", new Color(0.90f, 0.25f, 0.10f), 0.6f, new Color(1.2f, 0.30f, 0.05f)),
             DockPad = LitMaterial("Dock_Pad", new Color(0.20f, 0.70f, 1.00f), 0.5f, new Color(0.12f, 0.42f, 0.60f)),
             DockPost = LitMaterial("Dock_Post", new Color(0.85f, 0.95f, 1.00f), 0.5f, new Color(0.50f, 0.80f, 1.00f)),
+            // Like the jelly, the water shader's property defaults are the tuned look.
+            Water = LoadOrCreate($"{MaterialsFolder}/Water.mat", () => new Material(Shader.Find("BounJam/Water"))),
             // Slick enough that the solid can shove a crate along at a slow, heavy pace. Minimum combine keeps it
             // slick against everything, so a pushing crystal slides along its face instead of rolling up it.
             CratePhysics = LoadOrCreate($"{MaterialsFolder}/Crate_Physics.asset", () => new PhysicsMaterial("Crate")
@@ -193,6 +196,60 @@ namespace BounJam.EditorTools
             heat.AddComponent<HazardZone>();
         }
 
+        /// <summary>
+        /// A floor slab like <see cref="Floor"/> (<paramref name="floor"/> is its x/z footprint) with a pool sunk into
+        /// it (<paramref name="pool"/>, inside the floor): a basin <paramref name="depth"/> deep, filled with water up to
+        /// <paramref name="waterBelowFloor"/> under the floor top, so the liquid can roll right up to the edge and only
+        /// falls in past it.
+        /// </summary>
+        public static Water FloorWithPool(string name, Transform parent, Rect floor, Rect pool, float top, float depth,
+                                          float waterBelowFloor, Palette m)
+        {
+            Transform root = Group(name, parent);
+            // Four slabs around the hole: full-width strips south and north, short pieces west and east.
+            Slab("Floor South", root, floor.xMin, floor.xMax, floor.yMin, pool.yMin, top, 1f, m.Floor);
+            Slab("Floor North", root, floor.xMin, floor.xMax, pool.yMax, floor.yMax, top, 1f, m.Floor);
+            Slab("Floor West", root, floor.xMin, pool.xMin, pool.yMin, pool.yMax, top, 1f, m.Floor);
+            Slab("Floor East", root, pool.xMax, floor.xMax, pool.yMin, pool.yMax, top, 1f, m.Floor);
+
+            // The basin: a bottom under the hole and, below the floor slab, walls closing it in.
+            float bottom = top - depth;
+            Slab("Pool Bottom", root, pool.xMin, pool.xMax, pool.yMin, pool.yMax, bottom, 1f, m.Structure);
+            if (depth > 1f)
+            {
+                const float wall = 0.5f;
+                float wallTop = top - 1f, wallHeight = depth - 1f;
+                Slab("Pool Wall South", root, pool.xMin - wall, pool.xMax + wall, pool.yMin - wall, pool.yMin, wallTop, wallHeight, m.Structure);
+                Slab("Pool Wall North", root, pool.xMin - wall, pool.xMax + wall, pool.yMax, pool.yMax + wall, wallTop, wallHeight, m.Structure);
+                Slab("Pool Wall West", root, pool.xMin - wall, pool.xMin, pool.yMin, pool.yMax, wallTop, wallHeight, m.Structure);
+                Slab("Pool Wall East", root, pool.xMax, pool.xMax + wall, pool.yMin, pool.yMax, wallTop, wallHeight, m.Structure);
+            }
+
+            float surface = top - waterBelowFloor;
+            return WaterVolume("Water", root, new Vector3(pool.center.x, (bottom + surface) * 0.5f, pool.center.y),
+                               new Vector3(pool.width, surface - bottom, pool.height), m);
+        }
+
+        /// <summary>A box spanning x0..x1 and z0..z1, <paramref name="thickness"/> thick under <paramref name="top"/>. Empty spans are skipped.</summary>
+        static void Slab(string name, Transform parent, float x0, float x1, float z0, float z1, float top, float thickness, Material material)
+        {
+            if (x1 - x0 < 0.001f || z1 - z0 < 0.001f) return;
+            Box(name, parent, new Vector3((x0 + x1) * 0.5f, top - thickness * 0.5f, (z0 + z1) * 0.5f),
+                new Vector3(x1 - x0, thickness, z1 - z0), material);
+        }
+
+        /// <summary>A body of water filling the box at <paramref name="center"/> of <paramref name="size"/>; its surface is the box top.</summary>
+        public static Water WaterVolume(string name, Transform parent, Vector3 center, Vector3 size, Palette m)
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(WaterPrefabPath);
+            if (prefab == null) prefab = BuildWaterPrefab(m.Water);
+            var water = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            water.name = name;
+            water.transform.SetPositionAndRotation(center, Quaternion.identity);
+            water.transform.localScale = size;
+            return water.GetComponent<Water>();
+        }
+
         /// <summary>The goal: a glowing pad with corner posts and a beacon. <paramref name="position"/> is on the floor surface.</summary>
         public static ShipDock Dock(string name, Transform parent, Vector3 position, Palette m, ShipBuoyancy ship)
         {
@@ -243,6 +300,7 @@ namespace BounJam.EditorTools
             // Reuse existing prefabs so tuning done in the Inspector survives a level rebuild.
             GameObject blobPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BlobPrefabPath);
             if (blobPrefab == null) blobPrefab = BuildBlobPrefab(m.Blob);
+            else AddMissingBlobParts();
             var blob = (GameObject)PrefabUtility.InstantiatePrefab(blobPrefab);
             blob.transform.position = blobSpawn + Vector3.up * CoreRadius;
 
@@ -446,9 +504,48 @@ namespace BounJam.EditorTools
             formSettings.FindProperty("solidCollider").objectReferenceValue = solidCollider;
             formSettings.FindProperty("skinRenderer").objectReferenceValue = skin.GetComponent<MeshRenderer>();
             formSettings.ApplyModifiedPropertiesWithoutUndo();
+            AddBlobWater(root);
             AddGroundGuard(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
+            Object.DestroyImmediate(root);
+            return prefab;
+        }
+
+        /// <summary>Adds components newer than the saved Blob prefab to it, leaving all its tuning as it is.</summary>
+        static void AddMissingBlobParts()
+        {
+            GameObject root = PrefabUtility.LoadPrefabContents(BlobPrefabPath);
+            if (!root.TryGetComponent(out BlobWater _))
+            {
+                AddBlobWater(root);
+                PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
+                Debug.Log("[BounJam] Blob prefab: added water handling.");
+            }
+            PrefabUtility.UnloadPrefabContents(root);
+        }
+
+        static void AddBlobWater(GameObject root)
+        {
+            var water = root.AddComponent<BlobWater>();
+            var settings = new SerializedObject(water);
+            settings.FindProperty("skinRenderer").objectReferenceValue = root.GetComponentInChildren<MeshRenderer>();
+            settings.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>A unit cube of water, no collider and no shadow; levels scale it to fill pools.</summary>
+        static GameObject BuildWaterPrefab(Material material)
+        {
+            GameObject root = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            root.name = "Water";
+            root.layer = LayerMask.NameToLayer("Water");
+            Object.DestroyImmediate(root.GetComponent<Collider>());
+            var renderer = root.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            root.AddComponent<Water>();
+
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, WaterPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
         }

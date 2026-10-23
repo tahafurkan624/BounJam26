@@ -74,6 +74,8 @@ namespace BounJam
         public bool IsSolid { get; private set; }
         /// <summary>The collider that has the frozen shape (only enabled while solid).</summary>
         public Collider SolidCollider => solidCollider;
+        /// <summary>The frozen shape's collider points, in the blob's local space (only meaningful while solid).</summary>
+        public Vector3[] HullPoints => hullPoints;
         /// <summary>Raised after every form change; true = now solid.</summary>
         public event Action<bool> FormChanged;
 
@@ -147,7 +149,7 @@ namespace BounJam
             body.ResetInertiaTensor();
             body.linearVelocity *= momentumKept;
             body.angularVelocity = Vector3.zero;
-            motor.SetSolid(true);
+            motor.SetSolid(true, solidCollider);
 
             IsSolid = true;
             lastSwitchTime = Time.time;

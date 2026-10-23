@@ -271,6 +271,9 @@ namespace BounJam.EditorTools
                 result += $" rescues={guard.Rescues}";
             if (target.TryGetComponent(out BlobSkin skin))
                 result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
+            if (target.TryGetComponent(out BlobWater water))
+                result += string.Format(CultureInfo.InvariantCulture, " submersion={0:0.00} swimming={1} dissolved={2}",
+                                        water.Submersion, water.GetComponent<BlobMotor>().IsSwimming, water.IsDissolved);
             // Overlay UI isn't in camera screenshots, so report what each HUD text says and how visible it is.
             foreach (var label in target.GetComponentsInChildren<UnityEngine.UI.Text>())
                 result += string.Format(CultureInfo.InvariantCulture, " [{0}: \"{1}\" alpha={2:0.00}]",

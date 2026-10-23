@@ -8,7 +8,8 @@ namespace BounJam.EditorTools
 {
     /// <summary>
     /// Builds the greybox sandbox: a walled arena with every test piece (ramp, steps, low tunnel, narrow gap, bumps,
-    /// grate, crates, buttons, gate, lift, hot plate, a test dock), the blob, the ship, the camera and level logic.
+    /// grate, crates, buttons, gate, lift, hot plate, water pool, a test dock), the blob, the ship, the camera and level
+    /// logic.
     /// It never completes; R or falling restarts it. Running it again replaces everything it created in the scene;
     /// the template's light and volume stay.
     /// </summary>
@@ -51,9 +52,15 @@ namespace BounJam.EditorTools
         {
             var level = new GameObject("Level").transform;
 
-            // Arena: 36 x 36 m floor, top surface at y = 0, low walls all around.
+            // Arena: 36 x 36 m floor, top surface at y = 0, low walls all around. A 7 x 7 m pool is sunk into the
+            // west side: the liquid dissolves in it, the solid floats and swims, and climbs out over the low edge
+            // or up the ramp on its north side.
             Transform arena = Group("Arena", level);
-            Floor("Floor", arena, 0f, 0f, 36f, 36f, 0f, m.Floor);
+            const float poolDepth = 1.6f;
+            FloorWithPool("Floor", arena, new Rect(-18f, -18f, 36f, 36f), new Rect(-16.5f, -12f, 7f, 7f), 0f, poolDepth, 0.15f, m);
+            float rampRise = poolDepth, rampAngle = 20f;
+            Ramp("Pool Ramp", arena, -10.5f, -5f - rampRise / Mathf.Tan(rampAngle * Mathf.Deg2Rad), -poolDepth, rampRise, 2f,
+                 rampAngle, m.Structure);
             Box("Wall North", arena, new Vector3(0f, 0.75f, 18.5f), new Vector3(38f, 1.5f, 1f), m.Wall);
             Box("Wall South", arena, new Vector3(0f, 0.75f, -18.5f), new Vector3(38f, 1.5f, 1f), m.Wall);
             Box("Wall East", arena, new Vector3(18.5f, 0.75f, 0f), new Vector3(1f, 1.5f, 36f), m.Wall);

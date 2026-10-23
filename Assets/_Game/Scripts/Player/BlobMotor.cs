@@ -6,8 +6,8 @@ namespace BounJam
     /// <summary>
     /// Moves the blob's core rigidbody. Input is camera-relative on the ground plane, and the body is
     /// steered toward a target velocity (accelerate while there is input, brake when there isn't),
-    /// so it reacts quickly but still carries momentum. The liquid can jump. The core never rotates; the skin does
-    /// the visuals.
+    /// so it reacts quickly but still carries momentum. The liquid can jump, the solid swims when it floats in water
+    /// (<see cref="BlobWater"/> decides when). The core never rotates; the skin does the visuals.
     /// </summary>
     [RequireComponent(typeof(Rigidbody), typeof(SphereCollider))]
     public class BlobMotor : MonoBehaviour
@@ -30,6 +30,9 @@ namespace BounJam
         [Tooltip("Solid form: pushes itself along the input direction (its frozen shape decides whether it rolls or " +
                  "slides) and brakes, spin included, when there's no input.")]
         [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 1.8f, acceleration = 15f, braking = 6f };
+        [Tooltip("Solid form floating in water: paddles along the input direction, no footing needed, and drifts to a " +
+                 "stop when there's no input.")]
+        [SerializeField] MoveSettings swim = new MoveSettings { maxSpeed = 2.2f, acceleration = 5f, braking = 1.5f };
         [Tooltip("Fraction of acceleration and braking available while airborne.")]
         [Range(0f, 1f)]
         [SerializeField] float airControl = 0.3f;
@@ -61,6 +64,13 @@ namespace BounJam
         [Tooltip("Upward speed while flowing up a step, m/s.")]
         [SerializeField] float stepClimbSpeed = 2.5f;
 
+        [Header("Shore")]
+        [Tooltip("Swimming into the edge of the water climbs out onto a ledge whose top is at most this far above the " +
+                 "crystal's centre, m. Higher walls can't be climbed.")]
+        [SerializeField] float shoreClimbHeight = 0.6f;
+        [Tooltip("Upward speed while climbing out of the water, m/s.")]
+        [SerializeField] float shoreClimbSpeed = 1.5f;
+
         // Below this gap the core counts as touching the ground rather than skimming over it.
         const float ContactGap = 0.02f;
         // Physics steps after a step climb during which hugging and snapping stay off, so they don't undo the lift.
@@ -68,12 +78,20 @@ namespace BounJam
         // Physics steps after a jump during which the ground is ignored: the probe still reaches it for a moment, and
         // hugging, snapping or sticking to it would pull the blob straight back down.
         const int JumpGraceSteps = 6;
+        // A climb out of the water gives up after this many physics steps, in case something holds the crystal back.
+        const int MaxClimbSteps = 75;
+        // Climbing out lifts the crystal's underside this far above the edge before moving it over, m.
+        const float ShoreClearance = 0.05f;
 
         Rigidbody body;
         SphereCollider core;
         int stepsSinceGrounded;
         int stepsSinceClimb = ClimbGraceSteps;
         int stepsSinceJump = JumpGraceSteps;
+        bool climbingOut;
+        float shoreTop;
+        Vector3 climbDirection;
+        int climbSteps;
         // True from a jump until the blob is back on the ground, so coyote time can't give a second jump.
         bool hasJumped;
         float jumpRequestTime = float.NegativeInfinity;
@@ -84,26 +102,42 @@ namespace BounJam
         bool solidGroundContact;
         bool solidCrateContact;
         Vector3 solidGroundNormal = Vector3.up;
+        bool shoreContact;
+        Vector3 shoreNormal;
+        Vector3 shorePoint;
+        Collider solidShape;
         int pushableLayer;
 
         public Rigidbody Body => body;
         public bool IsGrounded { get; private set; }
+        /// <summary>True while the solid floats in water and swims instead of pushing itself along the ground.</summary>
+        public bool IsSwimming { get; private set; }
         public Vector3 GroundNormal { get; private set; } = Vector3.up;
         public Vector3 Velocity => body.linearVelocity;
-        public MoveSettings ActiveSettings => isSolid ? solid : liquid;
+        public MoveSettings ActiveSettings => isSolid ? (IsSwimming ? swim : solid) : liquid;
         /// <summary>Raised on the physics step the blob takes off, with the upward speed the jump added, m/s.</summary>
         public event Action<float> Jumped;
 
         /// <summary>Jumps on the next physics step it can: now if on the ground, or on landing within the jump buffer.</summary>
         public void RequestJump() => jumpRequestTime = Time.time;
 
-        /// <summary>Switches between liquid movement (core sphere) and solid movement (whatever shape is frozen).</summary>
-        public void SetSolid(bool value)
+        /// <summary>
+        /// Switches between liquid movement (core sphere) and solid movement (whatever shape is frozen;
+        /// <paramref name="shape"/> is its collider).
+        /// </summary>
+        public void SetSolid(bool value, Collider shape = null)
         {
             isSolid = value;
+            solidShape = shape;
+            IsSwimming = false;
+            climbingOut = false;
             solidGroundContact = false;
             stepContact = false;
+            shoreContact = false;
         }
+
+        /// <summary>Solid form only: true while floating in water.</summary>
+        public void SetSwimming(bool value) => IsSwimming = value && isSolid;
         /// <summary>Speed along the ground relative to the current top speed; 0 at rest, about 1 at full speed.</summary>
         public float NormalizedSpeed => Vector3.ProjectOnPlane(body.linearVelocity, GroundNormal).magnitude / Mathf.Max(0.01f, ActiveSettings.maxSpeed);
         /// <summary>World radius of the core collider.</summary>
@@ -217,10 +251,17 @@ namespace BounJam
             IsGrounded = solidGroundContact;
             GroundNormal = solidGroundContact ? solidGroundNormal : Vector3.up;
             bool pressingCrate = solidCrateContact;
+            bool pressingShore = shoreContact;
             solidGroundContact = false;
             solidCrateContact = false;
+            shoreContact = false;
 
             Vector3 wish = WishDirection();
+            if (IsSwimming || climbingOut)
+            {
+                Swim(wish, pressingShore);
+                return;
+            }
             if (wish.sqrMagnitude < 0.0001f)
             {
                 if (IsGrounded) BrakeSolid();
@@ -235,6 +276,65 @@ namespace BounJam
             float speedAlongWish = Vector3.Dot(planar, wish.normalized);
             if (speedAlongWish < solid.maxSpeed * wish.magnitude)
                 body.AddForce(wish * solid.acceleration, ForceMode.Acceleration);
+        }
+
+        /// <summary>
+        /// Floating: steered like the liquid, along the water's surface and without needing footing, and drifting to a
+        /// stop without input. Swimming into a low enough edge starts a climb out onto it.
+        /// </summary>
+        void Swim(Vector3 wish, bool pressingShore)
+        {
+            if (climbingOut)
+            {
+                ClimbOut(wish);
+                return;
+            }
+
+            float rate = wish.sqrMagnitude > 0.0001f ? swim.acceleration : swim.braking;
+            Vector3 planar = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
+            Vector3 steered = Vector3.MoveTowards(planar, wish * swim.maxSpeed, rate * Time.fixedDeltaTime);
+            body.AddForce(steered - planar, ForceMode.VelocityChange);
+
+            if (!pressingShore || wish.sqrMagnitude < 0.01f || Vector3.Dot(wish.normalized, -shoreNormal) < 0.3f) return;
+            // The edge's top, looked for just past the contact. From inside a wall taller than the reach the ray
+            // starts inside it and finds nothing, so only low enough edges are climbed.
+            float reach = body.worldCenterOfMass.y + shoreClimbHeight;
+            Vector3 probe = shorePoint - shoreNormal * 0.1f;
+            probe.y = reach;
+            if (!Physics.Raycast(probe, Vector3.down, out RaycastHit top, reach - shorePoint.y, groundMask, QueryTriggerInteraction.Ignore)
+                || top.normal.y < 0.7f)
+                return;
+
+            climbingOut = true;
+            shoreTop = top.point.y;
+            climbDirection = -shoreNormal;
+            climbSteps = 0;
+        }
+
+        /// <summary>
+        /// Climbing out of the water onto the edge it swam into: rise until the underside clears the edge, move over it
+        /// until the centre is above the ledge, then drop on. Letting go of the input drops it back into the water.
+        /// </summary>
+        void ClimbOut(Vector3 wish)
+        {
+            Vector3 center = body.worldCenterOfMass;
+            float bottom = solidShape != null ? solidShape.bounds.min.y : center.y - CoreRadius;
+            bool overLedge = Physics.Raycast(center, Vector3.down, out RaycastHit below, center.y - bottom + 0.1f, groundMask,
+                                             QueryTriggerInteraction.Ignore)
+                             && below.normal.y > 0.7f && below.point.y > shoreTop - 0.05f;
+            if (wish.sqrMagnitude < 0.01f || overLedge || ++climbSteps > MaxClimbSteps)
+            {
+                climbingOut = false;
+                return;
+            }
+
+            // Rising: lean on the edge so it doesn't drift off. Clear of it: hold the height and move over. No spin:
+            // rubbing up the edge would otherwise roll the crystal over backwards.
+            bool rising = bottom < shoreTop + ShoreClearance;
+            Vector3 velocity = climbDirection * (rising ? 0.3f : shoreClimbSpeed);
+            velocity.y = rising ? Mathf.Max(body.linearVelocity.y, shoreClimbSpeed) : Mathf.Max(body.linearVelocity.y, 0f);
+            body.linearVelocity = velocity;
+            body.angularVelocity = Vector3.zero;
         }
 
         void BrakeSolid()
@@ -255,14 +355,23 @@ namespace BounJam
             if (isSolid)
             {
                 if (collision.gameObject.layer == pushableLayer) solidCrateContact = true;
+                // The level itself (fixed, or a door or lift) can be a shore to climb out of the water onto.
+                bool partOfLevel = collision.rigidbody == null || collision.rigidbody.isKinematic;
                 // Anything holding the solid up from below counts as ground for pushing.
                 for (int i = 0; i < collision.contactCount; i++)
                 {
-                    Vector3 normal = collision.GetContact(i).normal;
+                    ContactPoint contact = collision.GetContact(i);
+                    Vector3 normal = contact.normal;
                     if (normal.y > 0.5f)
                     {
                         solidGroundContact = true;
                         solidGroundNormal = normal;
+                    }
+                    else if (partOfLevel && normal.y > -0.3f)
+                    {
+                        shoreContact = true;
+                        shoreNormal = Vector3.ProjectOnPlane(normal, Vector3.up).normalized;
+                        shorePoint = contact.point;
                     }
                 }
                 return;
