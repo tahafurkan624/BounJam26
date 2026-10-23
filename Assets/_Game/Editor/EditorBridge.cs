@@ -22,6 +22,7 @@ namespace BounJam.EditorTools
     ///   stick &lt;x&gt; &lt;y&gt;                              override the player's Move input; "stick 0 0" holds still
     ///   probe &lt;GameObject name&gt;                     position, velocity, render bounds (and blob skin stats)
     ///   teleport &lt;GameObject name&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;     move an object (and its rigidbody, stopped) there
+    ///   mat &lt;asset path&gt; &lt;property&gt; &lt;value | r g b [a]&gt;  set and save a material float or colour
     /// An unfocused editor doesn't run the game loop, so play sessions started here stay paused and are stepped
     /// one frame per editor update during "waitgame" (0.02 s of game time per frame).
     /// </summary>
@@ -128,6 +129,8 @@ namespace BounJam.EditorTools
                     return Probe(rest);
                 case "teleport":
                     return Teleport(args);
+                case "mat":
+                    return SetMaterialProperty(args);
                 default:
                     return $"error: unknown command '{verb}'";
             }
@@ -141,6 +144,25 @@ namespace BounJam.EditorTools
             var stick = new Vector2(ParseFloat(args[0]), ParseFloat(args[1]));
             reader.MoveOverride = stick;
             return $"ok: move override {Format(stick)}";
+        }
+
+        static string SetMaterialProperty(string[] args)
+        {
+            var material = AssetDatabase.LoadAssetAtPath<Material>(args[0]);
+            if (material == null) return $"error: no material at {args[0]}";
+            string property = args[1];
+            if (!material.HasProperty(property)) return $"error: {material.name} has no property {property}";
+
+            if (args.Length >= 5)
+            {
+                var color = new Color(ParseFloat(args[2]), ParseFloat(args[3]), ParseFloat(args[4]), args.Length >= 6 ? ParseFloat(args[5]) : 1f);
+                material.SetColor(property, color);
+            }
+            else material.SetFloat(property, ParseFloat(args[2]));
+
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssetIfDirty(material);
+            return $"ok: {material.name}.{property} = {string.Join(" ", args, 2, args.Length - 2)}";
         }
 
         static string Teleport(string[] args)

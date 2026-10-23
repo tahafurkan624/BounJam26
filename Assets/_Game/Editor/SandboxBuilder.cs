@@ -22,7 +22,8 @@ namespace BounJam.EditorTools
         const string GridShaderName = "BounJam/Greybox Grid";
 
         static readonly string[] GeneratedRoots = { "Level", "Blob", "CM FollowCam", "Game" };
-        static readonly Vector3 SpawnPoint = new Vector3(0f, 1f, -12f);
+        // Core resting on the floor, so the blob also sits on the ground in the editor.
+        static readonly Vector3 SpawnPoint = new Vector3(0f, CoreRadius, -12f);
         static readonly Vector3 CameraOffset = new Vector3(0f, 9f, -7.5f);
         const float CameraFieldOfView = 40f;
         const float CoreRadius = 0.3f;
@@ -82,13 +83,8 @@ namespace BounJam.EditorTools
             Obstacle = GridMaterial("Greybox_Obstacle", new Color(0.72f, 0.64f, 0.56f), new Color(0.60f, 0.53f, 0.46f), 0.5f),
             Crate = GridMaterial("Greybox_Crate", new Color(0.92f, 0.56f, 0.22f), new Color(0.70f, 0.40f, 0.14f), 0.5f),
             Grate = GridMaterial("Greybox_Grate", new Color(0.30f, 0.55f, 0.95f), new Color(0.12f, 0.25f, 0.55f), 0.2f),
-            Blob = LoadOrCreate($"{MaterialsFolder}/Blob_Placeholder.mat", () =>
-            {
-                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                material.SetColor("_BaseColor", new Color(0.20f, 0.85f, 0.72f));
-                material.SetFloat("_Smoothness", 0.9f);
-                return material;
-            }),
+            // The jelly shader's property defaults are the tuned look; the material only needs creating.
+            Blob = LoadOrCreate($"{MaterialsFolder}/Blob_Jelly.mat", () => new Material(Shader.Find("BounJam/Jelly"))),
         };
 
         static void BuildLevel(Palette m)
@@ -203,12 +199,17 @@ namespace BounJam.EditorTools
 
         static Mesh BuildRestPreviewMesh()
         {
+            // Same topology and smoothing as the runtime skin, so the editor preview matches play mode.
             IcoSphere.Build(2, out Vector3[] directions, out int[] triangles);
-            var vertices = new Vector3[directions.Length];
+            var coarse = new Vector3[directions.Length];
             var restCenter = new Vector3(0f, BlobRadius - CoreRadius, 0f);
-            for (int i = 0; i < directions.Length; i++) vertices[i] = restCenter + directions[i] * BlobRadius;
+            for (int i = 0; i < directions.Length; i++) coarse[i] = restCenter + directions[i] * BlobRadius;
 
-            var mesh = new Mesh { name = "Blob Rest Preview", vertices = vertices, triangles = triangles };
+            LoopSubdivision smoothing = LoopSubdivision.Build(coarse.Length, triangles, 2);
+            var vertices = new Vector3[smoothing.VertexCount];
+            smoothing.Apply(coarse, vertices);
+
+            var mesh = new Mesh { name = "Blob Rest Preview", vertices = vertices, triangles = smoothing.Triangles };
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             AssetDatabase.CreateAsset(mesh, RestPreviewMeshPath);

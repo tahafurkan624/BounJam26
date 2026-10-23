@@ -21,6 +21,9 @@ namespace BounJam
         [Tooltip("Skin detail: 1 = 42 points, 2 = 162, 3 = 642.")]
         [Range(1, 3)]
         [SerializeField] int subdivisions = 2;
+        [Tooltip("Smoothing steps for the rendered surface; each one makes it 4x finer. 2 turns 162 points into 2562 vertices.")]
+        [Range(0, 3)]
+        [SerializeField] int renderSmoothing = 2;
 
         [Header("Softness")]
         [Tooltip("Pull of each point toward its rest position. Higher = firmer jelly.")]
@@ -48,6 +51,11 @@ namespace BounJam
         [SerializeField] float flattenDamping = 8f;
         [Tooltip("Extra squash when landing, per m/s of falling speed.")]
         [SerializeField] float landingSquash = 0.6f;
+        [Tooltip("Gentle squash-and-stretch while standing still, so the blob looks alive. Fades out with speed.")]
+        [Range(0f, 0.15f)]
+        [SerializeField] float idleBreath = 0.04f;
+        [Tooltip("Idle breaths per second.")]
+        [SerializeField] float idleBreathRate = 0.8f;
 
         [Header("Draping")]
         [Tooltip("Lower skin points look this far down for ground and sink onto it, so the liquid drapes over bumps and edges, m.")]
@@ -80,7 +88,9 @@ namespace BounJam
         Vector3[] tensionTargets;
         Vector3[] previousOffsets;
         Vector3[] currentOffsets;
-        Vector3[] renderVertices;
+        Vector3[] coarseVertices;
+        Vector3[] smoothVertices;
+        LoopSubdivision smoothing;
         bool initialised;
 
         float flatten;
@@ -132,15 +142,19 @@ namespace BounJam
             tensionTargets = new Vector3[count];
             previousOffsets = new Vector3[count];
             currentOffsets = new Vector3[count];
-            renderVertices = new Vector3[count];
+            coarseVertices = new Vector3[count];
 
-            for (int i = 0; i < count; i++) renderVertices[i] = restDirections[i] * radius;
-            restVolume = IcoSphere.Volume(renderVertices, triangles);
+            for (int i = 0; i < count; i++) coarseVertices[i] = restDirections[i] * radius;
+            restVolume = IcoSphere.Volume(coarseVertices, triangles);
+
+            smoothing = LoopSubdivision.Build(count, triangles, renderSmoothing);
+            smoothVertices = new Vector3[smoothing.VertexCount];
+            smoothing.Apply(coarseVertices, smoothVertices);
 
             mesh = new Mesh { name = "Blob Skin" };
             mesh.MarkDynamic();
-            mesh.vertices = renderVertices;
-            mesh.triangles = triangles;
+            mesh.vertices = smoothVertices;
+            mesh.triangles = smoothing.Triangles;
             mesh.RecalculateNormals();
             if (skinFilter != null) skinFilter.sharedMesh = mesh;
         }
@@ -187,11 +201,11 @@ namespace BounJam
             Vector3 centroid = Vector3.zero;
             for (int i = 0; i < positions.Length; i++)
             {
-                renderVertices[i] = positions[i] - core;
-                centroid += renderVertices[i];
+                coarseVertices[i] = positions[i] - core;
+                centroid += coarseVertices[i];
             }
             centroid /= positions.Length;
-            VolumeRatio = IcoSphere.Volume(renderVertices, triangles) / restVolume;
+            VolumeRatio = IcoSphere.Volume(coarseVertices, triangles) / restVolume;
             float pressureAcceleration = pressure * (1f - VolumeRatio);
 
             Vector3 sag = Physics.gravity * gravitySag;
@@ -200,7 +214,7 @@ namespace BounJam
             {
                 Vector3 p = positions[i];
                 Vector3 v = velocities[i];
-                Vector3 outward = (renderVertices[i] - centroid).normalized;
+                Vector3 outward = (coarseVertices[i] - centroid).normalized;
 
                 Vector3 acceleration = stiffness * (restPositions[i] - p)
                                        - damping * (v - coreVelocity)
@@ -249,7 +263,8 @@ namespace BounJam
 
             float speed01 = grounded ? Mathf.Clamp01(motor.NormalizedSpeed) : 0f;
             float eased = speed01 * speed01 * (3f - 2f * speed01);
-            float target = flattenAtFullSpeed * eased;
+            float breath = idleBreath * Mathf.Sin(Time.time * idleBreathRate * 2f * Mathf.PI) * (1f - eased);
+            float target = flattenAtFullSpeed * eased + breath;
             flattenVelocity += (flattenStiffness * (target - flatten) - flattenDamping * flattenVelocity) * dt;
             flatten = Mathf.Clamp(flatten + flattenVelocity * dt, -0.3f, 0.8f);
             stretch = stretchAtFullSpeed * eased;
@@ -314,10 +329,11 @@ namespace BounJam
             float t = body.interpolation == RigidbodyInterpolation.Interpolate
                 ? Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime)
                 : 1f;
-            for (int i = 0; i < renderVertices.Length; i++)
-                renderVertices[i] = Vector3.LerpUnclamped(previousOffsets[i], currentOffsets[i], t);
+            for (int i = 0; i < coarseVertices.Length; i++)
+                coarseVertices[i] = Vector3.LerpUnclamped(previousOffsets[i], currentOffsets[i], t);
+            smoothing.Apply(coarseVertices, smoothVertices);
 
-            mesh.SetVertices(renderVertices);
+            mesh.SetVertices(smoothVertices);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
         }
