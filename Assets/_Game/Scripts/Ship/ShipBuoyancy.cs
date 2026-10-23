@@ -67,6 +67,7 @@ namespace BounJam
         public bool IsFloating { get; private set; }
         /// <summary>Seconds since the ship last touched the jelly.</summary>
         public float TimeSinceFloating { get; private set; }
+        public Rigidbody Body => body;
 
         void Awake()
         {

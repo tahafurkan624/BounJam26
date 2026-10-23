@@ -25,6 +25,7 @@ namespace BounJam.EditorTools
     ///   mat &lt;asset path&gt; &lt;property&gt; &lt;value | r g b [a]&gt;  set and save a material float or colour
     ///   invoke &lt;GameObject&gt; &lt;Component&gt; &lt;Method&gt;   call a public parameterless method, e.g. "invoke Blob BlobForm Toggle"
     ///   set &lt;GameObject&gt; &lt;Component&gt; &lt;field[.sub]&gt; &lt;value&gt;  set a field for tuning (play mode changes don't persist)
+    ///   open &lt;scene path&gt;                           open a scene (edit mode) or load it by name (play mode)
     /// An unfocused editor doesn't run the game loop, so play sessions started here stay paused and are stepped
     /// one frame per editor update during "waitgame" (0.02 s of game time per frame).
     /// </summary>
@@ -137,6 +138,14 @@ namespace BounJam.EditorTools
                     return Invoke(args);
                 case "set":
                     return SetField(args);
+                case "open":
+                    if (EditorApplication.isPlaying)
+                    {
+                        SceneManager.LoadScene(System.IO.Path.GetFileNameWithoutExtension(rest));
+                        return $"ok: loading {rest}";
+                    }
+                    UnityEditor.SceneManagement.EditorSceneManager.OpenScene(rest);
+                    return $"ok: opened {rest}";
                 default:
                     return $"error: unknown command '{verb}'";
             }
@@ -260,6 +269,14 @@ namespace BounJam.EditorTools
                 result += $" grounded={motor.IsGrounded} sleeping={motor.Body.IsSleeping()}";
             if (target.TryGetComponent(out BlobSkin skin))
                 result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
+            // Overlay UI isn't in camera screenshots, so report what each HUD text says and how visible it is.
+            foreach (var label in target.GetComponentsInChildren<UnityEngine.UI.Text>())
+                result += string.Format(CultureInfo.InvariantCulture, " [{0}: \"{1}\" alpha={2:0.00}]",
+                                        label.name, label.text.Replace("\n", " / "), label.color.a);
+            if (target.TryGetComponent(out LevelManager level))
+                result += $" level={level.Current}";
+            if (target.TryGetComponent(out ShipDock dock))
+                result += string.Format(CultureInfo.InvariantCulture, " dockProgress={0:0.00} delivered={1}", dock.Progress, dock.IsDelivered);
             if (target.TryGetComponent(out PressureButton button))
                 result += string.Format(CultureInfo.InvariantCulture, " pressed={0} mass={1:0.00}", button.IsPressed, button.MassOnTop);
             if (target.TryGetComponent(out ButtonMover mover))

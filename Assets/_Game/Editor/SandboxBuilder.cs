@@ -1,45 +1,23 @@
-using Unity.Cinemachine;
-using Unity.Cinemachine.TargetTracking;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using static BounJam.EditorTools.LevelKit;
 
 namespace BounJam.EditorTools
 {
     /// <summary>
-    /// Builds the greybox sandbox: test geometry, the Blob prefab (core, motor, soft skin), the fixed-angle follow
-    /// camera and the restarter.
-    /// Running it again replaces everything it created in the scene; the template's light and volume stay. Materials,
-    /// the physics material and the Blob prefab are only created when missing, so tweaks made in the editor survive a
-    /// rebuild ("Rebuild Blob Prefab" regenerates the prefab on purpose).
+    /// Builds the greybox sandbox: a walled arena with every test piece (ramp, steps, low tunnel, narrow gap, bumps,
+    /// grate, crates, buttons, gate, lift, hot plate, a test dock), the blob, the ship, the camera and level logic.
+    /// It never completes; R or falling restarts it. Running it again replaces everything it created in the scene;
+    /// the template's light and volume stay.
     /// </summary>
     public static class SandboxBuilder
     {
-        const string ScenePath = "Assets/_Game/Scenes/Sandbox.unity";
-        const string MaterialsFolder = "Assets/_Game/Art/Materials";
-        const string BlobPrefabPath = "Assets/_Game/Prefabs/Blob.prefab";
-        const string GridShaderName = "BounJam/Greybox Grid";
+        public const string ScenePath = "Assets/_Game/Scenes/Sandbox.unity";
 
         static readonly string[] GeneratedRoots = { "Level", "Blob", "PaperShip", "CM FollowCam", "Game" };
-        // Core resting on the floor, so the blob also sits on the ground in the editor.
-        static readonly Vector3 SpawnPoint = new Vector3(0f, CoreRadius, -12f);
-        static readonly Vector3 CameraOffset = new Vector3(0f, 9f, -7.5f);
-        const float CameraFieldOfView = 40f;
-        const float CoreRadius = 0.3f;
-        const float BlobRadius = 0.5f;
-        const string RestPreviewMeshPath = "Assets/_Game/Art/Models/Blob_RestPreview.asset";
-        const string ShipModelPath = "Assets/_Game/Art/Models/PaperShip.fbx";
-        const string ShipPrefabPath = "Assets/_Game/Prefabs/PaperShip.prefab";
-        // Dropped from just above the resting blob so it settles onto the jelly.
-        static readonly Vector3 ShipSpawnOffset = new Vector3(0f, 1.0f, 0f);
-
-        struct Palette
-        {
-            public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob, Paper;
-            public Material Door, Lift, ButtonIdle, ButtonPressed;
-            public PhysicsMaterial CratePhysics;
-        }
+        static readonly Vector3 Spawn = new Vector3(0f, 0f, -12f);
 
         [MenuItem("BounJam/Build Sandbox Level")]
         public static void Build()
@@ -56,20 +34,12 @@ namespace BounJam.EditorTools
                     Object.DestroyImmediate(root);
 
             Palette palette = CreatePalette();
-            BuildLevel(palette);
-
-            // Reuse the existing Blob prefab so tuning done in the Inspector survives a level rebuild.
-            GameObject blobPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BlobPrefabPath);
-            if (blobPrefab == null) blobPrefab = BuildBlobPrefab(palette.Blob);
-            var blob = (GameObject)PrefabUtility.InstantiatePrefab(blobPrefab);
-            blob.transform.position = SpawnPoint;
-
-            GameObject shipPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ShipPrefabPath);
-            if (shipPrefab == null) shipPrefab = BuildShipPrefab(palette.Paper);
-            var ship = (GameObject)PrefabUtility.InstantiatePrefab(shipPrefab);
-            ship.transform.position = SpawnPoint + ShipSpawnOffset;
+            Transform level = BuildArena(palette);
+            var (blob, ship) = PlacePlayer(palette, Spawn, Spawn + Vector3.up * CoreRadius + ShipOnBlobOffset);
+            // A dock to try delivering, but no next scene: the sandbox never completes.
+            ShipDock dock = Dock("Test Dock", level, new Vector3(14f, 0f, -13f), palette, ship);
             BuildCamera(blob.transform);
-            BuildGame(blob.transform);
+            BuildGame("Sandbox", null, false, blob, ship, dock);
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -77,49 +47,13 @@ namespace BounJam.EditorTools
             Debug.Log("[BounJam] Sandbox level built.");
         }
 
-        /// <summary>Regenerates the Blob prefab from scratch with code defaults. Inspector tuning on it is lost.</summary>
-        [MenuItem("BounJam/Rebuild Blob Prefab")]
-        public static void RebuildBlobPrefab()
-        {
-            BuildBlobPrefab(CreatePalette().Blob);
-            AssetDatabase.SaveAssets();
-            Debug.Log("[BounJam] Blob prefab rebuilt.");
-        }
-
-        static Palette CreatePalette() => new Palette
-        {
-            Floor = GridMaterial("Greybox_Floor", new Color(0.62f, 0.63f, 0.66f), new Color(0.50f, 0.51f, 0.54f), 1f),
-            Wall = GridMaterial("Greybox_Wall", new Color(0.42f, 0.44f, 0.50f), new Color(0.35f, 0.37f, 0.42f), 1f),
-            Structure = GridMaterial("Greybox_Structure", new Color(0.55f, 0.60f, 0.70f), new Color(0.45f, 0.50f, 0.60f), 1f),
-            Obstacle = GridMaterial("Greybox_Obstacle", new Color(0.72f, 0.64f, 0.56f), new Color(0.60f, 0.53f, 0.46f), 0.5f),
-            Crate = GridMaterial("Greybox_Crate", new Color(0.92f, 0.56f, 0.22f), new Color(0.70f, 0.40f, 0.14f), 0.5f),
-            Grate = GridMaterial("Greybox_Grate", new Color(0.30f, 0.55f, 0.95f), new Color(0.12f, 0.25f, 0.55f), 0.2f),
-            // The jelly shader's property defaults are the tuned look; the material only needs creating.
-            Blob = LoadOrCreate($"{MaterialsFolder}/Blob_Jelly.mat", () => new Material(Shader.Find("BounJam/Jelly"))),
-            Paper = LitMaterial("PaperShip_Paper", new Color(0.93f, 0.91f, 0.84f), 0.15f, Color.black),
-            Door = GridMaterial("Greybox_Door", new Color(0.75f, 0.30f, 0.25f), new Color(0.55f, 0.20f, 0.18f), 0.5f),
-            Lift = GridMaterial("Greybox_Lift", new Color(0.95f, 0.80f, 0.30f), new Color(0.75f, 0.60f, 0.20f), 0.5f),
-            ButtonIdle = LitMaterial("Button_Idle", new Color(0.90f, 0.30f, 0.20f), 0.4f, Color.black),
-            ButtonPressed = LitMaterial("Button_Pressed", new Color(0.35f, 0.90f, 0.40f), 0.4f, new Color(0.15f, 0.60f, 0.20f)),
-            // Slick enough that the solid can shove a crate along at a slow, heavy pace. Minimum combine keeps it
-            // slick against everything, so a pushing crystal slides along its face instead of rolling up it.
-            CratePhysics = LoadOrCreate($"{MaterialsFolder}/Crate_Physics.asset", () => new PhysicsMaterial("Crate")
-            {
-                dynamicFriction = 0.3f,
-                staticFriction = 0.35f,
-                bounciness = 0f,
-                frictionCombine = PhysicsMaterialCombine.Minimum,
-                bounceCombine = PhysicsMaterialCombine.Minimum,
-            }),
-        };
-
-        static void BuildLevel(Palette m)
+        static Transform BuildArena(Palette m)
         {
             var level = new GameObject("Level").transform;
 
             // Arena: 36 x 36 m floor, top surface at y = 0, low walls all around.
             Transform arena = Group("Arena", level);
-            Box("Floor", arena, new Vector3(0f, -0.5f, 0f), new Vector3(36f, 1f, 36f), m.Floor);
+            Floor("Floor", arena, 0f, 0f, 36f, 36f, 0f, m.Floor);
             Box("Wall North", arena, new Vector3(0f, 0.75f, 18.5f), new Vector3(38f, 1.5f, 1f), m.Wall);
             Box("Wall South", arena, new Vector3(0f, 0.75f, -18.5f), new Vector3(38f, 1.5f, 1f), m.Wall);
             Box("Wall East", arena, new Vector3(18.5f, 0.75f, 0f), new Vector3(1f, 1.5f, 36f), m.Wall);
@@ -127,13 +61,9 @@ namespace BounJam.EditorTools
 
             // 15 degree ramp up to a 2 m platform with open edges to fall off.
             Transform ramp = Group("Ramp And Platform", level);
-            const float rampAngle = 15f, platformHeight = 2f, rampThickness = 0.4f, platformFrontZ = 5f;
-            float rampLength = platformHeight / Mathf.Sin(rampAngle * Mathf.Deg2Rad);
-            float rampRun = platformHeight / Mathf.Tan(rampAngle * Mathf.Deg2Rad);
-            float rampCenterY = platformHeight * 0.5f - rampThickness * 0.5f / Mathf.Cos(rampAngle * Mathf.Deg2Rad);
-            Box("Platform", ramp, new Vector3(11f, platformHeight * 0.5f, 9f), new Vector3(10f, platformHeight, 8f), m.Structure);
-            Box("Ramp", ramp, new Vector3(11f, rampCenterY, platformFrontZ - rampRun * 0.5f), new Vector3(4f, rampThickness, rampLength), m.Structure,
-                euler: new Vector3(-rampAngle, 0f, 0f));
+            Box("Platform", ramp, new Vector3(11f, 1f, 9f), new Vector3(10f, 2f, 8f), m.Structure);
+            float rampRun = 2f / Mathf.Tan(15f * Mathf.Deg2Rad);
+            Ramp("Ramp", ramp, 11f, 5f - rampRun, 0f, 2f, 4f, 15f, m.Structure);
 
             // Steps rising 0.15 m each, then a landing: shows which step heights the blob climbs.
             Transform steps = Group("Steps", level);
@@ -144,13 +74,13 @@ namespace BounJam.EditorTools
             }
             Box("Landing", steps, new Vector3(-11f, 0.3f, 5f), new Vector3(4f, 0.6f, 3f), m.Structure);
 
-            // Low tunnel, 0.65 m clearance: the liquid has to flatten to pass (Stage 2).
+            // Low tunnel, 0.65 m clearance: the liquid flattens through, the ship's sail gets knocked off.
             Transform tunnel = Group("Low Tunnel", level);
             Box("Tunnel Wall Left", tunnel, new Vector3(-1.75f, 0.6f, 11f), new Vector3(0.5f, 1.2f, 6f), m.Wall);
             Box("Tunnel Wall Right", tunnel, new Vector3(1.75f, 0.6f, 11f), new Vector3(0.5f, 1.2f, 6f), m.Wall);
             Box("Tunnel Ceiling", tunnel, new Vector3(0f, 0.8f, 11f), new Vector3(4f, 0.3f, 6f), m.Structure);
 
-            // Narrow gap, 0.7 m wide: the liquid has to squeeze through sideways (Stage 2).
+            // Narrow gap, 0.7 m wide: the liquid squeezes through sideways.
             Transform gap = Group("Narrow Gap", level);
             Box("Gap Wall Left", gap, new Vector3(-14.925f, 0.75f, 10f), new Vector3(5.15f, 1.5f, 0.5f), m.Wall);
             Box("Gap Wall Right", gap, new Vector3(-8.825f, 0.75f, 10f), new Vector3(5.65f, 1.5f, 0.5f), m.Wall);
@@ -175,320 +105,24 @@ namespace BounJam.EditorTools
             Crate("Crate Big", crates, new Vector3(-5f, 0.5f, -6f), 1f, 4f, m);
             Crate("Crate Small", crates, new Vector3(-6.6f, 0.4f, -6f), 0.8f, 3f, m);
 
-            BuildInteractables(level, m);
-        }
-
-        static void BuildInteractables(Transform level, Palette m)
-        {
-            Transform group = Group("Interactables", level);
-
+            Transform interactables = Group("Interactables", level);
             // A locked room in the south-west corner. Its gate sinks into the floor while the button is pressed
             // and stays open 4 s after release: press as a solid, melt, slip in as liquid.
-            Box("Room Wall North", group, new Vector3(-14f, 0.75f, -15f), new Vector3(8f, 1.5f, 0.5f), m.Wall);
-            Box("Room Wall North Short", group, new Vector3(-6.75f, 0.75f, -15f), new Vector3(1.5f, 1.5f, 0.5f), m.Wall);
-            Box("Room Wall East", group, new Vector3(-5.75f, 0.75f, -16.5f), new Vector3(0.5f, 1.5f, 3f), m.Wall);
-            PressureButton gateButton = Button("Button Gate", group, new Vector3(-3f, 0f, -13f), m);
-            Mover("Room Gate", group, new Vector3(-8.75f, 0.75f, -15f), new Vector3(2.5f, 1.5f, 0.5f), m.Door,
+            Box("Room Wall North", interactables, new Vector3(-14f, 0.75f, -15f), new Vector3(8f, 1.5f, 0.5f), m.Wall);
+            Box("Room Wall North Short", interactables, new Vector3(-6.75f, 0.75f, -15f), new Vector3(1.5f, 1.5f, 0.5f), m.Wall);
+            Box("Room Wall East", interactables, new Vector3(-5.75f, 0.75f, -16.5f), new Vector3(0.5f, 1.5f, 3f), m.Wall);
+            PressureButton gateButton = Button("Button Gate", interactables, new Vector3(-3f, 0f, -13f), m);
+            Mover("Room Gate", interactables, new Vector3(-8.75f, 0.75f, -15f), new Vector3(2.5f, 1.5f, 0.5f), m.Door,
                   new[] { gateButton }, new Vector3(0f, -1.55f, 0f), speed: 2f, holdTime: 4f);
 
-            // Push the big crate 3.5 m south onto this button to raise a lift next to the platform.
-            PressureButton liftButton = Button("Button Lift", group, new Vector3(-5f, 0f, -9.5f), m);
-            Mover("Lift", group, new Vector3(5f, 0.1f, 9f), new Vector3(2f, 0.2f, 2f), m.Lift,
-                  new[] { liftButton }, new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f);
-        }
+            // Push the big crate 3.5 m south onto this button to power a lift next to the platform.
+            PressureButton liftButton = Button("Button Lift", interactables, new Vector3(-5f, 0f, -9.5f), m);
+            Mover("Lift", interactables, new Vector3(5f, 0.1f, 9f), new Vector3(2f, 0.2f, 2f), m.Lift,
+                  new[] { liftButton }, new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f, cycle: true);
 
-        static PressureButton Button(string name, Transform parent, Vector3 position, Palette m)
-        {
-            var root = new GameObject(name) { layer = LayerMask.NameToLayer("Interactable") };
-            root.transform.SetParent(parent, false);
-            root.transform.position = position;
-
-            // Visual plate only: no collider, so nothing snags on its edge.
-            GameObject plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            plate.name = "Plate";
-            Object.DestroyImmediate(plate.GetComponent<Collider>());
-            plate.layer = root.layer;
-            plate.transform.SetParent(root.transform, false);
-            plate.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-            plate.transform.localScale = new Vector3(1.2f, 0.04f, 1.2f);
-            var plateRenderer = plate.GetComponent<MeshRenderer>();
-            plateRenderer.sharedMaterial = m.ButtonIdle;
-
-            var button = root.AddComponent<PressureButton>();
-            var settings = new SerializedObject(button);
-            settings.FindProperty("cap").objectReferenceValue = plate.transform;
-            settings.FindProperty("capRenderer").objectReferenceValue = plateRenderer;
-            settings.FindProperty("idleMaterial").objectReferenceValue = m.ButtonIdle;
-            settings.FindProperty("pressedMaterial").objectReferenceValue = m.ButtonPressed;
-            settings.FindProperty("detectMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Pushable", "Ship");
-            settings.ApplyModifiedPropertiesWithoutUndo();
-            return button;
-        }
-
-        static void Mover(string name, Transform parent, Vector3 position, Vector3 size, Material material,
-                          PressureButton[] buttons, Vector3 activeOffset, float speed, float holdTime)
-        {
-            GameObject go = Box(name, parent, position, size, material);
-            var body = go.AddComponent<Rigidbody>();
-            body.isKinematic = true;
-            body.interpolation = RigidbodyInterpolation.Interpolate;
-
-            var mover = go.AddComponent<ButtonMover>();
-            var settings = new SerializedObject(mover);
-            SerializedProperty list = settings.FindProperty("buttons");
-            list.arraySize = buttons.Length;
-            for (int i = 0; i < buttons.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = buttons[i];
-            settings.FindProperty("activeOffset").vector3Value = activeOffset;
-            settings.FindProperty("speed").floatValue = speed;
-            settings.FindProperty("holdTime").floatValue = holdTime;
-            settings.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        static GameObject BuildBlobPrefab(Material material)
-        {
-            PhysicsMaterial liquidPhysics = LoadOrCreate($"{MaterialsFolder}/Blob_Liquid_Physics.asset", () => new PhysicsMaterial("Blob Liquid")
-            {
-                dynamicFriction = 0f,
-                staticFriction = 0f,
-                bounciness = 0f,
-                frictionCombine = PhysicsMaterialCombine.Minimum,
-                bounceCombine = PhysicsMaterialCombine.Minimum,
-            });
-
-            var root = new GameObject("Blob") { layer = LayerMask.NameToLayer("PlayerLiquid") };
-            var body = root.AddComponent<Rigidbody>();
-            body.mass = 1f;
-            body.interpolation = RigidbodyInterpolation.Interpolate;
-            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            body.constraints = RigidbodyConstraints.FreezeRotation;
-
-            var core = root.AddComponent<SphereCollider>();
-            core.radius = CoreRadius;
-            core.sharedMaterial = liquidPhysics;
-
-            var input = root.AddComponent<PlayerInputReader>();
-            var motor = root.AddComponent<BlobMotor>();
-            var motorSettings = new SerializedObject(motor);
-            motorSettings.FindProperty("input").objectReferenceValue = input;
-            motorSettings.FindProperty("groundMask").intValue = ~LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Triggers", "Ignore Raycast");
-            motorSettings.ApplyModifiedPropertiesWithoutUndo();
-
-            // The skin mesh is rebuilt every frame in play mode; the saved mesh is only the round rest shape,
-            // so the blob is visible in the editor too.
-            var skin = new GameObject("Skin") { layer = root.layer };
-            skin.transform.SetParent(root.transform, false);
-            skin.AddComponent<MeshFilter>().sharedMesh = BuildRestPreviewMesh();
-            skin.AddComponent<MeshRenderer>().sharedMaterial = material;
-
-            var skinSim = root.AddComponent<BlobSkin>();
-            var skinSettings = new SerializedObject(skinSim);
-            skinSettings.FindProperty("skinFilter").objectReferenceValue = skin.GetComponent<MeshFilter>();
-            skinSettings.FindProperty("collisionMask").intValue = LayerMask.GetMask("Default", "Environment", "Pushable", "Interactable");
-            skinSettings.ApplyModifiedPropertiesWithoutUndo();
-
-            // Solid form: a convex collider that takes the frozen shape, with real friction.
-            PhysicsMaterial solidPhysics = LoadOrCreate($"{MaterialsFolder}/Blob_Solid_Physics.asset", () => new PhysicsMaterial("Blob Solid")
-            {
-                dynamicFriction = 0.4f,
-                staticFriction = 0.5f,
-                bounciness = 0.05f,
-                frictionCombine = PhysicsMaterialCombine.Average,
-                bounceCombine = PhysicsMaterialCombine.Average,
-            });
-            var solidCollider = root.AddComponent<MeshCollider>();
-            solidCollider.convex = true;
-            solidCollider.sharedMaterial = solidPhysics;
-            solidCollider.enabled = false;
-
-            var form = root.AddComponent<BlobForm>();
-            var formSettings = new SerializedObject(form);
-            formSettings.FindProperty("input").objectReferenceValue = input;
-            formSettings.FindProperty("liquidCore").objectReferenceValue = core;
-            formSettings.FindProperty("solidCollider").objectReferenceValue = solidCollider;
-            formSettings.FindProperty("skinRenderer").objectReferenceValue = skin.GetComponent<MeshRenderer>();
-            formSettings.ApplyModifiedPropertiesWithoutUndo();
-
-            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
-            Object.DestroyImmediate(root);
-            return prefab;
-        }
-
-        /// <summary>Regenerates the PaperShip prefab from the imported model with code defaults.</summary>
-        [MenuItem("BounJam/Rebuild Ship Prefab")]
-        public static void RebuildShipPrefab()
-        {
-            BuildShipPrefab(CreatePalette().Paper);
-            AssetDatabase.SaveAssets();
-            Debug.Log("[BounJam] Ship prefab rebuilt.");
-        }
-
-        static GameObject BuildShipPrefab(Material paper)
-        {
-            Mesh mesh = null;
-            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(ShipModelPath))
-                if (asset is Mesh found) mesh = found;
-            if (mesh == null) throw new System.InvalidOperationException($"No mesh in {ShipModelPath}; run Tools/Blender/make_paper_ship.py first.");
-
-            var root = new GameObject("PaperShip") { layer = LayerMask.NameToLayer("Ship") };
-            var model = new GameObject("Model") { layer = root.layer };
-            model.transform.SetParent(root.transform, false);
-            model.AddComponent<MeshFilter>().sharedMesh = mesh;
-            model.AddComponent<MeshRenderer>().sharedMaterial = paper;
-
-            // The boat's length should run along Z; turn the model if the export came out sideways.
-            Bounds bounds = mesh.bounds;
-            if (bounds.size.x > bounds.size.z)
-            {
-                model.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-                bounds.size = new Vector3(bounds.size.z, bounds.size.y, bounds.size.x);
-            }
-            Debug.Log($"[BounJam] Ship model size {bounds.size.x:0.000} x {bounds.size.y:0.000} x {bounds.size.z:0.000}, bottom {bounds.min.y:0.000}");
-
-            var body = root.AddComponent<Rigidbody>();
-            body.mass = 0.25f;
-            body.interpolation = RigidbodyInterpolation.Interpolate;
-            body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
-            body.angularDamping = 0.5f;
-
-            // Hull plus a slim sail box, so low ceilings and overhangs can knock the ship off the blob.
-            const float hullHeight = 0.14f;
-            var hull = root.AddComponent<BoxCollider>();
-            hull.center = new Vector3(0f, bounds.min.y + hullHeight * 0.5f, 0f);
-            hull.size = new Vector3(bounds.size.x, hullHeight, bounds.size.z * 0.9f);
-            float sailHeight = bounds.max.y - (bounds.min.y + hullHeight);
-            var sail = root.AddComponent<BoxCollider>();
-            sail.center = new Vector3(0f, bounds.min.y + hullHeight + sailHeight * 0.5f, 0f);
-            sail.size = new Vector3(0.05f, sailHeight, bounds.size.z * 0.35f);
-
-            root.AddComponent<ShipBuoyancy>();
-
-            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, ShipPrefabPath);
-            Object.DestroyImmediate(root);
-            return prefab;
-        }
-
-        static Mesh BuildRestPreviewMesh()
-        {
-            // Same topology and smoothing as the runtime skin, so the editor preview matches play mode.
-            IcoSphere.Build(2, out Vector3[] directions, out int[] triangles);
-            var coarse = new Vector3[directions.Length];
-            var restCenter = new Vector3(0f, BlobRadius - CoreRadius, 0f);
-            for (int i = 0; i < directions.Length; i++) coarse[i] = restCenter + directions[i] * BlobRadius;
-
-            LoopSubdivision smoothing = LoopSubdivision.Build(coarse.Length, triangles, 2);
-            var vertices = new Vector3[smoothing.VertexCount];
-            smoothing.Apply(coarse, vertices);
-
-            var mesh = new Mesh { name = "Blob Rest Preview", vertices = vertices, triangles = smoothing.Triangles };
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            AssetDatabase.CreateAsset(mesh, RestPreviewMeshPath);
-            return mesh;
-        }
-
-        static void BuildCamera(Transform target)
-        {
-            Camera main = Camera.main;
-            if (main == null)
-            {
-                main = new GameObject("Main Camera") { tag = "MainCamera" }.AddComponent<Camera>();
-            }
-            if (!main.TryGetComponent(out CinemachineBrain _)) main.gameObject.AddComponent<CinemachineBrain>();
-
-            var rig = new GameObject("CM FollowCam");
-            var vcam = rig.AddComponent<CinemachineCamera>();
-            vcam.Follow = target;
-            vcam.Lens.FieldOfView = CameraFieldOfView;
-
-            // World-space offset and no rotation control: the camera keeps one fixed angle and just slides along.
-            var follow = rig.AddComponent<CinemachineFollow>();
-            follow.FollowOffset = CameraOffset;
-            follow.TrackerSettings.BindingMode = BindingMode.WorldSpace;
-            follow.TrackerSettings.PositionDamping = new Vector3(0.4f, 0.3f, 0.4f);
-
-            float pitch = Mathf.Atan2(CameraOffset.y, -CameraOffset.z) * Mathf.Rad2Deg;
-            Vector3 position = target.position + CameraOffset;
-            Quaternion rotation = Quaternion.Euler(pitch, 0f, 0f);
-            rig.transform.SetPositionAndRotation(position, rotation);
-            main.transform.SetPositionAndRotation(position, rotation);
-            main.fieldOfView = CameraFieldOfView;
-        }
-
-        static void BuildGame(Transform player)
-        {
-            var restarter = new GameObject("Game").AddComponent<LevelRestarter>();
-            var settings = new SerializedObject(restarter);
-            settings.FindProperty("player").objectReferenceValue = player;
-            settings.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        static Transform Group(string name, Transform parent)
-        {
-            var group = new GameObject(name).transform;
-            group.SetParent(parent, false);
-            return group;
-        }
-
-        static GameObject Box(string name, Transform parent, Vector3 position, Vector3 size, Material material,
-                              string layer = "Environment", Vector3 euler = default)
-            => Shape(PrimitiveType.Cube, name, parent, position, size, material, layer, euler);
-
-        static GameObject Shape(PrimitiveType type, string name, Transform parent, Vector3 position, Vector3 scale, Material material,
-                                string layer = "Environment", Vector3 euler = default)
-        {
-            GameObject go = GameObject.CreatePrimitive(type);
-            go.name = name;
-            go.layer = LayerMask.NameToLayer(layer);
-            go.transform.SetParent(parent, false);
-            go.transform.SetPositionAndRotation(position, Quaternion.Euler(euler));
-            go.transform.localScale = scale;
-            go.GetComponent<MeshRenderer>().sharedMaterial = material;
-            return go;
-        }
-
-        static void Crate(string name, Transform parent, Vector3 position, float size, float mass, Palette m)
-        {
-            GameObject crate = Box(name, parent, position, Vector3.one * size, m.Crate, "Pushable");
-            crate.GetComponent<Collider>().sharedMaterial = m.CratePhysics;
-            var body = crate.AddComponent<Rigidbody>();
-            body.mass = mass;
-            body.interpolation = RigidbodyInterpolation.Interpolate;
-            crate.AddComponent<Pushable>();
-        }
-
-        static Material LitMaterial(string name, Color color, float smoothness, Color emission)
-            => LoadOrCreate($"{MaterialsFolder}/{name}.mat", () =>
-            {
-                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                material.SetColor("_BaseColor", color);
-                material.SetFloat("_Smoothness", smoothness);
-                if (emission != Color.black)
-                {
-                    material.EnableKeyword("_EMISSION");
-                    material.SetColor("_EmissionColor", emission);
-                }
-                return material;
-            });
-
-        static Material GridMaterial(string name, Color baseColor, Color lineColor, float cellSize)
-            => LoadOrCreate($"{MaterialsFolder}/{name}.mat", () =>
-            {
-                Shader shader = Shader.Find(GridShaderName);
-                if (shader == null) shader = Shader.Find("Universal Render Pipeline/Lit");
-                var material = new Material(shader);
-                material.SetColor("_BaseColor", baseColor);
-                material.SetColor("_LineColor", lineColor);
-                material.SetFloat("_CellSize", cellSize);
-                return material;
-            });
-
-        static T LoadOrCreate<T>(string path, System.Func<T> create) where T : Object
-        {
-            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
-            if (asset != null) return asset;
-            asset = create();
-            AssetDatabase.CreateAsset(asset, path);
-            return asset;
+            // Burns the ship if it's dropped here; the blob crosses safely.
+            HotPlate("Hot Plate", interactables, new Vector3(15.5f, 0f, -3f), new Vector2(3.5f, 3f), m);
+            return level;
         }
     }
 }
