@@ -27,6 +27,20 @@ namespace BounJam.EditorTools
             return material;
         }
 
+        /// <summary>Loads a flat-coloured URP Unlit material (unaffected by light), creating it the first time.</summary>
+        public static Material UnlitMaterial(string name, Color color)
+        {
+            string path = $"{MaterialFolder}/{name}.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material != null)
+                return material;
+
+            material = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = name };
+            material.SetColor("_BaseColor", color);
+            AssetDatabase.CreateAsset(material, path);
+            return material;
+        }
+
         /// <summary>Assigns a private [SerializeField] reference the way the Inspector would.</summary>
         public static void SetField(Object target, string field, Object value) => SetValues(target, (field, value));
 

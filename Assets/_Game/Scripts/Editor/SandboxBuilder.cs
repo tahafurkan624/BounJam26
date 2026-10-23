@@ -91,6 +91,9 @@ namespace BounJam.EditorTools
             Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(1f, 0, -5f)).name = "Snack Tree";
             Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(-8f, 0, -4f));
             Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(7f, 0, 10f));
+            // Two Fire Souls, far enough from the spawn point not to see the beaver straight away.
+            Place(EnemyPrefabBuilder.FireSoulPath, gameplay, new Vector3(3f, 0, 10f));
+            Place(EnemyPrefabBuilder.FireSoulPath, gameplay, new Vector3(12f, 0, 4f));
             // The pit, with a path of crumbling slabs across it: keep running and you make it.
             Place(LevelPrefabBuilder.PitPath, gameplay, new Vector3(-13f, -2f, -5f));
             for (int i = 0; i < 3; i++)

@@ -123,6 +123,7 @@ GameObject:
   - component: {fileID: 7933179901149258096}
   - component: {fileID: 7727828233506705572}
   - component: {fileID: 854194912242322197}
+  - component: {fileID: 6363076160523438727}
   m_Layer: 12
   m_Name: CrumblingGround
   m_TagString: Untagged
@@ -183,3 +184,23 @@ MonoBehaviour:
   delay: 0.6
   shakeDistance: 0.05
   removeAfter: 3
+--- !u!114 &6363076160523438727
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7084807859905262349}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e3fdca004f2d45fe8abbed571a8abd5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshModifier
+  m_SerializedVersion: 0
+  m_OverrideArea: 0
+  m_Area: 0
+  m_OverrideGenerateLinks: 0
+  m_GenerateLinks: 0
+  m_IgnoreFromBuild: 1
+  m_ApplyToChildren: 1
+  m_AffectedAgents: ffffffff

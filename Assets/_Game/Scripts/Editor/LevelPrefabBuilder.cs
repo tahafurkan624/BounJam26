@@ -3,8 +3,10 @@ using BounJam.Level;
 using BounJam.Liquids;
 using BounJam.UI;
 using TMPro;
+using Unity.AI.Navigation;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.AI;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.Rendering;
@@ -117,8 +119,13 @@ namespace BounJam.EditorTools
             var trunk = new GameObject("Trunk").transform;
             trunk.SetParent(root.transform, false);
             trunk.localPosition = new Vector3(0f, stumpHeight, 0f);
-            TreePart(PrimitiveType.Cylinder, "Log", trunk, new Vector3(0f, logLength / 2f, 0f),
+            GameObject log = TreePart(PrimitiveType.Cylinder, "Log", trunk, new Vector3(0f, logLength / 2f, 0f),
                 new Vector3(trunkRadius * 2f, logLength / 2f, trunkRadius * 2f), bark);
+            // Carves the nav mesh wherever the trunk ends up, so Fire Souls walk around fallen trees.
+            var obstacle = log.AddComponent<NavMeshObstacle>();
+            obstacle.shape = NavMeshObstacleShape.Capsule;
+            obstacle.carving = true;
+            obstacle.carveOnlyStationary = true;
             float canopyHeight = logLength + canopyRadius * 0.25f;
             TreePart(PrimitiveType.Sphere, "Canopy", trunk, new Vector3(0f, canopyHeight, 0f), Vector3.one * canopyRadius * 2f, leaves);
 
@@ -157,7 +164,7 @@ namespace BounJam.EditorTools
 
             // Unlit black just under the ground, so the pit reads as a deep hole instead of showing the sky.
             GameObject darkness = BuilderUtility.VisualPrimitive(PrimitiveType.Quad, "Darkness", root.transform,
-                new Vector3(0f, 0.8f, 0f), new Vector3(6f, 6f, 1f), AbyssMaterial());
+                new Vector3(0f, 0.8f, 0f), new Vector3(6f, 6f, 1f), BuilderUtility.UnlitMaterial("Abyss", Color.black));
             darkness.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
         }
 
@@ -179,6 +186,8 @@ namespace BounJam.EditorTools
             slab.GetComponent<MeshRenderer>().sharedMaterial =
                 BuilderUtility.FlatMaterial("Greybox_Crumbling", new Color(0.6f, 0.5f, 0.4f));
             BuilderUtility.SetValues(root.GetComponent<CrumblingGround>(), ("slab", slab.transform));
+            // It won't be there for long, so nothing should plan a path across it.
+            root.AddComponent<NavMeshModifier>().ignoreFromBuild = true;
         }
 
         // A 4 x 1 x 4 m floor piece whose top sits at the origin, for building levels with gaps in them.
@@ -197,19 +206,7 @@ namespace BounJam.EditorTools
                 BuilderUtility.FlatMaterial("Greybox_Ground", new Color(0.42f, 0.55f, 0.36f));
         }
 
-        static Material AbyssMaterial()
-        {
-            const string path = "Assets/_Game/Art/Materials/Abyss.mat";
-            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material != null)
-                return material;
-            material = new Material(Shader.Find("Universal Render Pipeline/Unlit")) { name = "Abyss" };
-            material.SetColor("_BaseColor", Color.black);
-            AssetDatabase.CreateAsset(material, path);
-            return material;
-        }
-
-        static void TreePart(PrimitiveType shape, string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
+        static GameObject TreePart(PrimitiveType shape, string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
         {
             GameObject part = GameObject.CreatePrimitive(shape);
             part.name = name;
@@ -218,9 +215,10 @@ namespace BounJam.EditorTools
             part.transform.localPosition = localPosition;
             part.transform.localScale = localScale;
             part.GetComponent<MeshRenderer>().sharedMaterial = material;
+            return part;
         }
 
-        static ParticleSystem BuildFlames(Transform parent, Material material)
+        internal static ParticleSystem BuildFlames(Transform parent, Material material)
         {
             ParticleSystem flames = NewParticles("Flames", parent, new Vector3(0f, 0.2f, 0f), material);
             ParticleSystem.MainModule main = flames.main;
@@ -252,7 +250,7 @@ namespace BounJam.EditorTools
         }
 
         // Driven by Fire.Emit: a puff where water lands and a big cloud when the fire goes out.
-        static ParticleSystem BuildSteam(Transform parent, Material material)
+        internal static ParticleSystem BuildSteam(Transform parent, Material material)
         {
             ParticleSystem steam = NewParticles("Steam", parent, new Vector3(0f, 0.6f, 0f), material);
             ParticleSystem.MainModule main = steam.main;
@@ -310,7 +308,7 @@ namespace BounJam.EditorTools
             return new ParticleSystem.MinMaxGradient(gradient);
         }
 
-        static Material ParticleMaterial()
+        internal static Material ParticleMaterial()
         {
             var material = AssetDatabase.LoadAssetAtPath<Material>(ParticleMaterialPath);
             if (material != null)
@@ -322,6 +320,14 @@ namespace BounJam.EditorTools
 
         static void FillLevel(GameObject root)
         {
+            // Baked from colliders when the level loads, so Fire Souls can find their way around.
+            var navMesh = new GameObject("NavMesh", typeof(NavMeshSurface), typeof(RuntimeNavMesh));
+            navMesh.transform.SetParent(root.transform, false);
+            var surface = navMesh.GetComponent<NavMeshSurface>();
+            surface.collectObjects = CollectObjects.All;
+            surface.useGeometry = NavMeshCollectGeometry.PhysicsColliders;
+            surface.layerMask = GameLayers.MaskOf(GameLayers.Default, GameLayers.Ground, GameLayers.Tree);
+
             var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
             eventSystem.transform.SetParent(root.transform, false);
 
