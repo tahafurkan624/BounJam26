@@ -1,0 +1,329 @@
+<title>BounJam26 Stil Panosu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: look-dev board. Header → A/B compare tool → six look cards (3×2) → gap checklist. */
+:root {
+  --bg: #f2f5fa;
+  --surface: #ffffff;
+  --ink: #15203a;
+  --muted: #5a6683;
+  --line: #d9e0ec;
+  --blob: #0aa884;
+  --coral: #e8553f;
+  --sun: #f2a516;
+  --chip-low: #dff5ec;
+  --chip-mid: #fdf0d3;
+  --chip-high: #fde3de;
+  --chip-ink-low: #0b6e55;
+  --chip-ink-mid: #8a5a00;
+  --chip-ink-high: #a8321f;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Nunito Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1424; --surface: #151f35; --ink: #e8eef9; --muted: #9aa8c4; --line: #26334f;
+    --blob: #2fe0b4; --coral: #ff7a63; --sun: #ffc04a;
+    --chip-low: #113a31; --chip-mid: #3b2f12; --chip-high: #43201a;
+    --chip-ink-low: #7fe8c9; --chip-ink-mid: #ffd27a; --chip-ink-high: #ffab9b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1424; --surface: #151f35; --ink: #e8eef9; --muted: #9aa8c4; --line: #26334f;
+  --blob: #2fe0b4; --coral: #ff7a63; --sun: #ffc04a;
+  --chip-low: #113a31; --chip-mid: #3b2f12; --chip-high: #43201a;
+  --chip-ink-low: #7fe8c9; --chip-ink-mid: #ffd27a; --chip-ink-high: #ffab9b;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+.wrap {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+  display: grid;
+  gap: 56px;
+}
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; line-height: 1.05; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 700; }
+p { margin: 0; }
+.eyebrow {
+  font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+/* header */
+header { display: grid; gap: 14px; max-width: 70ch; }
+header h1 .drop { color: var(--blob); }
+header p { color: var(--muted); font-size: 1.05rem; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+
+/* compare */
+.compare { display: grid; gap: 16px; }
+.compare-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; }
+.pickers { display: flex; flex-wrap: wrap; gap: 10px; }
+.pickers label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+select {
+  font: inherit; font-size: 0.95rem; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+select:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--blob); outline-offset: 2px; }
+.stage {
+  position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 14px; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line); user-select: none;
+}
+.stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.stage .right { clip-path: inset(0 0 0 var(--split, 50%)); }
+.stage .divider {
+  position: absolute; top: 0; bottom: 0; left: var(--split, 50%); width: 3px; margin-left: -1.5px;
+  background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); pointer-events: none;
+}
+.stage .tag {
+  position: absolute; bottom: 12px; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700;
+  background: rgba(10, 18, 35, .72); color: #fff;
+}
+.stage .tag.l { left: 12px; } .stage .tag.r { right: 12px; }
+.slider { width: 100%; accent-color: var(--blob); }
+
+/* look cards */
+.looks { display: grid; gap: 20px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.look { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; }
+.look button.shot { all: unset; cursor: zoom-in; display: block; }
+.look button.shot:focus-visible { outline: 3px solid var(--blob); outline-offset: -3px; }
+.look img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+.look .body { padding: 16px 18px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.look .title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.look dl { margin: 0; display: grid; gap: 8px; }
+.look dt { font-size: 0.72rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.look dd { margin: 0; font-size: 0.93rem; }
+.chip { font-family: var(--mono); font-size: 0.7rem; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.chip.low { background: var(--chip-low); color: var(--chip-ink-low); }
+.chip.mid { background: var(--chip-mid); color: var(--chip-ink-mid); }
+.chip.high { background: var(--chip-high); color: var(--chip-ink-high); }
+
+/* gaps */
+.gaps { display: grid; gap: 18px; }
+.gaps > p { color: var(--muted); max-width: 70ch; }
+.gap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.gap-list li {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px;
+  display: grid; gap: 6px; align-content: start;
+}
+.gap-list li.key { border-color: var(--blob); box-shadow: inset 4px 0 0 var(--blob); }
+.gap-list .q { font-weight: 700; color: var(--ink); }
+.gap-list .why { color: var(--muted); font-size: 0.93rem; }
+.gap-list .opts { font-size: 0.88rem; }
+.gap-list .opts b { font-weight: 700; color: var(--blob); }
+
+footer { color: var(--muted); font-size: 0.85rem; max-width: 70ch; }
+
+/* lightbox */
+dialog { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1600px); }
+dialog::backdrop { background: rgba(6, 10, 20, .82); }
+dialog img { display: block; width: 100%; height: auto; border-radius: 10px; }
+dialog p { color: #fff; font-weight: 700; padding: 10px 2px 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .look { transition: transform .18s ease, box-shadow .18s ease; }
+  .look:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(20, 40, 80, .12); }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">BounJam26 · look-dev · Blender 5.0 / Cycles</span>
+    <h1>Aynı sahne, altı <span class="drop">estetik</span></h1>
+    <p>Kağıt gemiyi taşıyan blob, düğme, itme bloğu ve iskele, her seferinde aynı kamerayla render edildi. Değişenler sadece materyal, ışık ve renk paleti. Amaç hangi yönün oyuna uyduğunu ve hepsinde neyin eksik kaldığını görmek.</p>
+    <div class="meta"><span>1600×900 · 128 örnek · RTX 4070 Laptop</span><span>render başına ≈ 8 sn</span><span>blob her estetikte parlak kalır</span></div>
+  </header>
+
+  <section class="compare" aria-labelledby="cmp-h">
+    <div class="compare-head">
+      <div>
+        <span class="eyebrow">Yan yana</span>
+        <h2 id="cmp-h">İki estetiği karşılaştır</h2>
+      </div>
+      <div class="pickers">
+        <label for="pick-left">Sol <select id="pick-left"></select></label>
+        <label for="pick-right">Sağ <select id="pick-right"></select></label>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <img id="img-left" alt="">
+      <img id="img-right" class="right" alt="">
+      <div class="divider"></div>
+      <span class="tag l" id="tag-left"></span>
+      <span class="tag r" id="tag-right"></span>
+    </div>
+    <input class="slider" id="split" type="range" min="0" max="100" value="50" aria-label="Ayırıcı konumu">
+  </section>
+
+  <section aria-labelledby="looks-h" style="display:grid;gap:18px">
+    <div>
+      <span class="eyebrow">Altı yön</span>
+      <h2 id="looks-h">Ne iyi çalışıyor, ne çalışmıyor</h2>
+    </div>
+    <div class="looks" id="looks"></div>
+  </section>
+
+  <section class="gaps" aria-labelledby="gaps-h">
+    <div>
+      <span class="eyebrow">Doğru çıktı için</span>
+      <h2 id="gaps-h">Eksik parçalar</h2>
+    </div>
+    <p>Altı karenin hepsinde aynı boşluklar var. Bunlar stilden bağımsız; cevaplanmadan hangi estetiği seçersek seçelim sonuç tahmin olarak kalır. Yeşil çizgili olanlar en çok etkiyi yapanlar.</p>
+    <ul class="gap-list">
+      <li class="key">
+        <span class="q">Dünya nerede geçiyor?</span>
+        <span class="why">Damalı bloklar her yere uyuyor, bu yüzden hiçbir yere ait değil. Kağıt gemi bir mekân ima ediyor ama sahne bunu söylemiyor.</span>
+        <span class="opts">Örnekler: <b>yağmurlu sokak ve su birikintileri</b>, banyo küveti, mutfak lavabosu, oyuncak odası, sahil.</span>
+      </li>
+      <li class="key">
+        <span class="q">Oyun kamerası nasıl?</span>
+        <span class="why">Stil karesi oyun kamerasından çekilmezse renk, ölçek ve okunurluk kararları yanlış çıkar. Blob şu an ekranda küçük.</span>
+        <span class="opts">Seçenekler: <b>sabit izometrik</b>, arkadan takip eden 3. şahıs, yandan 2.5D.</span>
+      </li>
+      <li class="key">
+        <span class="q">Referans görseller</span>
+        <span class="why">"Mario 3D World gibi" çok geniş bir tarif. 3 ila 5 ekran görüntüsü malzeme, ışık ve renk doygunluğunu birebir yakalamamı sağlar.</span>
+        <span class="opts">İstenen: beğendiğin oyunlardan sahneler, ve özellikle neyini beğendiğin.</span>
+      </li>
+      <li>
+        <span class="q">Katı form nasıl görünüyor?</span>
+        <span class="why">Oynanışın yarısı katı formda geçiyor ama hiçbir karede yok. Sıvıdan katıya geçiş estetiğin merkezinde olmalı.</span>
+        <span class="opts">Seçenekler: yontulmuş taş, buz/kristal, cilalı reçine, kurumuş jöle.</span>
+      </li>
+      <li>
+        <span class="q">Karakterin kişiliği</span>
+        <span class="why">Sadece göz var. Ağız, kaş veya yanak eklemek ifade ve geri bildirim imkânı verir; hasar, sevinç veya zorlanma anları için.</span>
+        <span class="opts">Seçenekler: sadece göz, göz ve ağız, tam ifade seti.</span>
+      </li>
+      <li>
+        <span class="q">Yüzey ve malzeme çeşitliliği</span>
+        <span class="why">Tek bir platform tipi var ve yan yüzleri boş. Sıvı form zeminin şeklini aldığı için zemin malzemesi oynanışın kendisi.</span>
+        <span class="opts">Gerekenler: kenar şeridi, rampa, köşe, ince platform, en az bir doğal yüzey.</span>
+      </li>
+      <li>
+        <span class="q">Hareket ve efekt dili</span>
+        <span class="why">Durağan karede görünmüyor ama estetiği en çok bu belirler: damla izi, sıçrama, gemi dalgalanması, katılaşma anı.</span>
+        <span class="opts">Sonraki adım: kısa bir turntable veya hareket testi.</span>
+      </li>
+      <li>
+        <span class="q">Hedef platform ve performans</span>
+        <span class="why">Subsurface, transmission ve DOF render'da ucuz, URP'de değil. PC mi, web/mobil mi olduğu malzeme seçimini değiştiriyor.</span>
+        <span class="opts">Seçenekler: sadece PC, PC ve WebGL (jam için), mobil.</span>
+      </li>
+    </ul>
+  </section>
+
+  <footer>Kaynak: <span style="font-family:var(--mono)">ArtSource/Blender/scripts/style_frame.py</span>. Her estetik bir preset; seçilen yön asset script'lerine işlenip FBX'ler yeniden üretilecek. İlk denenen cel-shading karşılaştırma menüsünde duruyor.</footer>
+</div>
+
+<dialog id="lightbox" aria-label="Büyük görüntü">
+  <img id="lb-img" alt="">
+  <p id="lb-cap"></p>
+</dialog>
+
+<script>
+const LOOKS = [
+  { id: "toy", name: "Oyuncak", sub: "parlak plastik", cost: ["low", "Unity: düşük"],
+    good: "Renkler en canlı, her obje net okunuyor. Mario 3D World hissine en yakın olan bu.",
+    bad: "Deniz düz ve boş. Platform yanları sade, nerede olduğumuzu anlatan bir şey yok.",
+    unity: "URP Lit, SSAO ve bloom yetiyor." },
+  { id: "golden", name: "Gün batımı", sub: "oyuncak + sıcak ışık", cost: ["low", "Unity: düşük"],
+    good: "En atmosferik olanı. Uzun gölgeler derinlik katıyor.",
+    bad: "Renkler kararıyor, düğme ve kutu daha zor seçiliyor. Ana stil değil, bazı level'lar için bir ruh hali.",
+    unity: "Sadece ışık ve skybox değişiyor, malzemeler aynı." },
+  { id: "clay", name: "Kil", sub: "stop-motion", cost: ["mid", "Unity: orta"],
+    good: "Sıcak, el yapımı bir his. Parlak blob mat kilin üstünde çok iyi öne çıkıyor.",
+    bad: "Formlar bir kil için fazla kusursuz. Parmak izi ve yamukluk modelin kendisinde de olmalı.",
+    unity: "Triplanar noise normal map ve düşük parlaklık gerekiyor." },
+  { id: "lowpoly", name: "Low-poly", sub: "fasetli, düz renk", cost: ["low", "Unity: en düşük"],
+    good: "En ucuzu ve en hızlı üretileni. Temiz ve tutarlı.",
+    bad: "Blob fasetlenince sıvı hissi kayboluyor; jöle değil mücevher gibi duruyor.",
+    unity: "Flat shading, doku yok. Web ve mobil için ideal." },
+  { id: "pastel", name: "Pastel diorama", sub: "tilt-shift", cost: ["mid", "Unity: düşük–orta"],
+    good: "Minyatür bir diorama hissi. Yumuşak ve sakin.",
+    bad: "Kontrast düşük. Etkileşimli objeler arka plana karışıyor, oynanış okunurluğu zayıf.",
+    unity: "DOF post-process ve yumuşak gölge." },
+  { id: "papercraft", name: "Kağıt işi", sub: "karton + renkli kağıt", cost: ["high", "Unity: yüksek"],
+    good: "Kağıt gemiyle tema olarak en uyumlu fikir.",
+    bad: "Bu kare sadece materyal değişimi. Gerçek kağıt hissi için kat izleri, katmanlı kenarlar ve kesik silüetler modellenmeli.",
+    unity: "Doku seti ve modellerin yeniden tasarımı gerekiyor." },
+];
+const EXTRA = [{ id: "cel", name: "Cel-shading (ilk deneme, elendi)" }];
+const ALL = LOOKS.map(l => ({ id: l.id, name: l.name })).concat(EXTRA);
+const src = id => "img/" + id + ".jpg";
+
+// cards
+const grid = document.getElementById("looks");
+LOOKS.forEach(l => {
+  const card = document.createElement("article");
+  card.className = "look";
+  card.innerHTML = `
+    <button class="shot" type="button" aria-label="${l.name} görüntüsünü büyüt"><img src="${src(l.id)}" alt="${l.name} estetiğinde stil karesi" loading="lazy"></button>
+    <div class="body">
+      <div class="title-row"><h3>${l.name} <span style="font-weight:500;color:var(--muted);font-size:.9rem">· ${l.sub}</span></h3><span class="chip ${l.cost[0]}">${l.cost[1]}</span></div>
+      <dl>
+        <div><dt>İyi</dt><dd>${l.good}</dd></div>
+        <div><dt>Eksik</dt><dd>${l.bad}</dd></div>
+        <div><dt>Unity'de</dt><dd>${l.unity}</dd></div>
+      </dl>
+    </div>`;
+  card.querySelector("button").addEventListener("click", () => openLightbox(l.id, l.name + " · " + l.sub));
+  grid.appendChild(card);
+});
+
+// compare
+const left = document.getElementById("pick-left"), right = document.getElementById("pick-right");
+ALL.forEach(o => { left.add(new Option(o.name, o.id)); right.add(new Option(o.name, o.id)); });
+left.value = "toy"; right.value = "clay";
+const stage = document.getElementById("stage"), split = document.getElementById("split");
+function nameOf(id) { return ALL.find(o => o.id === id).name; }
+function render() {
+  document.getElementById("img-left").src = src(left.value);
+  document.getElementById("img-left").alt = nameOf(left.value);
+  document.getElementById("img-right").src = src(right.value);
+  document.getElementById("img-right").alt = nameOf(right.value);
+  document.getElementById("tag-left").textContent = nameOf(left.value);
+  document.getElementById("tag-right").textContent = nameOf(right.value);
+  stage.style.setProperty("--split", split.value + "%");
+}
+[left, right].forEach(s => s.addEventListener("change", render));
+split.addEventListener("input", render);
+function dragTo(clientX) {
+  const r = stage.getBoundingClientRect();
+  split.value = Math.round(Math.min(100, Math.max(0, (clientX - r.left) / r.width * 100)));
+  render();
+}
+let dragging = false;
+stage.addEventListener("pointerdown", e => { dragging = true; stage.setPointerCapture(e.pointerId); dragTo(e.clientX); });
+stage.addEventListener("pointermove", e => { if (dragging) dragTo(e.clientX); });
+stage.addEventListener("pointerup", () => { dragging = false; });
+render();
+
+// lightbox
+const lb = document.getElementById("lightbox");
+function openLightbox(id, caption) {
+  document.getElementById("lb-img").src = src(id);
+  document.getElementById("lb-img").alt = caption;
+  document.getElementById("lb-cap").textContent = caption;
+  lb.showModal();
+}
+lb.addEventListener("click", () => lb.close());
+</script>
