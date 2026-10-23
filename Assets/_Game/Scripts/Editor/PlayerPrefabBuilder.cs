@@ -1,6 +1,7 @@
 using BounJam.Core;
 using BounJam.Player;
 using Unity.Cinemachine;
+using Unity.Cinemachine.TargetTracking;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -20,20 +21,33 @@ namespace BounJam.EditorTools
         [MenuItem("BounJam/Setup/Rebuild Player Prefabs")]
         internal static void Build()
         {
-            GameObject rig = BuildRig();
-            GameObject rigAsset = PrefabUtility.SaveAsPrefabAsset(rig, RigPath);
-            Object.DestroyImmediate(rig);
+            var rig = new GameObject("PlayerRig");
+            GameObject rigAsset;
+            try
+            {
+                BuildRig(rig);
+                rigAsset = PrefabUtility.SaveAsPrefabAsset(rig, RigPath);
+            }
+            finally
+            {
+                Object.DestroyImmediate(rig);
+            }
 
             var spawn = new GameObject("PlayerSpawn", typeof(PlayerSpawn));
-            BuilderUtility.SetField(spawn.GetComponent<PlayerSpawn>(), "playerRig", rigAsset);
-            PrefabUtility.SaveAsPrefabAsset(spawn, SpawnPath);
-            Object.DestroyImmediate(spawn);
+            try
+            {
+                BuilderUtility.SetField(spawn.GetComponent<PlayerSpawn>(), "playerRig", rigAsset);
+                PrefabUtility.SaveAsPrefabAsset(spawn, SpawnPath);
+            }
+            finally
+            {
+                Object.DestroyImmediate(spawn);
+            }
             Debug.Log("[BounJam] Built player prefabs.");
         }
 
-        static GameObject BuildRig()
+        static void BuildRig(GameObject rig)
         {
-            var rig = new GameObject("PlayerRig");
             GameObject beaver = BuildBeaver(rig.transform, out Transform cameraPivot);
 
             var mainCamera = new GameObject("Main Camera", typeof(Camera), typeof(UniversalAdditionalCameraData),
@@ -43,21 +57,45 @@ namespace BounJam.EditorTools
             mainCamera.GetComponent<Camera>().nearClipPlane = 0.1f;
             BuilderUtility.SetField(beaver.GetComponent<PlayerAim>(), "viewCamera", mainCamera.GetComponent<Camera>());
 
-            var followCamera = new GameObject("Follow Camera", typeof(CinemachineCamera), typeof(CinemachineThirdPersonFollow));
-            followCamera.transform.SetParent(rig.transform, false);
+            CinemachineOrbitalFollow orbit = BuildFreeLookCamera(rig.transform, cameraPivot);
+            BuilderUtility.SetField(beaver.GetComponent<PlayerLook>(), "orbit", orbit);
+
+            BuildHud(rig.transform);
+        }
+
+        // Orbits the pivot in world space (PlayerLook drives the angles) and keeps the beaver centred,
+        // slightly below the crosshair so the crosshair is not hidden behind it.
+        static CinemachineOrbitalFollow BuildFreeLookCamera(Transform parent, Transform cameraPivot)
+        {
+            var followCamera = new GameObject("Free Look Camera", typeof(CinemachineCamera),
+                typeof(CinemachineOrbitalFollow), typeof(CinemachineRotationComposer), typeof(CinemachineDeoccluder));
+            followCamera.transform.SetParent(parent, false);
+
             var cinemachineCamera = followCamera.GetComponent<CinemachineCamera>();
             cinemachineCamera.Follow = cameraPivot;
             cinemachineCamera.Lens.FieldOfView = 55f;
-            var thirdPerson = followCamera.GetComponent<CinemachineThirdPersonFollow>();
-            thirdPerson.ShoulderOffset = new Vector3(0.5f, 0.1f, 0f);
-            thirdPerson.VerticalArmLength = 0.3f;
-            thirdPerson.CameraDistance = 4f;
-            thirdPerson.AvoidObstacles.Enabled = true;
-            thirdPerson.AvoidObstacles.CollisionFilter = GameLayers.MaskOf(GameLayers.Default, GameLayers.Ground, GameLayers.Tree);
-            thirdPerson.AvoidObstacles.CameraRadius = 0.2f;
 
-            BuildHud(rig.transform);
-            return rig;
+            var orbit = followCamera.GetComponent<CinemachineOrbitalFollow>();
+            orbit.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;
+            orbit.Radius = 6f;
+            orbit.TrackerSettings.BindingMode = BindingMode.WorldSpace;
+            orbit.TrackerSettings.PositionDamping = new Vector3(0.3f, 0.3f, 0.3f);
+            orbit.VerticalAxis.Range = new Vector2(-15f, 65f);
+            orbit.VerticalAxis.Value = orbit.VerticalAxis.Center = 20f;
+
+            var composer = followCamera.GetComponent<CinemachineRotationComposer>();
+            composer.TargetOffset = new Vector3(0f, 0.5f, 0f);
+            composer.Damping = Vector2.zero;
+
+            var deoccluder = followCamera.GetComponent<CinemachineDeoccluder>();
+            deoccluder.CollideAgainst = GameLayers.MaskOf(GameLayers.Default, GameLayers.Ground, GameLayers.Tree);
+            deoccluder.MinimumDistanceFromTarget = 0.5f;
+            deoccluder.AvoidObstacles.Enabled = true;
+            deoccluder.AvoidObstacles.CameraRadius = 0.2f;
+            deoccluder.AvoidObstacles.Strategy = CinemachineDeoccluder.ObstacleAvoidance.ResolutionStrategy.PullCameraForward;
+            deoccluder.AvoidObstacles.Damping = 0.2f;
+            deoccluder.AvoidObstacles.DampingWhenOccluded = 0f;
+            return orbit;
         }
 
         // A capsule stand-in until the real beaver model arrives; the teeth show which way it faces.
@@ -87,7 +125,6 @@ namespace BounJam.EditorTools
             cameraPivot = new GameObject("Camera Pivot").transform;
             cameraPivot.SetParent(beaver.transform, false);
             cameraPivot.localPosition = new Vector3(0f, 1.1f, 0f);
-            BuilderUtility.SetField(beaver.GetComponent<PlayerLook>(), "pivot", cameraPivot);
 
             BuilderUtility.SetLayerRecursively(beaver, GameLayers.Player);
             return beaver;

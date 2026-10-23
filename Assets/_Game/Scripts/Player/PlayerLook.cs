@@ -1,26 +1,26 @@
+using Unity.Cinemachine;
 using UnityEngine;
 
 namespace BounJam.Player
 {
     /// <summary>
-    /// Turns the camera pivot with mouse or right-stick input. The Cinemachine third-person camera copies
-    /// the pivot's rotation, so this decides where the camera looks. Also keeps the cursor locked.
+    /// Orbits the free-look camera around the beaver with mouse or right-stick input. The orbit is in
+    /// world space, so the camera only turns when you look around, never when the beaver turns.
+    /// Also keeps the cursor locked.
     /// </summary>
-    [DefaultExecutionOrder(-10)] // Update runs before PlayerMotor reads PlanarRotation, LateUpdate before Cinemachine
+    [DefaultExecutionOrder(-10)] // runs before PlayerMotor reads PlanarRotation
     public class PlayerLook : MonoBehaviour
     {
-        [SerializeField] Transform pivot;
+        [SerializeField] CinemachineOrbitalFollow orbit;
         [SerializeField, Tooltip("Degrees turned per pixel of mouse movement.")]
         float mouseSensitivity = 0.1f;
         [SerializeField, Tooltip("Degrees per second at full stick tilt.")]
         float stickSensitivity = 200f;
         [SerializeField] bool invertY;
-        [SerializeField] float minPitch = -40f;
-        [SerializeField] float maxPitch = 70f;
 
         BeaverInput input;
         float yaw;
-        float pitch = 10f;
+        float pitch;
         int framesToIgnoreLook;
 
         /// <summary>The camera's heading without its pitch; movement input is relative to this.</summary>
@@ -29,7 +29,8 @@ namespace BounJam.Player
         void Awake()
         {
             input = GetComponent<BeaverInput>();
-            yaw = transform.eulerAngles.y;
+            yaw = transform.eulerAngles.y; // start behind the beaver
+            pitch = orbit.VerticalAxis.Value;
         }
 
         void OnEnable() => LockCursor();
@@ -50,21 +51,22 @@ namespace BounJam.Player
             {
                 if (input.FirePressed)
                     LockCursor();
-                return;
             }
-            if (framesToIgnoreLook > 0)
+            else if (framesToIgnoreLook > 0)
             {
                 framesToIgnoreLook--;
-                return;
+            }
+            else
+            {
+                Vector2 look = input.Look;
+                float scale = input.LookIsMouseDelta ? mouseSensitivity : stickSensitivity * Time.deltaTime;
+                yaw = Mathf.Repeat(yaw + look.x * scale + 180f, 360f) - 180f;
+                Vector2 pitchRange = orbit.VerticalAxis.Range;
+                pitch = Mathf.Clamp(pitch + (invertY ? look.y : -look.y) * scale, pitchRange.x, pitchRange.y);
             }
 
-            Vector2 look = input.Look;
-            float scale = input.LookIsMouseDelta ? mouseSensitivity : stickSensitivity * Time.deltaTime;
-            yaw += look.x * scale;
-            pitch = Mathf.Clamp(pitch + (invertY ? look.y : -look.y) * scale, minPitch, maxPitch);
+            orbit.HorizontalAxis.Value = yaw;
+            orbit.VerticalAxis.Value = pitch;
         }
-
-        // The pivot is a child of the beaver, so it is re-aimed after PlayerMotor has turned the body.
-        void LateUpdate() => pivot.rotation = Quaternion.Euler(pitch, yaw, 0f);
     }
 }

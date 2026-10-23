@@ -6,6 +6,7 @@ using System.Reflection;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace BounJam.EditorTools
 {
@@ -13,7 +14,7 @@ namespace BounJam.EditorTools
     /// Lets tools outside Unity (such as Claude Code) drive the open editor. Each *.cmd file dropped in
     /// Library/BounJamCommands holds one command; files run in name order and are deleted as they start.
     /// Commands: refresh | call Namespace.Type.Method | open Assets/Scene.unity | play | stop |
-    /// wait seconds | screenshot path. Results go to the Console and Editor.log.
+    /// wait seconds | screenshot path | hierarchy. Results go to the Console and Editor.log.
     /// </summary>
     [InitializeOnLoad]
     static class ExternalCommands
@@ -82,9 +83,22 @@ namespace BounJam.EditorTools
                 case "screenshot":
                     ScreenCapture.CaptureScreenshot(argument);
                     break;
+                case "hierarchy":
+                    LogHierarchy();
+                    break;
                 default:
                     Debug.LogError($"[BounJam] Unknown external command '{verb}'.");
                     break;
+            }
+        }
+
+        static void LogHierarchy()
+        {
+            for (int i = 0; i < SceneManager.sceneCount; i++)
+            {
+                Scene scene = SceneManager.GetSceneAt(i);
+                string roots = string.Join(", ", scene.GetRootGameObjects().Select(go => go.name));
+                Debug.Log($"[BounJam] Scene {scene.path} (unsaved changes: {scene.isDirty}): {roots}");
             }
         }
 
