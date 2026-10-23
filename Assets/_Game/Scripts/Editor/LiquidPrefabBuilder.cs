@@ -23,7 +23,7 @@ namespace BounJam.EditorTools
             Liquid("Water", ("displayName", "Water"), ("kind", LiquidKind.Water),
                 ("color", new Color(0.35f, 0.65f, 1f, 0.85f)), ("isInfinite", true), ("flowPerSecond", 1f),
                 ("particlesPerSecond", 70f), ("launchSpeed", 15f), ("gravityModifier", 0.6f),
-                ("particleSize", 0.24f), ("pushPerUnit", 12f)),
+                ("particleSize", 0.24f), ("pushPerUnit", 12f), ("extinguishPower", 1f)),
             Liquid("Sticky", ("displayName", "Sticky Sap"), ("kind", LiquidKind.Sticky),
                 ("color", new Color(0.75f, 0.85f, 0.2f, 0.95f)), ("capacity", 5f), ("flowPerSecond", 1f),
                 ("particlesPerSecond", 40f), ("launchSpeed", 12f), ("gravityModifier", 0.9f),

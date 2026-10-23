@@ -1,6 +1,8 @@
 using System;
+using TMPro;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 namespace BounJam.EditorTools
@@ -65,6 +67,42 @@ namespace BounJam.EditorTools
         {
             foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
                 child.gameObject.layer = layer;
+        }
+
+        public static RectTransform UiObject(string name, Transform parent)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            return (RectTransform)go.transform;
+        }
+
+        /// <summary>Fills the parent, leaving <paramref name="inset"/> pixels on every side.</summary>
+        public static void Stretch(RectTransform rect, float inset)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = new Vector2(inset, inset);
+            rect.offsetMax = new Vector2(-inset, -inset);
+        }
+
+        public static Image UiImage(RectTransform rect, Color color)
+        {
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = false;
+            return image;
+        }
+
+        public static TMP_Text UiLabel(string name, Transform parent, string text, float size, TextAlignmentOptions alignment)
+        {
+            var label = UiObject(name, parent).gameObject.AddComponent<TextMeshProUGUI>();
+            label.font = TMP_Settings.defaultFontAsset;
+            label.text = text;
+            label.fontSize = size;
+            label.alignment = alignment;
+            label.color = Color.white;
+            label.raycastTarget = false;
+            return label;
         }
 
         /// <summary>A primitive mesh without its collider, for decoration.</summary>

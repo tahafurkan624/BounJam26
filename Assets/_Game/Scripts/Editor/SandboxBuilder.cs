@@ -31,8 +31,10 @@ namespace BounJam.EditorTools
             }
             if (!File.Exists(PlayerPrefabBuilder.SpawnPath))
                 PlayerPrefabBuilder.Build();
-            if (!File.Exists(PlayerPrefabBuilder.SpawnPath))
-                return; // PlayerPrefabBuilder has logged why, e.g. it is waiting for the TextMeshPro import
+            if (!File.Exists(LevelPrefabBuilder.LevelPath))
+                LevelPrefabBuilder.Build();
+            if (!File.Exists(PlayerPrefabBuilder.SpawnPath) || !File.Exists(LevelPrefabBuilder.LevelPath))
+                return; // the builders have logged why, e.g. they are waiting for the TextMeshPro import
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 Debug.Log("[BounJam] Sandbox not built. Use BounJam > Setup > Rebuild Sandbox Scene when ready.");
@@ -64,13 +66,15 @@ namespace BounJam.EditorTools
             Transform props = new GameObject("Test Props").transform;
             Pushable(PrimitiveType.Cube, "Pushable Cube", props, new Vector3(2.5f, 0.5f, -1f), 1f, pushable);
             Pushable(PrimitiveType.Sphere, "Pushable Sphere", props, new Vector3(-2.5f, 0.4f, -1f), 0.8f, pushable);
-            LiquidProbe(props, new Vector3(0f, 0.75f, -2.5f), accent);
+            LiquidProbe(props, new Vector3(-4f, 0.75f, -3f), accent);
 
             Transform gameplay = new GameObject("Gameplay").transform;
-            var spawn = (GameObject)PrefabUtility.InstantiatePrefab(
-                AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabBuilder.SpawnPath), scene);
-            spawn.transform.SetParent(gameplay);
-            spawn.transform.position = new Vector3(0, 0, -6);
+            Place(LevelPrefabBuilder.LevelPath, gameplay, Vector3.zero);
+            Place(PlayerPrefabBuilder.SpawnPath, gameplay, new Vector3(0, 0, -6));
+            // Two fires on the ground and one up on the platform, which needs an arcing shot.
+            Place(LevelPrefabBuilder.FirePath, gameplay, new Vector3(0, 0, 3));
+            Place(LevelPrefabBuilder.FirePath, gameplay, new Vector3(-4, 0, 0));
+            Place(LevelPrefabBuilder.FirePath, gameplay, new Vector3(-6, 2, 13));
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddToBuildSettings();
@@ -87,6 +91,13 @@ namespace BounJam.EditorTools
             go.transform.SetPositionAndRotation(position, Quaternion.Euler(pitch, 0, 0));
             go.transform.localScale = size;
             go.GetComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        static void Place(string prefabPath, Transform parent, Vector3 position)
+        {
+            var instance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath));
+            instance.transform.SetParent(parent);
+            instance.transform.position = position;
         }
 
         static void Pushable(PrimitiveType shape, string name, Transform parent, Vector3 position, float size, Material material)
@@ -114,9 +125,11 @@ namespace BounJam.EditorTools
             go.AddComponent<LiquidHitProbe>();
         }
 
+        // Sandbox first. The URP template's sample scene is dropped so "Next Level" never loads it.
         static void AddToBuildSettings()
         {
-            var scenes = EditorBuildSettings.scenes.Where(s => s.path != ScenePath).ToList();
+            const string templateScenePath = "Assets/Scenes/SampleScene.unity";
+            var scenes = EditorBuildSettings.scenes.Where(s => s.path != ScenePath && s.path != templateScenePath).ToList();
             scenes.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
             EditorBuildSettings.scenes = scenes.ToArray();
         }

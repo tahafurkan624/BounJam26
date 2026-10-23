@@ -38,6 +38,8 @@ namespace BounJam.Liquids
         [Header("Effects")]
         [SerializeField, Min(0f), Tooltip("Impulse per unit given to rigidbodies on the Pushable layer.")]
         float pushPerUnit = 12f;
+        [SerializeField, Min(0f), Tooltip("Fire put out per unit: 1 for water, 0 for liquids that don't fight fire.")]
+        float extinguishPower;
 
         public string DisplayName => displayName;
         public LiquidKind Kind => kind;
@@ -50,6 +52,7 @@ namespace BounJam.Liquids
         public float GravityModifier => gravityModifier;
         public float ParticleSize => particleSize;
         public float PushPerUnit => pushPerUnit;
+        public float ExtinguishPower => extinguishPower;
         public float UnitsPerParticle => flowPerSecond / particlesPerSecond;
     }
 }

@@ -184,7 +184,7 @@ namespace BounJam.EditorTools
             scaler.matchWidthOrHeight = 0.5f;
 
             // PlayerAim casts through the screen centre, so the crosshair sits there.
-            RectTransform crosshair = UiObject("Crosshair", hud.transform);
+            RectTransform crosshair = BuilderUtility.UiObject("Crosshair", hud.transform);
             crosshair.sizeDelta = new Vector2(10f, 10f);
             var image = crosshair.gameObject.AddComponent<Image>();
             image.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
@@ -202,12 +202,12 @@ namespace BounJam.EditorTools
             const float slotSize = 72f, spacing = 88f;
             int slotCount = inventory.SlotCount;
 
-            RectTransform panel = UiObject("Liquids", hud);
+            RectTransform panel = BuilderUtility.UiObject("Liquids", hud);
             panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(0.5f, 0f);
             panel.anchoredPosition = new Vector2(0f, 32f);
             panel.sizeDelta = new Vector2(slotCount * spacing, slotSize + 44f);
 
-            TMP_Text liquidName = Label("Liquid Name", panel, "Water", 30f, TextAlignmentOptions.Bottom);
+            TMP_Text liquidName = BuilderUtility.UiLabel("Liquid Name", panel, "Water", 30f, TextAlignmentOptions.Bottom);
             RectTransform nameRect = liquidName.rectTransform;
             nameRect.anchorMin = new Vector2(0f, 1f);
             nameRect.anchorMax = Vector2.one;
@@ -217,22 +217,22 @@ namespace BounJam.EditorTools
             var views = new LiquidSlotView[slotCount];
             for (int i = 0; i < slotCount; i++)
             {
-                RectTransform slot = UiObject($"Slot {i + 1}", panel);
+                RectTransform slot = BuilderUtility.UiObject($"Slot {i + 1}", panel);
                 slot.anchorMin = slot.anchorMax = slot.pivot = new Vector2(0.5f, 0f);
                 slot.anchoredPosition = new Vector2((i - (slotCount - 1) / 2f) * spacing, 0f);
                 slot.sizeDelta = new Vector2(slotSize, slotSize);
-                Image frame = AddImage(slot, Color.white);
+                Image frame = BuilderUtility.UiImage(slot, Color.white);
 
-                RectTransform tank = UiObject("Tank", slot);
-                Stretch(tank, 5f);
-                AddImage(tank, new Color(0.08f, 0.1f, 0.14f, 0.85f));
+                RectTransform tank = BuilderUtility.UiObject("Tank", slot);
+                BuilderUtility.Stretch(tank, 5f);
+                BuilderUtility.UiImage(tank, new Color(0.08f, 0.1f, 0.14f, 0.85f));
 
-                RectTransform fillRect = UiObject("Fill", tank);
-                Stretch(fillRect, 0f);
-                Image fill = AddImage(fillRect, Color.white);
+                RectTransform fillRect = BuilderUtility.UiObject("Fill", tank);
+                BuilderUtility.Stretch(fillRect, 0f);
+                Image fill = BuilderUtility.UiImage(fillRect, Color.white);
 
-                TMP_Text key = Label("Key", slot, (i + 1).ToString(), 22f, TextAlignmentOptions.TopLeft);
-                Stretch(key.rectTransform, 9f);
+                TMP_Text key = BuilderUtility.UiLabel("Key", slot, (i + 1).ToString(), 22f, TextAlignmentOptions.TopLeft);
+                BuilderUtility.Stretch(key.rectTransform, 9f);
 
                 views[i] = slot.gameObject.AddComponent<LiquidSlotView>();
                 BuilderUtility.SetValues(views[i], ("frame", frame), ("fill", fill));
@@ -240,41 +240,6 @@ namespace BounJam.EditorTools
 
             BuilderUtility.SetValues(panel.gameObject.AddComponent<LiquidHud>(),
                 ("inventory", inventory), ("liquidName", liquidName), ("slots", views));
-        }
-
-        static RectTransform UiObject(string name, Transform parent)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(parent, false);
-            return (RectTransform)go.transform;
-        }
-
-        static void Stretch(RectTransform rect, float inset)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = new Vector2(inset, inset);
-            rect.offsetMax = new Vector2(-inset, -inset);
-        }
-
-        static Image AddImage(RectTransform rect, Color color)
-        {
-            var image = rect.gameObject.AddComponent<Image>();
-            image.color = color;
-            image.raycastTarget = false;
-            return image;
-        }
-
-        static TMP_Text Label(string name, Transform parent, string text, float size, TextAlignmentOptions alignment)
-        {
-            var label = UiObject(name, parent).gameObject.AddComponent<TextMeshProUGUI>();
-            label.font = TMP_Settings.defaultFontAsset;
-            label.text = text;
-            label.fontSize = size;
-            label.alignment = alignment;
-            label.color = Color.white;
-            label.raycastTarget = false;
-            return label;
         }
     }
 }
