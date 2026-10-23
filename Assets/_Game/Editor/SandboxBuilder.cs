@@ -37,6 +37,8 @@ namespace BounJam.EditorTools
         struct Palette
         {
             public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob, Paper;
+            public Material Door, Lift, ButtonIdle, ButtonPressed;
+            public PhysicsMaterial CratePhysics;
         }
 
         [MenuItem("BounJam/Build Sandbox Level")]
@@ -94,12 +96,20 @@ namespace BounJam.EditorTools
             Grate = GridMaterial("Greybox_Grate", new Color(0.30f, 0.55f, 0.95f), new Color(0.12f, 0.25f, 0.55f), 0.2f),
             // The jelly shader's property defaults are the tuned look; the material only needs creating.
             Blob = LoadOrCreate($"{MaterialsFolder}/Blob_Jelly.mat", () => new Material(Shader.Find("BounJam/Jelly"))),
-            Paper = LoadOrCreate($"{MaterialsFolder}/PaperShip_Paper.mat", () =>
+            Paper = LitMaterial("PaperShip_Paper", new Color(0.93f, 0.91f, 0.84f), 0.15f, Color.black),
+            Door = GridMaterial("Greybox_Door", new Color(0.75f, 0.30f, 0.25f), new Color(0.55f, 0.20f, 0.18f), 0.5f),
+            Lift = GridMaterial("Greybox_Lift", new Color(0.95f, 0.80f, 0.30f), new Color(0.75f, 0.60f, 0.20f), 0.5f),
+            ButtonIdle = LitMaterial("Button_Idle", new Color(0.90f, 0.30f, 0.20f), 0.4f, Color.black),
+            ButtonPressed = LitMaterial("Button_Pressed", new Color(0.35f, 0.90f, 0.40f), 0.4f, new Color(0.15f, 0.60f, 0.20f)),
+            // Slick enough that the solid can shove a crate along at a slow, heavy pace. Minimum combine keeps it
+            // slick against everything, so a pushing crystal slides along its face instead of rolling up it.
+            CratePhysics = LoadOrCreate($"{MaterialsFolder}/Crate_Physics.asset", () => new PhysicsMaterial("Crate")
             {
-                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-                material.SetColor("_BaseColor", new Color(0.93f, 0.91f, 0.84f));
-                material.SetFloat("_Smoothness", 0.15f);
-                return material;
+                dynamicFriction = 0.3f,
+                staticFriction = 0.35f,
+                bounciness = 0f,
+                frictionCombine = PhysicsMaterialCombine.Minimum,
+                bounceCombine = PhysicsMaterialCombine.Minimum,
             }),
         };
 
@@ -160,10 +170,78 @@ namespace BounJam.EditorTools
             Box("Grate Wall Right", grate, new Vector3(15.1f, 0.75f, -8f), new Vector3(5.8f, 1.5f, 0.5f), m.Wall);
             Box("Grate", grate, new Vector3(10f, 0.75f, -8f), new Vector3(4.4f, 1.5f, 0.15f), m.Grate, "LiquidPassable");
 
-            // Pushable crates: heavy enough that only the solid form should move them (Stage 6).
+            // Pushable crates: only the solid form moves them; heavy enough to hold a button down.
             Transform crates = Group("Crates", level);
-            Crate("Crate Big", crates, new Vector3(-5f, 0.5f, -6f), 1f, 20f, m.Crate);
-            Crate("Crate Small", crates, new Vector3(-6.6f, 0.4f, -6f), 0.8f, 10f, m.Crate);
+            Crate("Crate Big", crates, new Vector3(-5f, 0.5f, -6f), 1f, 4f, m);
+            Crate("Crate Small", crates, new Vector3(-6.6f, 0.4f, -6f), 0.8f, 3f, m);
+
+            BuildInteractables(level, m);
+        }
+
+        static void BuildInteractables(Transform level, Palette m)
+        {
+            Transform group = Group("Interactables", level);
+
+            // A locked room in the south-west corner. Its gate sinks into the floor while the button is pressed
+            // and stays open 4 s after release: press as a solid, melt, slip in as liquid.
+            Box("Room Wall North", group, new Vector3(-14f, 0.75f, -15f), new Vector3(8f, 1.5f, 0.5f), m.Wall);
+            Box("Room Wall North Short", group, new Vector3(-6.75f, 0.75f, -15f), new Vector3(1.5f, 1.5f, 0.5f), m.Wall);
+            Box("Room Wall East", group, new Vector3(-5.75f, 0.75f, -16.5f), new Vector3(0.5f, 1.5f, 3f), m.Wall);
+            PressureButton gateButton = Button("Button Gate", group, new Vector3(-3f, 0f, -13f), m);
+            Mover("Room Gate", group, new Vector3(-8.75f, 0.75f, -15f), new Vector3(2.5f, 1.5f, 0.5f), m.Door,
+                  new[] { gateButton }, new Vector3(0f, -1.55f, 0f), speed: 2f, holdTime: 4f);
+
+            // Push the big crate 3.5 m south onto this button to raise a lift next to the platform.
+            PressureButton liftButton = Button("Button Lift", group, new Vector3(-5f, 0f, -9.5f), m);
+            Mover("Lift", group, new Vector3(5f, 0.1f, 9f), new Vector3(2f, 0.2f, 2f), m.Lift,
+                  new[] { liftButton }, new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f);
+        }
+
+        static PressureButton Button(string name, Transform parent, Vector3 position, Palette m)
+        {
+            var root = new GameObject(name) { layer = LayerMask.NameToLayer("Interactable") };
+            root.transform.SetParent(parent, false);
+            root.transform.position = position;
+
+            // Visual plate only: no collider, so nothing snags on its edge.
+            GameObject plate = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            plate.name = "Plate";
+            Object.DestroyImmediate(plate.GetComponent<Collider>());
+            plate.layer = root.layer;
+            plate.transform.SetParent(root.transform, false);
+            plate.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+            plate.transform.localScale = new Vector3(1.2f, 0.04f, 1.2f);
+            var plateRenderer = plate.GetComponent<MeshRenderer>();
+            plateRenderer.sharedMaterial = m.ButtonIdle;
+
+            var button = root.AddComponent<PressureButton>();
+            var settings = new SerializedObject(button);
+            settings.FindProperty("cap").objectReferenceValue = plate.transform;
+            settings.FindProperty("capRenderer").objectReferenceValue = plateRenderer;
+            settings.FindProperty("idleMaterial").objectReferenceValue = m.ButtonIdle;
+            settings.FindProperty("pressedMaterial").objectReferenceValue = m.ButtonPressed;
+            settings.FindProperty("detectMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Pushable", "Ship");
+            settings.ApplyModifiedPropertiesWithoutUndo();
+            return button;
+        }
+
+        static void Mover(string name, Transform parent, Vector3 position, Vector3 size, Material material,
+                          PressureButton[] buttons, Vector3 activeOffset, float speed, float holdTime)
+        {
+            GameObject go = Box(name, parent, position, size, material);
+            var body = go.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.interpolation = RigidbodyInterpolation.Interpolate;
+
+            var mover = go.AddComponent<ButtonMover>();
+            var settings = new SerializedObject(mover);
+            SerializedProperty list = settings.FindProperty("buttons");
+            list.arraySize = buttons.Length;
+            for (int i = 0; i < buttons.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = buttons[i];
+            settings.FindProperty("activeOffset").vector3Value = activeOffset;
+            settings.FindProperty("speed").floatValue = speed;
+            settings.FindProperty("holdTime").floatValue = holdTime;
+            settings.ApplyModifiedPropertiesWithoutUndo();
         }
 
         static GameObject BuildBlobPrefab(Material material)
@@ -211,8 +289,8 @@ namespace BounJam.EditorTools
             // Solid form: a convex collider that takes the frozen shape, with real friction.
             PhysicsMaterial solidPhysics = LoadOrCreate($"{MaterialsFolder}/Blob_Solid_Physics.asset", () => new PhysicsMaterial("Blob Solid")
             {
-                dynamicFriction = 0.6f,
-                staticFriction = 0.7f,
+                dynamicFriction = 0.4f,
+                staticFriction = 0.5f,
                 bounciness = 0.05f,
                 frictionCombine = PhysicsMaterialCombine.Average,
                 bounceCombine = PhysicsMaterialCombine.Average,
@@ -368,13 +446,29 @@ namespace BounJam.EditorTools
             return go;
         }
 
-        static void Crate(string name, Transform parent, Vector3 position, float size, float mass, Material material)
+        static void Crate(string name, Transform parent, Vector3 position, float size, float mass, Palette m)
         {
-            GameObject crate = Box(name, parent, position, Vector3.one * size, material, "Pushable");
+            GameObject crate = Box(name, parent, position, Vector3.one * size, m.Crate, "Pushable");
+            crate.GetComponent<Collider>().sharedMaterial = m.CratePhysics;
             var body = crate.AddComponent<Rigidbody>();
             body.mass = mass;
             body.interpolation = RigidbodyInterpolation.Interpolate;
+            crate.AddComponent<Pushable>();
         }
+
+        static Material LitMaterial(string name, Color color, float smoothness, Color emission)
+            => LoadOrCreate($"{MaterialsFolder}/{name}.mat", () =>
+            {
+                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                material.SetColor("_BaseColor", color);
+                material.SetFloat("_Smoothness", smoothness);
+                if (emission != Color.black)
+                {
+                    material.EnableKeyword("_EMISSION");
+                    material.SetColor("_EmissionColor", emission);
+                }
+                return material;
+            });
 
         static Material GridMaterial(string name, Color baseColor, Color lineColor, float cellSize)
             => LoadOrCreate($"{MaterialsFolder}/{name}.mat", () =>

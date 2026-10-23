@@ -66,7 +66,9 @@ namespace BounJam
         float groundGap;
         bool isSolid;
         bool solidGroundContact;
+        bool solidCrateContact;
         Vector3 solidGroundNormal = Vector3.up;
+        int pushableLayer;
 
         public Rigidbody Body => body;
         public bool IsGrounded { get; private set; }
@@ -98,6 +100,7 @@ namespace BounJam
             core = GetComponent<SphereCollider>();
             if (input == null) input = GetComponent<PlayerInputReader>();
             if (cameraTransform == null && Camera.main != null) cameraTransform = Camera.main.transform;
+            pushableLayer = LayerMask.NameToLayer("Pushable");
         }
 
         void FixedUpdate()
@@ -151,13 +154,16 @@ namespace BounJam
         {
             IsGrounded = solidGroundContact;
             GroundNormal = solidGroundContact ? solidGroundNormal : Vector3.up;
+            bool pressingCrate = solidCrateContact;
             solidGroundContact = false;
+            solidCrateContact = false;
 
             Vector3 wish = WishDirection();
             if (wish.sqrMagnitude < 0.0001f) return;
             // A resting solid falls asleep and stops reporting contacts; wake it so the next step sees the ground.
             if (body.IsSleeping()) body.WakeUp();
-            if (!IsGrounded) return;
+            // Leaning on a crate counts as footing too: a round crystal shoving a crate can lift off the floor a little.
+            if (!IsGrounded && !pressingCrate) return;
 
             Vector3 planar = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
             float speedAlongWish = Vector3.Dot(planar, wish.normalized);
@@ -171,6 +177,7 @@ namespace BounJam
 
             if (isSolid)
             {
+                if (collision.gameObject.layer == pushableLayer) solidCrateContact = true;
                 // Anything holding the solid up from below counts as ground for pushing.
                 for (int i = 0; i < collision.contactCount; i++)
                 {

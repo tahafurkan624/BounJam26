@@ -218,9 +218,12 @@ namespace BounJam.EditorTools
 
         static string Teleport(string[] args)
         {
-            GameObject target = GameObject.Find(args[0]);
-            if (target == null) return $"error: no active GameObject named '{args[0]}'";
-            var position = new Vector3(ParseFloat(args[1]), ParseFloat(args[2]), ParseFloat(args[3]));
+            // The last three arguments are the position; everything before them is the (possibly spaced) name.
+            int n = args.Length;
+            string name = string.Join(" ", args, 0, n - 3);
+            GameObject target = GameObject.Find(name);
+            if (target == null) return $"error: no active GameObject named '{name}'";
+            var position = new Vector3(ParseFloat(args[n - 3]), ParseFloat(args[n - 2]), ParseFloat(args[n - 1]));
             target.transform.position = position;
             if (target.TryGetComponent(out Rigidbody body))
             {
@@ -228,7 +231,7 @@ namespace BounJam.EditorTools
                 body.linearVelocity = Vector3.zero;
             }
             Physics.SyncTransforms();
-            return $"ok: {args[0]} moved to {Format(position)}";
+            return $"ok: {name} moved to {Format(position)}";
         }
 
         static string Probe(string name)
@@ -257,6 +260,12 @@ namespace BounJam.EditorTools
                 result += $" grounded={motor.IsGrounded} sleeping={motor.Body.IsSleeping()}";
             if (target.TryGetComponent(out BlobSkin skin))
                 result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
+            if (target.TryGetComponent(out PressureButton button))
+                result += string.Format(CultureInfo.InvariantCulture, " pressed={0} mass={1:0.00}", button.IsPressed, button.MassOnTop);
+            if (target.TryGetComponent(out ButtonMover mover))
+                result += string.Format(CultureInfo.InvariantCulture, " active={0} progress={1:0.00}", mover.IsActive, mover.Progress);
+            if (target.TryGetComponent(out Pushable pushable))
+                result += $" free={pushable.IsFree}";
             if (target.TryGetComponent(out ShipBuoyancy ship))
                 result += string.Format(CultureInfo.InvariantCulture, " floating={0} tilt={1:0.0}", ship.IsFloating, Vector3.Angle(target.transform.up, Vector3.up));
             return result;
