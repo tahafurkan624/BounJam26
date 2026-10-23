@@ -20,6 +20,7 @@ namespace BounJam.EditorTools
     {
         public const string FirePath = "Assets/_Game/Prefabs/Level/Fire.prefab";
         public const string LevelPath = "Assets/_Game/Prefabs/Level/Level.prefab";
+        public const string TreePath = "Assets/_Game/Prefabs/Level/Tree.prefab";
         const string ParticleMaterialPath = "Assets/_Game/Art/VFX/Fire_Particle.mat";
         const string UrpParticleMaterialPath = "Packages/com.unity.render-pipelines.universal/Runtime/Materials/ParticlesUnlit.mat";
 
@@ -38,6 +39,7 @@ namespace BounJam.EditorTools
             }
             BuildPrefab(FirePath, new GameObject("Fire", typeof(LiquidTarget), typeof(Fire)), FillFire);
             BuildPrefab(LevelPath, new GameObject("Level", typeof(LevelManager)), FillLevel);
+            BuildPrefab(TreePath, new GameObject("Tree", typeof(ChewableTree)), FillTree);
             Debug.Log("[BounJam] Built level prefabs.");
         }
 
@@ -94,6 +96,58 @@ namespace BounJam.EditorTools
             BuilderUtility.SetValues(root.GetComponent<Fire>(),
                 ("flames", BuildFlames(root.transform, particles)), ("steam", BuildSteam(root.transform, particles)),
                 ("glow", light), ("hitbox", capsule));
+        }
+
+        // A stump that stays, and a trunk with a round canopy that falls; everything solid is on the Tree
+        // layer so standing and fallen trees block liquid. The trunk's origin is the centre of the cut.
+        static void FillTree(GameObject root)
+        {
+            const float stumpHeight = 0.3f, trunkRadius = 0.25f, logLength = 3.4f, canopyRadius = 1.2f;
+            Material bark = BuilderUtility.FlatMaterial("Greybox_Logs", new Color(0.35f, 0.22f, 0.12f));
+            Material leaves = BuilderUtility.FlatMaterial("Greybox_Leaves", new Color(0.2f, 0.45f, 0.18f));
+
+            TreePart(PrimitiveType.Cylinder, "Stump", root.transform, new Vector3(0f, stumpHeight / 2f, 0f),
+                new Vector3(trunkRadius * 2f, stumpHeight / 2f, trunkRadius * 2f), bark);
+            var trunk = new GameObject("Trunk").transform;
+            trunk.SetParent(root.transform, false);
+            trunk.localPosition = new Vector3(0f, stumpHeight, 0f);
+            TreePart(PrimitiveType.Cylinder, "Log", trunk, new Vector3(0f, logLength / 2f, 0f),
+                new Vector3(trunkRadius * 2f, logLength / 2f, trunkRadius * 2f), bark);
+            float canopyHeight = logLength + canopyRadius * 0.25f;
+            TreePart(PrimitiveType.Sphere, "Canopy", trunk, new Vector3(0f, canopyHeight, 0f), Vector3.one * canopyRadius * 2f, leaves);
+
+            ParticleSystem chips = NewParticles("Chips", root.transform, new Vector3(0f, stumpHeight, 0f), ParticleMaterial());
+            ParticleSystem.MainModule main = chips.main;
+            main.playOnAwake = true;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.5f, 0.9f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(1.5f, 3f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.06f, 0.12f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.75f, 0.55f, 0.3f), new Color(0.5f, 0.32f, 0.15f));
+            main.gravityModifier = 1f;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.maxParticles = 100;
+            ParticleSystem.EmissionModule emission = chips.emission;
+            emission.rateOverTime = 0f;
+            ParticleSystem.ShapeModule shape = chips.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 50f;
+            shape.radius = trunkRadius;
+
+            // At rest the canopy should touch the ground: cos(angle) = (canopy radius - cut height) / canopy distance.
+            float fallAngle = Mathf.Acos((canopyRadius - stumpHeight) / canopyHeight) * Mathf.Rad2Deg;
+            BuilderUtility.SetValues(root.GetComponent<ChewableTree>(),
+                ("trunk", trunk), ("trunkRadius", trunkRadius), ("fallAngle", fallAngle), ("chips", chips));
+        }
+
+        static void TreePart(PrimitiveType shape, string name, Transform parent, Vector3 localPosition, Vector3 localScale, Material material)
+        {
+            GameObject part = GameObject.CreatePrimitive(shape);
+            part.name = name;
+            part.layer = GameLayers.Tree;
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localScale = localScale;
+            part.GetComponent<MeshRenderer>().sharedMaterial = material;
         }
 
         static ParticleSystem BuildFlames(Transform parent, Material material)

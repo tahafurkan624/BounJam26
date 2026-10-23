@@ -83,6 +83,10 @@ namespace BounJam.EditorTools
             Place(LevelPrefabBuilder.FirePath, gameplay, new Vector3(0, 0, 3));
             Place(LevelPrefabBuilder.FirePath, gameplay, new Vector3(-4, 0, 0));
             Place(LevelPrefabBuilder.FirePath, gameplay, new Vector3(-6, 2, 13));
+            // One tree within reach of the spawn point, and two more around the edges.
+            Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(1f, 0, -5f)).name = "Snack Tree";
+            Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(-8f, 0, -4f));
+            Place(LevelPrefabBuilder.TreePath, gameplay, new Vector3(7f, 0, 10f));
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddToBuildSettings();

@@ -81,7 +81,7 @@ namespace BounJam.EditorTools
             CinemachineOrbitalFollow orbit = BuildFreeLookCamera(rig.transform, cameraPivot);
             BuilderUtility.SetField(beaver.GetComponent<PlayerLook>(), "orbit", orbit);
 
-            BuildHud(rig.transform, inventory);
+            BuildHud(rig.transform, inventory, beaver.GetComponent<TreeEater>());
         }
 
         // Orbits the pivot in world space (PlayerLook drives the angles) and keeps the beaver centred,
@@ -123,7 +123,7 @@ namespace BounJam.EditorTools
         static GameObject BuildBeaver(Transform parent, out Transform cameraPivot)
         {
             var beaver = new GameObject("Beaver", typeof(CharacterController), typeof(BeaverInput),
-                typeof(PlayerLook), typeof(PlayerMotor), typeof(PlayerAim), typeof(LiquidInventory), typeof(LiquidGun));
+                typeof(PlayerLook), typeof(PlayerMotor), typeof(PlayerAim), typeof(LiquidInventory), typeof(LiquidGun), typeof(TreeEater));
             beaver.transform.SetParent(parent, false);
 
             var controller = beaver.GetComponent<CharacterController>();
@@ -173,7 +173,7 @@ namespace BounJam.EditorTools
             return inventory;
         }
 
-        static void BuildHud(Transform parent, LiquidInventory inventory)
+        static void BuildHud(Transform parent, LiquidInventory inventory, TreeEater eater)
         {
             var hud = new GameObject("HUD", typeof(Canvas), typeof(CanvasScaler));
             hud.transform.SetParent(parent, false);
@@ -192,6 +192,14 @@ namespace BounJam.EditorTools
             image.raycastTarget = false;
 
             BuildLiquidPanel(hud.transform, inventory);
+
+            // Above the liquid tanks, shown only while a tree is within reach.
+            TMP_Text eatPrompt = BuilderUtility.UiLabel("Eat Prompt", hud.transform, "Hold E to eat", 30f, TextAlignmentOptions.Center);
+            eatPrompt.rectTransform.anchorMin = eatPrompt.rectTransform.anchorMax = new Vector2(0.5f, 0f);
+            eatPrompt.rectTransform.sizeDelta = new Vector2(600f, 50f);
+            eatPrompt.rectTransform.anchoredPosition = new Vector2(0f, 190f);
+            eatPrompt.enabled = false;
+            BuilderUtility.SetValues(eatPrompt.gameObject.AddComponent<EatPrompt>(), ("eater", eater), ("label", eatPrompt));
             BuilderUtility.SetLayerRecursively(hud, LayerMask.NameToLayer("UI"));
         }
 

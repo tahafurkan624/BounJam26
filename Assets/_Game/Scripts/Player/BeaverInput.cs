@@ -15,6 +15,7 @@ namespace BounJam.Player
         InputAction look;
         InputAction jump;
         InputAction fire;
+        InputAction eat;
         InputAction cycleLiquid;
         readonly List<InputAction> liquidSlots = new();
 
@@ -25,6 +26,7 @@ namespace BounJam.Player
         public bool JumpPressed => enabled && jump.WasPressedThisFrame();
         public bool FirePressed => enabled && fire.WasPressedThisFrame();
         public bool FireHeld => enabled && fire.IsPressed();
+        public bool EatHeld => enabled && eat.IsPressed();
 
         /// <summary>-1, 0 or +1: which way the scroll wheel or shoulder buttons cycle the liquid this frame.</summary>
         public int CycleLiquid =>
@@ -51,6 +53,7 @@ namespace BounJam.Player
             look = map.FindAction("Look", throwIfNotFound: true);
             jump = map.FindAction("Jump", throwIfNotFound: true);
             fire = map.FindAction("Fire", throwIfNotFound: true);
+            eat = map.FindAction("Eat", throwIfNotFound: true);
             cycleLiquid = map.FindAction("CycleLiquid", throwIfNotFound: true);
             // LiquidSlot1, LiquidSlot2, ... as many as the input asset defines.
             for (InputAction slot; (slot = map.FindAction($"LiquidSlot{liquidSlots.Count + 1}")) != null;)
