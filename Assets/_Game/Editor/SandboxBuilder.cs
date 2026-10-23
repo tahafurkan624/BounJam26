@@ -118,7 +118,7 @@ namespace BounJam.EditorTools
             // Push the big crate 3.5 m south onto this button to power a lift next to the platform.
             PressureButton liftButton = Button("Button Lift", interactables, new Vector3(-5f, 0f, -9.5f), m);
             Mover("Lift", interactables, new Vector3(5f, 0.1f, 9f), new Vector3(2f, 0.2f, 2f), m.Lift,
-                  new[] { liftButton }, new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f, cycle: true);
+                  new[] { liftButton }, new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f, cycle: true, carriesRiders: true);
 
             // Burns the ship if it's dropped here; the blob crosses safely.
             HotPlate("Hot Plate", interactables, new Vector3(15.5f, 0f, -3f), new Vector2(3.5f, 3f), m);

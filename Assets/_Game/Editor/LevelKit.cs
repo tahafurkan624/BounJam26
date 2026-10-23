@@ -146,9 +146,13 @@ namespace BounJam.EditorTools
             return button;
         }
 
+        /// <summary>
+        /// A door, gate or lift driven by buttons. Lifts (<paramref name="carriesRiders"/>) carry what stands on them;
+        /// doors stop for anything in their way. Neither ever crushes the blob, the ship or a crate.
+        /// </summary>
         public static ButtonMover Mover(string name, Transform parent, Vector3 position, Vector3 size, Material material,
                                         PressureButton[] buttons, Vector3 activeOffset, float speed, float holdTime,
-                                        bool cycle = false)
+                                        bool cycle = false, bool carriesRiders = false)
         {
             GameObject go = Box(name, parent, position, size, material);
             var body = go.AddComponent<Rigidbody>();
@@ -164,6 +168,8 @@ namespace BounJam.EditorTools
             settings.FindProperty("speed").floatValue = speed;
             settings.FindProperty("holdTime").floatValue = holdTime;
             settings.FindProperty("cycleWhileActive").boolValue = cycle;
+            settings.FindProperty("carriesRiders").boolValue = carriesRiders;
+            settings.FindProperty("blockingMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Ship", "Pushable");
             settings.ApplyModifiedPropertiesWithoutUndo();
             return mover;
         }

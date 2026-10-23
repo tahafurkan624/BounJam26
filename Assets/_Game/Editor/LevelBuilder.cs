@@ -116,7 +116,7 @@ namespace BounJam.EditorTools
             Crate("Crate", level, new Vector3(-3.5f, 0.5f, 1.5f), 1f, 4f, m);
             // A powered elevator: once the crate holds the button, it shuttles between the ground and the deck.
             Mover("Lift", level, new Vector3(2.5f, 0.1f, 7f), new Vector3(2f, 0.2f, 2f), m.Lift,
-                  new[] { button }, new Vector3(0f, deck - 0.2f, 0f), speed: 1f, holdTime: 0f, cycle: true);
+                  new[] { button }, new Vector3(0f, deck - 0.2f, 0f), speed: 1f, holdTime: 0f, cycle: true, carriesRiders: true);
 
             return new Spots
             {

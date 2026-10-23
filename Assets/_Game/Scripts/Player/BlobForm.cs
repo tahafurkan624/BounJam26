@@ -36,6 +36,14 @@ namespace BounJam
         [Tooltip("Brief size pop when hardening, as a fraction of the size.")]
         [SerializeField] float freezePop = 0.06f;
 
+        [Header("Overlaps")]
+        [Tooltip("What the new crystal is checked against when it appears. The hull is convex, so where the jelly " +
+                 "was wrapped around something it can cut into it; the blob steps out of heavy things and pushes " +
+                 "light ones (the ship) out of itself.")]
+        [SerializeField] LayerMask overlapMask = ~0;
+        [Tooltip("Top speed the physics may use to push the blob out of an overlap, m/s. Low = eased out, never shot through a floor.")]
+        [SerializeField] float maxDepenetrationSpeed = 3f;
+
         // The first 42 skin points are the level-1 icosphere: an even subset whose hull stays far below the
         // 255-polygon limit of convex mesh colliders.
         const int HullPointCount = 42;
@@ -57,6 +65,7 @@ namespace BounJam
         float solidLook;
         float lastSwitchTime = float.NegativeInfinity;
         Coroutine lookTransition;
+        readonly Collider[] nearby = new Collider[32];
 
         public bool IsSolid { get; private set; }
         /// <summary>The collider that has the frozen shape (only enabled while solid).</summary>
@@ -74,6 +83,7 @@ namespace BounJam
             liquidMass = body.mass;
             liquidAngularDamping = body.angularDamping;
             liquidConstraints = body.constraints;
+            body.maxDepenetrationVelocity = maxDepenetrationSpeed;
             liquidLayer = LayerMask.NameToLayer("PlayerLiquid");
             solidLayer = LayerMask.NameToLayer("PlayerSolid");
 
@@ -122,6 +132,7 @@ namespace BounJam
             solidCollider.sharedMesh = hullMesh;
             solidCollider.enabled = true;
             liquidCore.enabled = false;
+            ResolveOverlaps();
 
             SetLayer(solidLayer);
             body.mass = solidMass;
@@ -161,6 +172,50 @@ namespace BounJam
             lastSwitchTime = Time.time;
             StartLookTransition(0f, meltTime, 0f);
             FormChanged?.Invoke(false);
+        }
+
+        /// <summary>
+        /// The crystal is the convex hull of the jelly, so where the jelly was wrapped around something (a crate's
+        /// corner, a ship being scooped up) it cuts into it. Left alone, the physics would shove the bodies apart
+        /// hard enough to send the blob through the floor. Instead: step out of anything heavy or fixed, and move
+        /// light bodies (the ship) out of the crystal. Two passes settle overlaps with several things at once.
+        /// </summary>
+        void ResolveOverlaps()
+        {
+            Bounds hull = hullMesh.bounds;
+            for (int pass = 0; pass < 2; pass++)
+            {
+                Vector3 center = transform.TransformPoint(hull.center);
+                int count = Physics.OverlapBoxNonAlloc(center, hull.extents + Vector3.one * 0.05f, nearby, transform.rotation,
+                                                       overlapMask, QueryTriggerInteraction.Ignore);
+                Vector3 step = Vector3.zero;
+                for (int i = 0; i < count; i++)
+                {
+                    Collider other = nearby[i];
+                    Rigidbody otherBody = other.attachedRigidbody;
+                    if (otherBody == body) continue;
+
+                    // Moving bodies render interpolated; use where the physics actually has them.
+                    bool onBody = otherBody != null && other.transform == otherBody.transform;
+                    Vector3 otherPosition = onBody ? otherBody.position : other.transform.position;
+                    Quaternion otherRotation = onBody ? otherBody.rotation : other.transform.rotation;
+                    if (!Physics.ComputePenetration(solidCollider, body.position + step, body.rotation,
+                                                    other, otherPosition, otherRotation,
+                                                    out Vector3 direction, out float distance))
+                        continue;
+
+                    if (otherBody != null && !otherBody.isKinematic && otherBody.mass < body.mass * 0.5f)
+                    {
+                        // Light and loose: move it out of the crystal instead of moving the crystal.
+                        otherBody.position -= direction * distance;
+                        otherBody.transform.position -= direction * distance;
+                    }
+                    else step += direction * distance;
+                }
+                if (step == Vector3.zero) break;
+                body.position += step;
+                transform.position += step;
+            }
         }
 
         void SetLayer(int layer)
