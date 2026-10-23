@@ -136,6 +136,7 @@ MonoBehaviour:
   slopeSlide: 0.3
   floatingAngularDamping: 4
   uprighting: 40
+  airborneMaxRise: 0.5
   adhesionDistance: 0.15
   adhesionPull: 40
   adhesionDrag: 0.6

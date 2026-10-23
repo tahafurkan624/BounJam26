@@ -6,7 +6,8 @@ namespace BounJam
     /// <summary>
     /// Moves the blob's core rigidbody. Input is camera-relative on the ground plane, and the body is
     /// steered toward a target velocity (accelerate while there is input, brake when there isn't),
-    /// so it reacts quickly but still carries momentum. The core never rotates; the skin does the visuals.
+    /// so it reacts quickly but still carries momentum. The liquid can jump. The core never rotates; the skin does
+    /// the visuals.
     /// </summary>
     [RequireComponent(typeof(Rigidbody), typeof(SphereCollider))]
     public class BlobMotor : MonoBehaviour
@@ -33,6 +34,14 @@ namespace BounJam
         [Range(0f, 1f)]
         [SerializeField] float airControl = 0.3f;
 
+        [Header("Jump")]
+        [Tooltip("How high a jump from flat ground lifts the blob, m. Liquid form only.")]
+        [SerializeField] float jumpHeight = 0.8f;
+        [Tooltip("A jump pressed this long before landing still happens when it lands, s.")]
+        [SerializeField] float jumpBuffer = 0.15f;
+        [Tooltip("A jump is still allowed this long after flowing off an edge, s.")]
+        [SerializeField] float coyoteTime = 0.1f;
+
         [Header("Ground")]
         [SerializeField] LayerMask groundMask = ~0;
         [Tooltip("How far below the core the ground is still detected, m.")]
@@ -56,11 +65,18 @@ namespace BounJam
         const float ContactGap = 0.02f;
         // Physics steps after a step climb during which hugging and snapping stay off, so they don't undo the lift.
         const int ClimbGraceSteps = 4;
+        // Physics steps after a jump during which the ground is ignored: the probe still reaches it for a moment, and
+        // hugging, snapping or sticking to it would pull the blob straight back down.
+        const int JumpGraceSteps = 6;
 
         Rigidbody body;
         SphereCollider core;
         int stepsSinceGrounded;
         int stepsSinceClimb = ClimbGraceSteps;
+        int stepsSinceJump = JumpGraceSteps;
+        // True from a jump until the blob is back on the ground, so coyote time can't give a second jump.
+        bool hasJumped;
+        float jumpRequestTime = float.NegativeInfinity;
         bool stepContact;
         Vector3 stepNormal;
         float groundGap;
@@ -75,6 +91,11 @@ namespace BounJam
         public Vector3 GroundNormal { get; private set; } = Vector3.up;
         public Vector3 Velocity => body.linearVelocity;
         public MoveSettings ActiveSettings => isSolid ? solid : liquid;
+        /// <summary>Raised on the physics step the blob takes off, with the upward speed the jump added, m/s.</summary>
+        public event Action<float> Jumped;
+
+        /// <summary>Jumps on the next physics step it can: now if on the ground, or on landing within the jump buffer.</summary>
+        public void RequestJump() => jumpRequestTime = Time.time;
 
         /// <summary>Switches between liquid movement (core sphere) and solid movement (whatever shape is frozen).</summary>
         public void SetSolid(bool value)
@@ -103,6 +124,16 @@ namespace BounJam
             pushableLayer = LayerMask.NameToLayer("Pushable");
         }
 
+        void OnEnable()
+        {
+            if (input != null) input.JumpPressed += RequestJump;
+        }
+
+        void OnDisable()
+        {
+            if (input != null) input.JumpPressed -= RequestJump;
+        }
+
         void FixedUpdate()
         {
             if (isSolid)
@@ -112,10 +143,18 @@ namespace BounJam
             }
 
             ProbeGround();
+            stepsSinceJump++;
+            if (stepsSinceJump < JumpGraceSteps) ClearGround();
+            else if (IsGrounded) hasJumped = false;
             stepsSinceGrounded = IsGrounded ? 0 : stepsSinceGrounded + 1;
             stepsSinceClimb++;
+
+            if (Time.time - jumpRequestTime <= jumpBuffer && !hasJumped && stepsSinceGrounded * Time.fixedDeltaTime <= coyoteTime)
+                Jump();
+
             bool climbing = stepsSinceClimb < ClimbGraceSteps;
-            if (!climbing)
+            bool takingOff = stepsSinceJump < JumpGraceSteps;
+            if (!climbing && !takingOff)
             {
                 if (!IsGrounded && stepsSinceGrounded <= 1) SnapToGround();
                 else if (IsGrounded && groundGap > ContactGap) HugGround();
@@ -144,6 +183,28 @@ namespace BounJam
                 stepsSinceClimb = 0;
             }
             stepContact = false;
+        }
+
+        /// <summary>Straight up, keeping the speed along the ground; a blob already rising faster (a ramp, a lift) keeps that.</summary>
+        void Jump()
+        {
+            Vector3 velocity = body.linearVelocity;
+            float before = velocity.y;
+            velocity.y = Mathf.Max(velocity.y, Mathf.Sqrt(2f * -Physics.gravity.y * jumpHeight));
+            body.linearVelocity = velocity;
+
+            jumpRequestTime = float.NegativeInfinity;
+            hasJumped = true;
+            stepsSinceJump = 0;
+            ClearGround();
+            Jumped?.Invoke(velocity.y - before);
+        }
+
+        void ClearGround()
+        {
+            IsGrounded = false;
+            GroundNormal = Vector3.up;
+            groundGap = float.PositiveInfinity;
         }
 
         /// <summary>

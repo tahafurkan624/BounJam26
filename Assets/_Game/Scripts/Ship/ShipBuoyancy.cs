@@ -46,6 +46,9 @@ namespace BounJam
         [SerializeField] float floatingAngularDamping = 4f;
         [Tooltip("Turns the ship back upright while floating, like a keel, rad/s² per radian of tilt.")]
         [SerializeField] float uprighting = 40f;
+        [Tooltip("While the blob is in the air, how much faster than it the ship may rise, m/s. The jelly stretches up as " +
+                 "it leaves the ground, and without a limit the buoyancy turns that into a throw.")]
+        [SerializeField] float airborneMaxRise = 0.5f;
 
         [Header("Adhesion")]
         [Tooltip("A float point this far above the surface still clings to it, so the ship stays on when the blob " +
@@ -61,6 +64,7 @@ namespace BounJam
         Rigidbody body;
         Collider[] colliders;
         BlobForm blobForm;
+        BlobMotor blobMotor;
         float dryAngularDamping;
 
         /// <summary>True while at least one float point is in or clinging to the jelly.</summary>
@@ -77,17 +81,44 @@ namespace BounJam
             dryAngularDamping = body.angularDamping;
             colliders = GetComponentsInChildren<Collider>();
             if (blob == null) blob = FindAnyObjectByType<BlobSkin>();
-            if (blob != null) blobForm = blob.GetComponent<BlobForm>();
+            if (blob != null)
+            {
+                blobForm = blob.GetComponent<BlobForm>();
+                blobMotor = blob.GetComponent<BlobMotor>();
+            }
         }
 
         void OnEnable()
         {
             if (blobForm != null) blobForm.FormChanged += OnBlobFormChanged;
+            if (blobMotor != null) blobMotor.Jumped += OnBlobJumped;
         }
 
         void OnDisable()
         {
             if (blobForm != null) blobForm.FormChanged -= OnBlobFormChanged;
+            if (blobMotor != null) blobMotor.Jumped -= OnBlobJumped;
+        }
+
+        /// <summary>
+        /// The jelly under the hull has just jumped. Take off with it: otherwise the ship sinks into the suddenly
+        /// rising surface and the buoyancy fires it high off the top.
+        /// </summary>
+        void OnBlobJumped(float _)
+        {
+            if (!IsFloating) return;
+            Vector3 velocity = body.linearVelocity;
+            velocity.y = Mathf.Max(velocity.y, blobMotor.Velocity.y);
+            body.linearVelocity = velocity;
+        }
+
+        void LimitAirborneRise()
+        {
+            Vector3 velocity = body.linearVelocity;
+            float limit = blobMotor.Velocity.y + airborneMaxRise;
+            if (velocity.y <= limit) return;
+            velocity.y = limit;
+            body.linearVelocity = velocity;
         }
 
         /// <summary>
@@ -117,6 +148,8 @@ namespace BounJam
 
         void FixedUpdate()
         {
+            if (IsFloating && blobMotor != null && !blobMotor.IsGrounded) LimitAirborneRise();
+
             int touching = 0;
             Vector3 horizontal = Vector3.zero;
             if (blob != null)

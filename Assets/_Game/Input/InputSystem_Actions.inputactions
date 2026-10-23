@@ -15,6 +15,15 @@
                     "initialStateCheck": true
                 },
                 {
+                    "name": "Jump",
+                    "type": "Button",
+                    "id": "61ae3191-097b-49db-9cc3-966ca37fd47c",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "ToggleForm",
                     "type": "Button",
                     "id": "a300935b-586e-452f-aa8d-0a8ece2c2e5f",
@@ -166,8 +175,30 @@
                 },
                 {
                     "name": "",
-                    "id": "074877c6-aab2-4e23-82fa-c7cf0bf09ab6",
+                    "id": "6c24be75-a5a0-4851-a9b0-ee878cf98257",
                     "path": "<Keyboard>/space",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Keyboard&Mouse",
+                    "action": "Jump",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "799f34a4-cfef-4777-8e13-b69744b21ed6",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "Gamepad",
+                    "action": "Jump",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "074877c6-aab2-4e23-82fa-c7cf0bf09ab6",
+                    "path": "<Keyboard>/e",
                     "interactions": "",
                     "processors": "",
                     "groups": "Keyboard&Mouse",
@@ -178,7 +209,7 @@
                 {
                     "name": "",
                     "id": "cdc3e922-22cc-41b3-b27d-aed696a97621",
-                    "path": "<Gamepad>/buttonSouth",
+                    "path": "<Gamepad>/buttonWest",
                     "interactions": "",
                     "processors": "",
                     "groups": "Gamepad",

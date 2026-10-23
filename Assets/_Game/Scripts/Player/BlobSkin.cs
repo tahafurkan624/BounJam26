@@ -27,9 +27,9 @@ namespace BounJam
 
         [Header("Softness")]
         [Tooltip("Pull of each point toward its rest position. Higher = firmer jelly.")]
-        [SerializeField] float stiffness = 300f;
+        [SerializeField] float stiffness = 260f;
         [Tooltip("Damps point motion relative to the core. Lower = longer wobble.")]
-        [SerializeField] float damping = 10f;
+        [SerializeField] float damping = 11f;
         [Tooltip("Pull toward the average of neighbouring points; smooths dents and bumps.")]
         [SerializeField] float surfaceTension = 40f;
         [Tooltip("Outward push when squished below the rest volume, so the liquid spreads instead of shrinking.")]
@@ -48,9 +48,11 @@ namespace BounJam
         [Tooltip("How quickly the shape follows speed changes.")]
         [SerializeField] float flattenStiffness = 120f;
         [Tooltip("Lower = more bounce between flat and tall when speeding up or stopping.")]
-        [SerializeField] float flattenDamping = 8f;
+        [SerializeField] float flattenDamping = 9.5f;
         [Tooltip("Extra squash when landing, per m/s of falling speed.")]
-        [SerializeField] float landingSquash = 0.6f;
+        [SerializeField] float landingSquash = 0.5f;
+        [Tooltip("Stretch upward when jumping, per m/s of take-off speed.")]
+        [SerializeField] float jumpStretch = 0.5f;
         [Tooltip("Gentle squash-and-stretch while standing still, so the blob looks alive. Fades out with speed.")]
         [Range(0f, 0.15f)]
         [SerializeField] float idleBreath = 0.04f;
@@ -225,12 +227,27 @@ namespace BounJam
             BuildTopology();
         }
 
-        void OnEnable() => simulation = StartCoroutine(SimulateAfterPhysics());
+        void OnEnable()
+        {
+            motor.Jumped += OnJumped;
+            simulation = StartCoroutine(SimulateAfterPhysics());
+        }
 
         void OnDisable()
         {
+            motor.Jumped -= OnJumped;
             if (simulation != null) StopCoroutine(simulation);
             initialised = false;
+        }
+
+        /// <summary>
+        /// The whole jelly takes off, not just the core: points left behind would spring up past it a moment later and
+        /// fling a ship off the top. Negative flatten is taller than round, so the jelly stretches up, then settles.
+        /// </summary>
+        void OnJumped(float launch)
+        {
+            for (int i = 0; i < velocities.Length; i++) velocities[i].y += launch;
+            flattenVelocity -= jumpStretch * launch;
         }
 
         void OnDestroy()
@@ -371,7 +388,9 @@ namespace BounJam
             wasGrounded = grounded;
             previousCoreVelocity = coreVelocity;
 
-            float speed01 = grounded ? Mathf.Clamp01(motor.NormalizedSpeed) : 0f;
+            // In the air too: a blob that jumps or flows off an edge at speed stays spread out, instead of snapping back
+            // to round and flinging a ship off its top.
+            float speed01 = Mathf.Clamp01(motor.NormalizedSpeed);
             float eased = speed01 * speed01 * (3f - 2f * speed01);
             float breath = idleBreath * Mathf.Sin(Time.time * idleBreathRate * 2f * Mathf.PI) * (1f - eased);
             float target = flattenAtFullSpeed * eased + breath;

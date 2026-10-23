@@ -10,6 +10,7 @@ namespace BounJam
     public class PlayerInputReader : MonoBehaviour
     {
         InputAction move;
+        InputAction jump;
         InputAction toggleForm;
 
         /// <summary>When set, replaces the Move input (editor test tools, scripted sequences).</summary>
@@ -18,6 +19,7 @@ namespace BounJam
         /// <summary>Movement stick or keys, clamped to length 1.</summary>
         public Vector2 Move => Vector2.ClampMagnitude(MoveOverride ?? (move != null ? move.ReadValue<Vector2>() : Vector2.zero), 1f);
 
+        public event Action JumpPressed;
         public event Action ToggleFormPressed;
 
         void OnEnable()
@@ -30,6 +32,8 @@ namespace BounJam
             }
 
             move = actions.FindAction("Player/Move", throwIfNotFound: true);
+            jump = actions.FindAction("Player/Jump", throwIfNotFound: true);
+            jump.performed += OnJump;
             toggleForm = actions.FindAction("Player/ToggleForm", throwIfNotFound: true);
             toggleForm.performed += OnToggleForm;
             actions.FindActionMap("Player", throwIfNotFound: true).Enable();
@@ -37,9 +41,11 @@ namespace BounJam
 
         void OnDisable()
         {
+            if (jump != null) jump.performed -= OnJump;
             if (toggleForm != null) toggleForm.performed -= OnToggleForm;
         }
 
+        void OnJump(InputAction.CallbackContext _) => JumpPressed?.Invoke();
         void OnToggleForm(InputAction.CallbackContext _) => ToggleFormPressed?.Invoke();
     }
 }

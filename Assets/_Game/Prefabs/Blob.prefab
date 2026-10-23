@@ -123,6 +123,9 @@ MonoBehaviour:
     acceleration: 15
     braking: 6
   airControl: 0.3
+  jumpHeight: 0.8
+  jumpBuffer: 0.15
+  coyoteTime: 0.1
   groundMask:
     serializedVersion: 2
     m_Bits: 4294958715
@@ -149,16 +152,17 @@ MonoBehaviour:
   radius: 0.5
   subdivisions: 2
   renderSmoothing: 2
-  stiffness: 300
-  damping: 10
+  stiffness: 260
+  damping: 11
   surfaceTension: 40
   pressure: 300
   gravitySag: 0.3
   flattenAtFullSpeed: 0.45
   stretchAtFullSpeed: 0.15
   flattenStiffness: 120
-  flattenDamping: 8
-  landingSquash: 0.6
+  flattenDamping: 9.5
+  landingSquash: 0.5
+  jumpStretch: 0.5
   idleBreath: 0.04
   idleBreathRate: 0.8
   drapeDistance: 0.6
