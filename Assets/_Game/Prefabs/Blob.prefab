@@ -115,11 +115,11 @@ MonoBehaviour:
   input: {fileID: 4975069014646752162}
   cameraTransform: {fileID: 0}
   liquid:
-    maxSpeed: 7
-    acceleration: 35
+    maxSpeed: 5
+    acceleration: 12
     braking: 25
   solid:
-    maxSpeed: 2.2
+    maxSpeed: 1.8
     acceleration: 15
     braking: 6
   airControl: 0.3

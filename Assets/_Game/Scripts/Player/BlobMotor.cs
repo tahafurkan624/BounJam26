@@ -25,10 +25,10 @@ namespace BounJam
         [SerializeField] PlayerInputReader input;
         [Tooltip("Movement is relative to this camera's facing. Defaults to the main camera.")]
         [SerializeField] Transform cameraTransform;
-        [SerializeField] MoveSettings liquid = new MoveSettings { maxSpeed = 7f, acceleration = 35f, braking = 25f };
+        [SerializeField] MoveSettings liquid = new MoveSettings { maxSpeed = 5f, acceleration = 12f, braking = 25f };
         [Tooltip("Solid form: pushes itself along the input direction (its frozen shape decides whether it rolls or " +
                  "slides) and brakes, spin included, when there's no input.")]
-        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 2.2f, acceleration = 15f, braking = 6f };
+        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 1.8f, acceleration = 15f, braking = 6f };
         [Tooltip("Fraction of acceleration and braking available while airborne.")]
         [Range(0f, 1f)]
         [SerializeField] float airControl = 0.3f;
