@@ -93,7 +93,6 @@ namespace BounJam
 
             IcoSphere.Build(1, out _, out hullTriangles);
             hullPoints = new Vector3[HullPointCount];
-            hullMesh = new Mesh { name = "Blob Solid Hull" };
             if (skinRenderer != null) skinMaterial = skinRenderer.material;
             solidCollider.enabled = false;
             ApplyLook(0f, 1f);
@@ -128,11 +127,13 @@ namespace BounJam
 
             Vector3[] frozen = skin.Freeze();
             Array.Copy(frozen, hullPoints, HullPointCount);
-            hullMesh.Clear();
+            // A new mesh every freeze, so the collider is built exactly as on the first freeze. Refilling the mesh the
+            // collider had already been built from could leave the second crystal without a working shape, and it
+            // fell straight through the floor.
+            hullMesh = new Mesh { name = "Blob Solid Hull" };
             hullMesh.vertices = hullPoints;
             hullMesh.triangles = hullTriangles;
             hullMesh.RecalculateBounds();
-            solidCollider.sharedMesh = null; // reassigning forces the collider to rebuild from the new shape
             solidCollider.sharedMesh = hullMesh;
             solidCollider.enabled = true;
             liquidCore.enabled = false;
@@ -166,6 +167,9 @@ namespace BounJam
 
             liquidCore.enabled = true;
             solidCollider.enabled = false;
+            solidCollider.sharedMesh = null;
+            Destroy(hullMesh);
+            hullMesh = null;
             SetLayer(liquidLayer);
             body.mass = liquidMass;
             body.angularDamping = liquidAngularDamping;
