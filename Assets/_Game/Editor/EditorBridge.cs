@@ -20,7 +20,8 @@ namespace BounJam.EditorTools
     ///   play | stop                                 enter or leave play mode
     ///   waitgame &lt;seconds&gt;                          delay the next command (game time, play mode)
     ///   stick &lt;x&gt; &lt;y&gt;                              override the player's Move input; "stick 0 0" holds still
-    ///   probe &lt;GameObject name&gt;                     position and rigidbody velocity of an object
+    ///   probe &lt;GameObject name&gt;                     position, velocity, render bounds (and blob skin stats)
+    ///   teleport &lt;GameObject name&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;     move an object (and its rigidbody, stopped) there
     /// An unfocused editor doesn't run the game loop, so play sessions started here stay paused and are stepped
     /// one frame per editor update during "waitgame" (0.02 s of game time per frame).
     /// </summary>
@@ -123,6 +124,8 @@ namespace BounJam.EditorTools
                     return Stick(args);
                 case "probe":
                     return Probe(rest);
+                case "teleport":
+                    return Teleport(args);
                 default:
                     return $"error: unknown command '{verb}'";
             }
@@ -138,6 +141,21 @@ namespace BounJam.EditorTools
             return $"ok: move override {Format(stick)}";
         }
 
+        static string Teleport(string[] args)
+        {
+            GameObject target = GameObject.Find(args[0]);
+            if (target == null) return $"error: no active GameObject named '{args[0]}'";
+            var position = new Vector3(ParseFloat(args[1]), ParseFloat(args[2]), ParseFloat(args[3]));
+            target.transform.position = position;
+            if (target.TryGetComponent(out Rigidbody body))
+            {
+                body.position = position;
+                body.linearVelocity = Vector3.zero;
+            }
+            Physics.SyncTransforms();
+            return $"ok: {args[0]} moved to {Format(position)}";
+        }
+
         static string Probe(string name)
         {
             GameObject target = GameObject.Find(name);
@@ -145,6 +163,16 @@ namespace BounJam.EditorTools
             string result = $"ok: {name} position={Format(target.transform.position)}";
             if (target.TryGetComponent(out Rigidbody body))
                 result += $" velocity={Format(body.linearVelocity)} speed={body.linearVelocity.magnitude.ToString("0.00", CultureInfo.InvariantCulture)}";
+
+            Renderer[] renderers = target.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                Bounds bounds = renderers[0].bounds;
+                foreach (Renderer r in renderers) bounds.Encapsulate(r.bounds);
+                result += $" renderSize={Format(bounds.size)} renderBottom={bounds.min.y.ToString("0.00", CultureInfo.InvariantCulture)}";
+            }
+            if (target.TryGetComponent(out BlobSkin skin))
+                result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
             return result;
         }
 
@@ -156,6 +184,11 @@ namespace BounJam.EditorTools
 
             Camera main = Camera.main;
             if (main == null) return "error: no camera tagged MainCamera";
+
+            // Renders here happen outside the normal frame, before Unity refreshes culling bounds of meshes that
+            // changed this frame (like the blob skin). Reading the bounds forces that refresh.
+            foreach (Renderer r in UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None))
+                _ = r.bounds;
 
             Camera camera = main;
             GameObject temporary = null;

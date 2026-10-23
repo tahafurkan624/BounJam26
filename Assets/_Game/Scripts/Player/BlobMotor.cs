@@ -37,9 +37,30 @@ namespace BounJam
         [SerializeField] float maxGroundAngle = 50f;
         [Tooltip("Extra pull into the ground while grounded, keeps the blob hugging ramps and crests, m/s².")]
         [SerializeField] float groundStick = 15f;
+        [Tooltip("Right after leaving the ground, ground within this distance below pulls the blob back down " +
+                 "instead of letting it launch off bumps and crests, m. Larger drops still fall.")]
+        [SerializeField] float snapDistance = 0.6f;
+        [Tooltip("Above this speed the blob may leave the ground over crests, m/s.")]
+        [SerializeField] float snapMaxSpeed = 9f;
+
+        [Header("Steps")]
+        [Tooltip("Edges up to this height above the bottom of the core are flowed up, m.")]
+        [SerializeField] float maxStepHeight = 0.25f;
+        [Tooltip("Upward speed while flowing up a step, m/s.")]
+        [SerializeField] float stepClimbSpeed = 2.5f;
+
+        // Below this gap the core counts as touching the ground rather than skimming over it.
+        const float ContactGap = 0.02f;
+        // Physics steps after a step climb during which hugging and snapping stay off, so they don't undo the lift.
+        const int ClimbGraceSteps = 4;
 
         Rigidbody body;
         SphereCollider core;
+        int stepsSinceGrounded;
+        int stepsSinceClimb = ClimbGraceSteps;
+        bool stepContact;
+        Vector3 stepNormal;
+        float groundGap;
 
         public Rigidbody Body => body;
         public bool IsGrounded { get; private set; }
@@ -68,6 +89,14 @@ namespace BounJam
         void FixedUpdate()
         {
             ProbeGround();
+            stepsSinceGrounded = IsGrounded ? 0 : stepsSinceGrounded + 1;
+            stepsSinceClimb++;
+            bool climbing = stepsSinceClimb < ClimbGraceSteps;
+            if (!climbing)
+            {
+                if (!IsGrounded && stepsSinceGrounded <= 1) SnapToGround();
+                else if (IsGrounded && groundGap > ContactGap) HugGround();
+            }
 
             Vector3 up = IsGrounded ? GroundNormal : Vector3.up;
             Vector3 wish = WishDirection();
@@ -83,6 +112,33 @@ namespace BounJam
             body.AddForce(steered - planar, ForceMode.VelocityChange);
 
             if (IsGrounded) body.AddForce(-GroundNormal * groundStick, ForceMode.Acceleration);
+
+            // Pressing into a low edge: flow up it instead of relying on a bounce off the corner.
+            if (stepContact && wish.sqrMagnitude > 0.01f && Vector3.Dot(wish.normalized, -stepNormal) > 0.3f)
+            {
+                Vector3 velocity = body.linearVelocity;
+                if (velocity.y < stepClimbSpeed) body.linearVelocity = new Vector3(velocity.x, stepClimbSpeed, velocity.z);
+                stepsSinceClimb = 0;
+            }
+            stepContact = false;
+        }
+
+        void OnCollisionStay(Collision collision)
+        {
+            if ((groundMask.value & (1 << collision.gameObject.layer)) == 0) return;
+
+            float bottom = transform.TransformPoint(core.center).y - CoreRadius;
+            for (int i = 0; i < collision.contactCount; i++)
+            {
+                ContactPoint contact = collision.GetContact(i);
+                float height = contact.point.y - bottom;
+                // A steep surface touched low on the core is a step edge; touched higher up it is a wall.
+                if (contact.normal.y < 0.7f && height > ContactGap && height < maxStepHeight)
+                {
+                    stepContact = true;
+                    stepNormal = Vector3.ProjectOnPlane(contact.normal, Vector3.up).normalized;
+                }
+            }
         }
 
         void ProbeGround()
@@ -95,6 +151,36 @@ namespace BounJam
             IsGrounded = Physics.SphereCast(origin, castRadius, Vector3.down, out RaycastHit hit, distance, groundMask, QueryTriggerInteraction.Ignore)
                          && Vector3.Angle(hit.normal, Vector3.up) <= maxGroundAngle;
             GroundNormal = IsGrounded ? hit.normal : Vector3.up;
+            groundGap = IsGrounded ? hit.distance - (radius - castRadius) : float.PositiveInfinity;
+        }
+
+        /// <summary>Skimming just above the ground: turn any velocity away from it along the surface, keeping speed.</summary>
+        void HugGround()
+        {
+            Vector3 velocity = body.linearVelocity;
+            float away = Vector3.Dot(velocity, GroundNormal);
+            if (away > 0f) body.linearVelocity = (velocity - GroundNormal * away).normalized * velocity.magnitude;
+        }
+
+        void SnapToGround()
+        {
+            Vector3 velocity = body.linearVelocity;
+            float speed = velocity.magnitude;
+            if (speed > snapMaxSpeed) return;
+
+            float castRadius = CoreRadius * 0.9f;
+            Vector3 origin = transform.TransformPoint(core.center);
+            if (!Physics.SphereCast(origin, castRadius, Vector3.down, out RaycastHit hit, snapDistance, groundMask, QueryTriggerInteraction.Ignore)
+                || Vector3.Angle(hit.normal, Vector3.up) > maxGroundAngle)
+                return;
+
+            IsGrounded = true;
+            GroundNormal = hit.normal;
+            stepsSinceGrounded = 0;
+            groundGap = hit.distance - (CoreRadius - castRadius);
+            // Keep the speed but turn it along the surface, so the blob flows over the crest.
+            float away = Vector3.Dot(velocity, hit.normal);
+            if (away > 0f) body.linearVelocity = (velocity - hit.normal * away).normalized * speed;
         }
 
         Vector3 WishDirection()

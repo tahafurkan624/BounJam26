@@ -8,9 +8,11 @@ using UnityEngine.SceneManagement;
 namespace BounJam.EditorTools
 {
     /// <summary>
-    /// Builds the greybox sandbox: test geometry, the Blob prefab, the fixed-angle follow camera and the restarter.
-    /// Running it again replaces everything it created; the template's light and volume stay. Materials and the
-    /// prefab's physics material are only created when missing, so tweaks made in the editor survive a rebuild.
+    /// Builds the greybox sandbox: test geometry, the Blob prefab (core, motor, soft skin), the fixed-angle follow
+    /// camera and the restarter.
+    /// Running it again replaces everything it created in the scene; the template's light and volume stay. Materials,
+    /// the physics material and the Blob prefab are only created when missing, so tweaks made in the editor survive a
+    /// rebuild ("Rebuild Blob Prefab" regenerates the prefab on purpose).
     /// </summary>
     public static class SandboxBuilder
     {
@@ -24,6 +26,8 @@ namespace BounJam.EditorTools
         static readonly Vector3 CameraOffset = new Vector3(0f, 9f, -7.5f);
         const float CameraFieldOfView = 40f;
         const float CoreRadius = 0.3f;
+        const float BlobRadius = 0.5f;
+        const string RestPreviewMeshPath = "Assets/_Game/Art/Models/Blob_RestPreview.asset";
 
         struct Palette
         {
@@ -47,7 +51,10 @@ namespace BounJam.EditorTools
             Palette palette = CreatePalette();
             BuildLevel(palette);
 
-            var blob = (GameObject)PrefabUtility.InstantiatePrefab(BuildBlobPrefab(palette.Blob));
+            // Reuse the existing Blob prefab so tuning done in the Inspector survives a level rebuild.
+            GameObject blobPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(BlobPrefabPath);
+            if (blobPrefab == null) blobPrefab = BuildBlobPrefab(palette.Blob);
+            var blob = (GameObject)PrefabUtility.InstantiatePrefab(blobPrefab);
             blob.transform.position = SpawnPoint;
             BuildCamera(blob.transform);
             BuildGame(blob.transform);
@@ -56,6 +63,15 @@ namespace BounJam.EditorTools
             EditorSceneManager.SaveScene(scene);
             AssetDatabase.SaveAssets();
             Debug.Log("[BounJam] Sandbox level built.");
+        }
+
+        /// <summary>Regenerates the Blob prefab from scratch with code defaults. Inspector tuning on it is lost.</summary>
+        [MenuItem("BounJam/Rebuild Blob Prefab")]
+        public static void RebuildBlobPrefab()
+        {
+            BuildBlobPrefab(CreatePalette().Blob);
+            AssetDatabase.SaveAssets();
+            Debug.Log("[BounJam] Blob prefab rebuilt.");
         }
 
         static Palette CreatePalette() => new Palette
@@ -167,18 +183,36 @@ namespace BounJam.EditorTools
             motorSettings.FindProperty("groundMask").intValue = ~LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Triggers", "Ignore Raycast");
             motorSettings.ApplyModifiedPropertiesWithoutUndo();
 
-            // Placeholder look until the soft skin exists: a 1 m sphere resting on the floor around the small core.
-            GameObject visual = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            visual.name = "Visual (Placeholder)";
-            Object.DestroyImmediate(visual.GetComponent<Collider>());
-            visual.layer = root.layer;
-            visual.transform.SetParent(root.transform, false);
-            visual.transform.localPosition = new Vector3(0f, 0.5f - CoreRadius, 0f);
-            visual.GetComponent<MeshRenderer>().sharedMaterial = material;
+            // The skin mesh is rebuilt every frame in play mode; the saved mesh is only the round rest shape,
+            // so the blob is visible in the editor too.
+            var skin = new GameObject("Skin") { layer = root.layer };
+            skin.transform.SetParent(root.transform, false);
+            skin.AddComponent<MeshFilter>().sharedMesh = BuildRestPreviewMesh();
+            skin.AddComponent<MeshRenderer>().sharedMaterial = material;
+
+            var skinSim = root.AddComponent<BlobSkin>();
+            var skinSettings = new SerializedObject(skinSim);
+            skinSettings.FindProperty("skinFilter").objectReferenceValue = skin.GetComponent<MeshFilter>();
+            skinSettings.FindProperty("collisionMask").intValue = LayerMask.GetMask("Default", "Environment", "Pushable", "Interactable");
+            skinSettings.ApplyModifiedPropertiesWithoutUndo();
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        static Mesh BuildRestPreviewMesh()
+        {
+            IcoSphere.Build(2, out Vector3[] directions, out int[] triangles);
+            var vertices = new Vector3[directions.Length];
+            var restCenter = new Vector3(0f, BlobRadius - CoreRadius, 0f);
+            for (int i = 0; i < directions.Length; i++) vertices[i] = restCenter + directions[i] * BlobRadius;
+
+            var mesh = new Mesh { name = "Blob Rest Preview", vertices = vertices, triangles = triangles };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            AssetDatabase.CreateAsset(mesh, RestPreviewMeshPath);
+            return mesh;
         }
 
         static void BuildCamera(Transform target)
