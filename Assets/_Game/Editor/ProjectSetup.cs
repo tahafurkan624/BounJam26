@@ -50,8 +50,9 @@ namespace BounJam.EditorTools
             SetupLayers();
             SetupCollisionMatrix();
             SetupSandboxScene();
+            SetupPlayMode();
             AssetDatabase.SaveAssets();
-            Debug.Log("[BounJam] Project setup applied: layers, collision matrix, sandbox scene.");
+            Debug.Log("[BounJam] Project setup applied: layers, collision matrix, sandbox scene, fast play mode.");
         }
 
         static bool NeedsSetup()
@@ -88,6 +89,15 @@ namespace BounJam.EditorTools
                 rowB.uintValue &= ~(1u << a);
             }
             dynamicsManager.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        // Skipping the domain reload makes entering play mode take about a second instead of several.
+        // The scene still reloads, so every play session starts fresh. Runtime code must not rely on
+        // static fields being reset between play sessions.
+        static void SetupPlayMode()
+        {
+            EditorSettings.enterPlayModeOptionsEnabled = true;
+            EditorSettings.enterPlayModeOptions = EnterPlayModeOptions.DisableDomainReload;
         }
 
         static void SetupSandboxScene()

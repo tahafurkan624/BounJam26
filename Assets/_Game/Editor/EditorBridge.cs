@@ -41,6 +41,8 @@ namespace BounJam.EditorTools
             EditorApplication.update += Poll;
             EditorApplication.playModeStateChanged += state =>
             {
+                // Statics survive play mode when domain reload is off, and game time restarts at 0.
+                waitUntilGameTime = 0f;
                 if (state == PlayModeStateChange.EnteredEditMode) SessionState.EraseBool(BridgePlayKey);
             };
         }
