@@ -1,8 +1,10 @@
 using System.IO;
 using System.Linq;
 using BounJam.Core;
+using BounJam.Interactables;
 using BounJam.Liquids;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 
@@ -33,6 +35,8 @@ namespace BounJam.EditorTools
                 PlayerPrefabBuilder.Build();
             if (!File.Exists(LevelPrefabBuilder.LevelPath))
                 LevelPrefabBuilder.Build();
+            if (!File.Exists(InteractablePrefabBuilder.ButtonPath))
+                InteractablePrefabBuilder.Build();
             if (!File.Exists(PlayerPrefabBuilder.SpawnPath) || !File.Exists(LevelPrefabBuilder.LevelPath))
                 return; // the builders have logged why, e.g. they are waiting for the TextMeshPro import
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
@@ -61,12 +65,16 @@ namespace BounJam.EditorTools
             Block("Platform", environment, new Vector3(-6, 1, 13), new Vector3(3, 2, 6), block);
             Block("Target Wall", environment, new Vector3(4, 1.5f, 16), new Vector3(8, 3, 0.5f), accent);
 
-            // Things to spray at: two loose objects water pushes, and a post that logs the liquid it gets.
-            Material pushable = BuilderUtility.FlatMaterial("Greybox_Pushable", new Color(0.95f, 0.8f, 0.35f));
+            // Things to spray at: two loose objects water pushes, a post that logs the liquid it gets, and a
+            // button to the beaver's right that opens a gate behind it.
             Transform props = new GameObject("Test Props").transform;
-            Pushable(PrimitiveType.Cube, "Pushable Cube", props, new Vector3(2.5f, 0.5f, -1f), 1f, pushable);
-            Pushable(PrimitiveType.Sphere, "Pushable Sphere", props, new Vector3(-2.5f, 0.4f, -1f), 0.8f, pushable);
+            Place(InteractablePrefabBuilder.CubePath, props, new Vector3(2.5f, 0.5f, -1f));
+            Place(InteractablePrefabBuilder.SpherePath, props, new Vector3(-2.5f, 0.4f, -1f));
             LiquidProbe(props, new Vector3(-4f, 0.75f, -3f), accent);
+            var button = Place(InteractablePrefabBuilder.ButtonPath, props, new Vector3(4f, 0f, -6f), -90f).GetComponent<LiquidButton>();
+            GameObject gate = Block("Gate", props, new Vector3(6f, 1.25f, -6f), new Vector3(0.4f, 2.5f, 3f), accent);
+            UnityEventTools.AddBoolPersistentListener(button.Pressed, gate.SetActive, false);
+            PrefabUtility.RecordPrefabInstancePropertyModifications(button);
 
             Transform gameplay = new GameObject("Gameplay").transform;
             Place(LevelPrefabBuilder.LevelPath, gameplay, Vector3.zero);
@@ -81,7 +89,7 @@ namespace BounJam.EditorTools
             Debug.Log($"[BounJam] Built {ScenePath}.");
         }
 
-        static void Block(string name, Transform parent, Vector3 position, Vector3 size, Material material, float pitch = 0)
+        static GameObject Block(string name, Transform parent, Vector3 position, Vector3 size, Material material, float pitch = 0)
         {
             GameObject go = GameObject.CreatePrimitive(PrimitiveType.Cube);
             go.name = name;
@@ -91,25 +99,15 @@ namespace BounJam.EditorTools
             go.transform.SetPositionAndRotation(position, Quaternion.Euler(pitch, 0, 0));
             go.transform.localScale = size;
             go.GetComponent<MeshRenderer>().sharedMaterial = material;
+            return go;
         }
 
-        static void Place(string prefabPath, Transform parent, Vector3 position)
+        static GameObject Place(string prefabPath, Transform parent, Vector3 position, float yaw = 0f)
         {
             var instance = (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath));
             instance.transform.SetParent(parent);
-            instance.transform.position = position;
-        }
-
-        static void Pushable(PrimitiveType shape, string name, Transform parent, Vector3 position, float size, Material material)
-        {
-            GameObject go = GameObject.CreatePrimitive(shape);
-            go.name = name;
-            go.layer = GameLayers.Pushable;
-            go.transform.SetParent(parent);
-            go.transform.position = position;
-            go.transform.localScale = Vector3.one * size;
-            go.GetComponent<MeshRenderer>().sharedMaterial = material;
-            go.AddComponent<Rigidbody>().mass = 1f;
+            instance.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
+            return instance;
         }
 
         // On the LiquidHitbox layer: liquid hits it, but the player walks straight through.
