@@ -26,6 +26,9 @@ namespace BounJam.Core
             (Trigger, nameof(Trigger)),
         };
 
+        /// <summary>Everything physical except the player and trigger volumes: what aim rays and liquid hit.</summary>
+        public static readonly int Solid = MaskOf(Default, Ground, Enemy, Pushable, Tree, Interactable);
+
         public static int MaskOf(params int[] layers)
         {
             int mask = 0;

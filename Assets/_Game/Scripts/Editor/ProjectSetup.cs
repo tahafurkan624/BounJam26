@@ -6,8 +6,8 @@ using UnityEngine;
 namespace BounJam.EditorTools
 {
     /// <summary>
-    /// Writes the game's layers and physics rules into Project Settings. Runs by itself the first time
-    /// the layers are missing (and builds the sandbox scene then); afterwards use the BounJam menu.
+    /// Writes the game's layers and physics rules into Project Settings. Runs by itself whenever the
+    /// layers are missing; it can also be run from the BounJam menu.
     /// </summary>
     [InitializeOnLoad]
     static class ProjectSetup
@@ -16,10 +16,8 @@ namespace BounJam.EditorTools
 
         static void SetUpIfNeeded()
         {
-            if (EditorApplication.isPlayingOrWillChangePlaymode || LayersAreSetUp())
-                return;
-            ApplyLayersAndPhysics();
-            SandboxBuilder.BuildIfMissing();
+            if (!EditorApplication.isPlayingOrWillChangePlaymode && !LayersAreSetUp())
+                ApplyLayersAndPhysics();
         }
 
         static bool LayersAreSetUp() =>

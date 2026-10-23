@@ -11,13 +11,6 @@ namespace BounJam.EditorTools
     static class SandboxBuilder
     {
         const string ScenePath = "Assets/_Game/Scenes/Sandbox.unity";
-        const string MaterialFolder = "Assets/_Game/Art/Materials";
-
-        public static void BuildIfMissing()
-        {
-            if (!File.Exists(ScenePath))
-                Build();
-        }
 
         [MenuItem("BounJam/Setup/Rebuild Sandbox Scene")]
         static void Rebuild()
@@ -28,18 +21,23 @@ namespace BounJam.EditorTools
             Build();
         }
 
-        static void Build()
+        internal static void Build()
         {
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
             {
                 Debug.Log("[BounJam] Sandbox not built. Use BounJam > Setup > Rebuild Sandbox Scene when ready.");
                 return;
             }
+            if (!File.Exists(PlayerPrefabBuilder.SpawnPath))
+                PlayerPrefabBuilder.Build();
 
             var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-            Material ground = GreyboxMaterial("Greybox_Ground", new Color(0.42f, 0.55f, 0.36f));
-            Material block = GreyboxMaterial("Greybox_Block", new Color(0.62f, 0.64f, 0.70f));
-            Material accent = GreyboxMaterial("Greybox_Accent", new Color(0.85f, 0.55f, 0.30f));
+            // The player rig brings its own camera.
+            Object.DestroyImmediate(scene.GetRootGameObjects().First(go => go.GetComponent<Camera>() != null));
+
+            Material ground = BuilderUtility.FlatMaterial("Greybox_Ground", new Color(0.42f, 0.55f, 0.36f));
+            Material block = BuilderUtility.FlatMaterial("Greybox_Block", new Color(0.62f, 0.64f, 0.70f));
+            Material accent = BuilderUtility.FlatMaterial("Greybox_Accent", new Color(0.85f, 0.55f, 0.30f));
 
             Transform environment = new GameObject("Environment").transform;
             Block("Floor", environment, new Vector3(0, -0.5f, 0), new Vector3(60, 1, 60), ground);
@@ -54,12 +52,10 @@ namespace BounJam.EditorTools
             Block("Target Wall", environment, new Vector3(4, 1.5f, 16), new Vector3(8, 3, 0.5f), accent);
 
             Transform gameplay = new GameObject("Gameplay").transform;
-            var spawn = new GameObject("PlayerSpawn", typeof(PlayerSpawn));
+            var spawn = (GameObject)PrefabUtility.InstantiatePrefab(
+                AssetDatabase.LoadAssetAtPath<GameObject>(PlayerPrefabBuilder.SpawnPath), scene);
             spawn.transform.SetParent(gameplay);
             spawn.transform.position = new Vector3(0, 0, -6);
-
-            Camera camera = scene.GetRootGameObjects().Select(go => go.GetComponent<Camera>()).First(c => c != null);
-            camera.transform.SetPositionAndRotation(new Vector3(0, 5, -16), Quaternion.Euler(20, 0, 0));
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddToBuildSettings();
@@ -76,20 +72,6 @@ namespace BounJam.EditorTools
             go.transform.SetPositionAndRotation(position, Quaternion.Euler(pitch, 0, 0));
             go.transform.localScale = size;
             go.GetComponent<MeshRenderer>().sharedMaterial = material;
-        }
-
-        static Material GreyboxMaterial(string name, Color color)
-        {
-            string path = $"{MaterialFolder}/{name}.mat";
-            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (material != null)
-                return material;
-
-            material = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = name };
-            material.SetColor("_BaseColor", color);
-            material.SetFloat("_Smoothness", 0.2f);
-            AssetDatabase.CreateAsset(material, path);
-            return material;
         }
 
         static void AddToBuildSettings()
