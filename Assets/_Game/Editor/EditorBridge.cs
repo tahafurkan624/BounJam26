@@ -23,6 +23,8 @@ namespace BounJam.EditorTools
     ///   probe &lt;GameObject name&gt;                     position, velocity, render bounds (and blob skin stats)
     ///   teleport &lt;GameObject name&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;     move an object (and its rigidbody, stopped) there
     ///   mat &lt;asset path&gt; &lt;property&gt; &lt;value | r g b [a]&gt;  set and save a material float or colour
+    ///   invoke &lt;GameObject&gt; &lt;Component&gt; &lt;Method&gt;   call a public parameterless method, e.g. "invoke Blob BlobForm Toggle"
+    ///   set &lt;GameObject&gt; &lt;Component&gt; &lt;field[.sub]&gt; &lt;value&gt;  set a field for tuning (play mode changes don't persist)
     /// An unfocused editor doesn't run the game loop, so play sessions started here stay paused and are stepped
     /// one frame per editor update during "waitgame" (0.02 s of game time per frame).
     /// </summary>
@@ -131,6 +133,10 @@ namespace BounJam.EditorTools
                     return Teleport(args);
                 case "mat":
                     return SetMaterialProperty(args);
+                case "invoke":
+                    return Invoke(args);
+                case "set":
+                    return SetField(args);
                 default:
                     return $"error: unknown command '{verb}'";
             }
@@ -144,6 +150,51 @@ namespace BounJam.EditorTools
             var stick = new Vector2(ParseFloat(args[0]), ParseFloat(args[1]));
             reader.MoveOverride = stick;
             return $"ok: move override {Format(stick)}";
+        }
+
+        static string Invoke(string[] args)
+        {
+            GameObject target = GameObject.Find(args[0]);
+            if (target == null) return $"error: no active GameObject named '{args[0]}'";
+            Component component = target.GetComponent(args[1]);
+            if (component == null) return $"error: {args[0]} has no component {args[1]}";
+            var method = component.GetType().GetMethod(args[2], Type.EmptyTypes);
+            if (method == null) return $"error: {args[1]} has no public parameterless method {args[2]}";
+            object result = method.Invoke(component, null);
+            return $"ok: {args[0]}.{args[1]}.{args[2]}(){(result != null ? " = " + result : "")}";
+        }
+
+        /// <summary>
+        /// Sets a field (public or serialized private) on a scene component, for tuning in play mode.
+        /// "set Blob BlobMotor solid.acceleration 15" reaches one level into a struct field.
+        /// </summary>
+        static string SetField(string[] args)
+        {
+            GameObject target = GameObject.Find(args[0]);
+            if (target == null) return $"error: no active GameObject named '{args[0]}'";
+            Component component = target.GetComponent(args[1]);
+            if (component == null) return $"error: {args[0]} has no component {args[1]}";
+
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance |
+                                                          System.Reflection.BindingFlags.Public |
+                                                          System.Reflection.BindingFlags.NonPublic;
+            string[] path = args[2].Split('.');
+            var outer = component.GetType().GetField(path[0], flags);
+            if (outer == null) return $"error: {args[1]} has no field {path[0]}";
+
+            if (path.Length == 1)
+            {
+                outer.SetValue(component, Convert.ChangeType(args[3], outer.FieldType, CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                object holder = outer.GetValue(component);
+                var inner = holder.GetType().GetField(path[1], flags);
+                if (inner == null) return $"error: {path[0]} has no field {path[1]}";
+                inner.SetValue(holder, Convert.ChangeType(args[3], inner.FieldType, CultureInfo.InvariantCulture));
+                outer.SetValue(component, holder); // structs are copies; write the changed copy back
+            }
+            return $"ok: {args[0]}.{args[1]}.{args[2]} = {args[3]}";
         }
 
         static string SetMaterialProperty(string[] args)
@@ -195,6 +246,15 @@ namespace BounJam.EditorTools
                 foreach (Renderer r in renderers) bounds.Encapsulate(r.bounds);
                 result += $" renderSize={Format(bounds.size)} renderBottom={bounds.min.y.ToString("0.00", CultureInfo.InvariantCulture)}";
             }
+            if (target.TryGetComponent(out BlobForm form))
+            {
+                var block = new MaterialPropertyBlock();
+                target.GetComponentInChildren<Renderer>().GetPropertyBlock(block);
+                result += string.Format(CultureInfo.InvariantCulture, " solid={0} solidLook={1:0.00} rotation={2}",
+                                        form.IsSolid, block.GetFloat("_Solid"), Format(target.transform.eulerAngles));
+            }
+            if (target.TryGetComponent(out BlobMotor motor))
+                result += $" grounded={motor.IsGrounded} sleeping={motor.Body.IsSleeping()}";
             if (target.TryGetComponent(out BlobSkin skin))
                 result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
             if (target.TryGetComponent(out ShipBuoyancy ship))

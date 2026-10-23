@@ -208,6 +208,28 @@ namespace BounJam.EditorTools
             skinSettings.FindProperty("collisionMask").intValue = LayerMask.GetMask("Default", "Environment", "Pushable", "Interactable");
             skinSettings.ApplyModifiedPropertiesWithoutUndo();
 
+            // Solid form: a convex collider that takes the frozen shape, with real friction.
+            PhysicsMaterial solidPhysics = LoadOrCreate($"{MaterialsFolder}/Blob_Solid_Physics.asset", () => new PhysicsMaterial("Blob Solid")
+            {
+                dynamicFriction = 0.6f,
+                staticFriction = 0.7f,
+                bounciness = 0.05f,
+                frictionCombine = PhysicsMaterialCombine.Average,
+                bounceCombine = PhysicsMaterialCombine.Average,
+            });
+            var solidCollider = root.AddComponent<MeshCollider>();
+            solidCollider.convex = true;
+            solidCollider.sharedMaterial = solidPhysics;
+            solidCollider.enabled = false;
+
+            var form = root.AddComponent<BlobForm>();
+            var formSettings = new SerializedObject(form);
+            formSettings.FindProperty("input").objectReferenceValue = input;
+            formSettings.FindProperty("liquidCore").objectReferenceValue = core;
+            formSettings.FindProperty("solidCollider").objectReferenceValue = solidCollider;
+            formSettings.FindProperty("skinRenderer").objectReferenceValue = skin.GetComponent<MeshRenderer>();
+            formSettings.ApplyModifiedPropertiesWithoutUndo();
+
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;

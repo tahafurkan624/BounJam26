@@ -92,6 +92,8 @@ namespace BounJam
         Vector3[] smoothVertices;
         LoopSubdivision smoothing;
         bool initialised;
+        Vector3[] frozenLocal;
+        Mesh frozenMesh;
 
         float flatten;
         float flattenVelocity;
@@ -118,14 +120,69 @@ namespace BounJam
             public Vector3 Normal;
         }
 
+        /// <summary>True while hardened into the solid form: the shape is fixed and moves rigidly with the body.</summary>
+        public bool IsFrozen { get; private set; }
+        /// <summary>False until the first physics step has placed the skin points.</summary>
+        public bool IsReady => initialised;
+
+        /// <summary>
+        /// Locks the current shape. Returns the skin points in the blob's local space (at the moment of freezing
+        /// the blob has no rotation, so these are the offsets from the core). The first 42 points are an even
+        /// coarse subset that's good for building a collider.
+        /// </summary>
+        public Vector3[] Freeze()
+        {
+            if (frozenLocal == null) frozenLocal = new Vector3[positions.Length];
+            Vector3 core = body.position;
+            for (int i = 0; i < positions.Length; i++) frozenLocal[i] = positions[i] - core;
+
+            // Flat-shaded facets: every triangle gets its own vertices, so the frozen blob reads as a hard crystal.
+            var vertices = new Vector3[triangles.Length];
+            var faceTriangles = new int[triangles.Length];
+            for (int k = 0; k < triangles.Length; k++)
+            {
+                vertices[k] = frozenLocal[triangles[k]];
+                faceTriangles[k] = k;
+            }
+            if (frozenMesh == null) frozenMesh = new Mesh { name = "Blob Frozen" };
+            frozenMesh.Clear();
+            frozenMesh.vertices = vertices;
+            frozenMesh.triangles = faceTriangles;
+            frozenMesh.RecalculateNormals();
+            frozenMesh.RecalculateBounds();
+            if (skinFilter != null) skinFilter.sharedMesh = frozenMesh;
+
+            IsFrozen = true;
+            return frozenLocal;
+        }
+
+        /// <summary>
+        /// Turns back into liquid from wherever the frozen shape is now. Call before resetting the body's
+        /// rotation: the points start exactly where the (possibly tumbled) solid was and flow back to rest.
+        /// </summary>
+        public void Melt()
+        {
+            if (!IsFrozen) return;
+            Vector3 core = body.position;
+            Vector3 velocity = body.linearVelocity;
+            for (int i = 0; i < positions.Length; i++)
+            {
+                positions[i] = transform.TransformPoint(frozenLocal[i]);
+                velocities[i] = velocity;
+                previousOffsets[i] = currentOffsets[i] = positions[i] - core;
+            }
+            if (skinFilter != null) skinFilter.sharedMesh = mesh;
+            IsFrozen = false;
+        }
+
         /// <summary>
         /// Finds the top of the skin straight above or below a point (only its x and z matter).
-        /// Returns false when the point is outside the blob's footprint.
+        /// Returns false when the point is outside the blob's footprint, or while frozen (the solid is a collider).
         /// </summary>
         public bool TrySampleSurface(Vector3 point, out SurfaceSample sample)
         {
             sample = default;
-            if (!initialised) return false;
+            if (!initialised || IsFrozen) return false;
 
             float reach = radius * 3f;
             float dx = point.x - ShapeCenter.x, dz = point.z - ShapeCenter.z;
@@ -179,6 +236,7 @@ namespace BounJam
         void OnDestroy()
         {
             if (mesh != null) Destroy(mesh);
+            if (frozenMesh != null) Destroy(frozenMesh);
         }
 
         void BuildTopology()
@@ -223,6 +281,7 @@ namespace BounJam
 
         void Step(float dt)
         {
+            if (IsFrozen) return;
             Vector3 core = body.position;
             Vector3 coreVelocity = body.linearVelocity;
 
@@ -374,7 +433,7 @@ namespace BounJam
 
         void LateUpdate()
         {
-            if (!initialised) return;
+            if (!initialised || IsFrozen) return;
 
             // Match the rigidbody's interpolation so the skin moves as smoothly as the core between physics steps.
             float t = body.interpolation == RigidbodyInterpolation.Interpolate

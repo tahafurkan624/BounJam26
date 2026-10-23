@@ -22,6 +22,9 @@ namespace BounJam
         };
         [Tooltip("Local centre of mass; low keeps the ship upright.")]
         [SerializeField] Vector3 centerOfMass = new Vector3(0f, 0.04f, 0f);
+        [Tooltip("Top speed when the physics pushes the ship out of an overlap, m/s. Low = eased out, not popped off. " +
+                 "(Not saved on the Rigidbody itself, so it's applied from here.)")]
+        [SerializeField] float maxDepenetrationSpeed = 1.5f;
 
         [Header("Floating")]
         [Tooltip("Upward push per metre below the surface, m/s². Resting depth is about 9.81 / this.")]
@@ -56,6 +59,8 @@ namespace BounJam
         [SerializeField] float adhesionDrag = 0.6f;
 
         Rigidbody body;
+        Collider[] colliders;
+        BlobForm blobForm;
         float dryAngularDamping;
 
         /// <summary>True while at least one float point is in or clinging to the jelly.</summary>
@@ -67,8 +72,46 @@ namespace BounJam
         {
             body = GetComponent<Rigidbody>();
             body.centerOfMass = centerOfMass;
+            body.maxDepenetrationVelocity = maxDepenetrationSpeed;
             dryAngularDamping = body.angularDamping;
+            colliders = GetComponentsInChildren<Collider>();
             if (blob == null) blob = FindAnyObjectByType<BlobSkin>();
+            if (blob != null) blobForm = blob.GetComponent<BlobForm>();
+        }
+
+        void OnEnable()
+        {
+            if (blobForm != null) blobForm.FormChanged += OnBlobFormChanged;
+        }
+
+        void OnDisable()
+        {
+            if (blobForm != null) blobForm.FormChanged -= OnBlobFormChanged;
+        }
+
+        /// <summary>
+        /// The jelly the hull was sitting in has just become a collider. Lift the ship straight out onto it and match
+        /// its speed, instead of letting the physics shove it out mid-slide and flip it.
+        /// </summary>
+        void OnBlobFormChanged(bool solid)
+        {
+            if (!solid || !IsFloating) return;
+
+            Collider crystal = blobForm.SolidCollider;
+            Vector3 lift = Vector3.zero;
+            foreach (Collider own in colliders)
+            {
+                if (Physics.ComputePenetration(own, own.transform.position, own.transform.rotation,
+                                               crystal, crystal.transform.position, crystal.transform.rotation,
+                                               out Vector3 direction, out float distance)
+                    && distance > lift.magnitude)
+                    lift = direction * distance;
+            }
+
+            body.position += lift;
+            transform.position += lift;
+            body.linearVelocity = blob.GetComponent<Rigidbody>().linearVelocity;
+            body.angularVelocity = Vector3.zero;
         }
 
         void FixedUpdate()

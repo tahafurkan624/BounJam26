@@ -37,6 +37,8 @@ Material:
     - _SSSStrength: 0.8
     - _ShadowStrength: 0.35
     - _Shininess: 160
+    - _Solid: 0
+    - _SolidOpacity: 0.8
     - _Specular: 1.2
     - _Wobble: 0.004
     - _WobbleSpeed: 1.5
@@ -47,5 +49,6 @@ Material:
     - _RimColor: {r: 0.75, g: 1, b: 0.95, a: 1}
     - _SSSColor: {r: 0.5, g: 1, b: 0.75, a: 1}
     - _ShallowColor: {r: 0.45, g: 1, b: 0.85, a: 1}
+    - _SolidColor: {r: 0.55, g: 0.85, b: 0.88, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

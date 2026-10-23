@@ -26,6 +26,9 @@ namespace BounJam
         [Tooltip("Movement is relative to this camera's facing. Defaults to the main camera.")]
         [SerializeField] Transform cameraTransform;
         [SerializeField] MoveSettings liquid = new MoveSettings { maxSpeed = 7f, acceleration = 35f, braking = 25f };
+        [Tooltip("Solid form: pushes itself along the input direction with this much force and no active braking; " +
+                 "friction stops it, and its frozen shape decides whether it rolls or slides.")]
+        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 2.2f, acceleration = 15f, braking = 0f };
         [Tooltip("Fraction of acceleration and braking available while airborne.")]
         [Range(0f, 1f)]
         [SerializeField] float airControl = 0.3f;
@@ -61,12 +64,23 @@ namespace BounJam
         bool stepContact;
         Vector3 stepNormal;
         float groundGap;
+        bool isSolid;
+        bool solidGroundContact;
+        Vector3 solidGroundNormal = Vector3.up;
 
         public Rigidbody Body => body;
         public bool IsGrounded { get; private set; }
         public Vector3 GroundNormal { get; private set; } = Vector3.up;
         public Vector3 Velocity => body.linearVelocity;
-        public MoveSettings ActiveSettings => liquid;
+        public MoveSettings ActiveSettings => isSolid ? solid : liquid;
+
+        /// <summary>Switches between liquid movement (core sphere) and solid movement (whatever shape is frozen).</summary>
+        public void SetSolid(bool value)
+        {
+            isSolid = value;
+            solidGroundContact = false;
+            stepContact = false;
+        }
         /// <summary>Speed along the ground relative to the current top speed; 0 at rest, about 1 at full speed.</summary>
         public float NormalizedSpeed => Vector3.ProjectOnPlane(body.linearVelocity, GroundNormal).magnitude / Mathf.Max(0.01f, ActiveSettings.maxSpeed);
         /// <summary>World radius of the core collider.</summary>
@@ -88,6 +102,12 @@ namespace BounJam
 
         void FixedUpdate()
         {
+            if (isSolid)
+            {
+                MoveSolid();
+                return;
+            }
+
             ProbeGround();
             stepsSinceGrounded = IsGrounded ? 0 : stepsSinceGrounded + 1;
             stepsSinceClimb++;
@@ -123,9 +143,46 @@ namespace BounJam
             stepContact = false;
         }
 
+        /// <summary>
+        /// Solid form: a heavy push along the input direction at the centre of mass, only while resting on something
+        /// and below top speed. No braking and no ground helpers; the frozen shape rolls, tips or slides on its own.
+        /// </summary>
+        void MoveSolid()
+        {
+            IsGrounded = solidGroundContact;
+            GroundNormal = solidGroundContact ? solidGroundNormal : Vector3.up;
+            solidGroundContact = false;
+
+            Vector3 wish = WishDirection();
+            if (wish.sqrMagnitude < 0.0001f) return;
+            // A resting solid falls asleep and stops reporting contacts; wake it so the next step sees the ground.
+            if (body.IsSleeping()) body.WakeUp();
+            if (!IsGrounded) return;
+
+            Vector3 planar = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
+            float speedAlongWish = Vector3.Dot(planar, wish.normalized);
+            if (speedAlongWish < solid.maxSpeed * wish.magnitude)
+                body.AddForce(wish * solid.acceleration, ForceMode.Acceleration);
+        }
+
         void OnCollisionStay(Collision collision)
         {
             if ((groundMask.value & (1 << collision.gameObject.layer)) == 0) return;
+
+            if (isSolid)
+            {
+                // Anything holding the solid up from below counts as ground for pushing.
+                for (int i = 0; i < collision.contactCount; i++)
+                {
+                    Vector3 normal = collision.GetContact(i).normal;
+                    if (normal.y > 0.5f)
+                    {
+                        solidGroundContact = true;
+                        solidGroundNormal = normal;
+                    }
+                }
+                return;
+            }
 
             float bottom = transform.TransformPoint(core.center).y - CoreRadius;
             for (int i = 0; i < collision.contactCount; i++)

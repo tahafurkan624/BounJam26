@@ -34,6 +34,11 @@ Shader "BounJam/Jelly"
         _RimPower ("Rim Tightness", Range(0.5, 8)) = 2.5
         _RimStrength ("Rim Strength", Range(0, 2)) = 0.7
 
+        [Header(Solid Form)]
+        _Solid ("Solid (0 jelly, 1 hardened)", Range(0, 1)) = 0
+        _SolidColor ("Hardened Body Colour", Color) = (0.55, 0.85, 0.88, 1)
+        _SolidOpacity ("Hardened Opacity", Range(0, 1)) = 0.8
+
         [Header(Subsurface)]
         _SSSColor ("Glow Colour", Color) = (0.5, 1.0, 0.75, 1)
         _SSSStrength ("Glow Strength", Range(0, 3)) = 0.8
@@ -82,6 +87,9 @@ Shader "BounJam/Jelly"
                 half4 _RimColor;
                 half _RimPower;
                 half _RimStrength;
+                half _Solid;
+                half4 _SolidColor;
+                half _SolidOpacity;
                 half4 _SSSColor;
                 half _SSSStrength;
                 half _SSSDistortion;
@@ -127,7 +135,10 @@ Shader "BounJam/Jelly"
                 float3 p = input.positionWS * 6.0;
                 float2 wobble = float2(sin(p.x + t) + sin(p.z * 1.3 - t * 0.8),
                                        sin(p.y * 1.1 + t * 1.2) + sin(p.x * 0.7 - t)) * _Wobble;
-                float2 refractedUV = screenUV - normalVS.xy * _Refraction * (1.0 - thickness * 0.5) + wobble;
+                // Hardened: much less bending and no inner wobble.
+                float refraction = _Refraction * (1.0 - 0.7 * _Solid);
+                wobble *= 1.0 - _Solid;
+                float2 refractedUV = screenUV - normalVS.xy * refraction * (1.0 - thickness * 0.5) + wobble;
                 // Thick jelly scatters: average a small ring of samples so edges seen through it (like the
                 // blob's own shadow on the floor) blur instead of cutting a hard line across it.
                 const float2 ring[6] = { float2(1, 0), float2(0.5, 0.866), float2(-0.5, 0.866),
@@ -142,9 +153,11 @@ Shader "BounJam/Jelly"
                 // Light gets through jelly, so shadows on it (including its own) are only partial.
                 half shadow = lerp(1.0h, mainLight.shadowAttenuation, _ShadowStrength) * mainLight.distanceAttenuation;
                 half wrapped = saturate((dot(normalWS, mainLight.direction) + _Wrap) / (1.0 + _Wrap));
-                half3 body = _BodyColor.rgb * (SampleSH(normalWS) + mainLight.color * wrapped * shadow);
+                half3 bodyColor = lerp(_BodyColor.rgb, _SolidColor.rgb, _Solid);
+                half3 body = bodyColor * (SampleSH(normalWS) + mainLight.color * wrapped * shadow);
 
-                half3 color = lerp(transmitted, body, lerp(_Opacity, _CoreOpacity, thickness * thickness));
+                half opacity = lerp(lerp(_Opacity, _CoreOpacity, thickness * thickness), _SolidOpacity, _Solid);
+                half3 color = lerp(transmitted, body, opacity);
 
                 // Light shining through from behind, strongest at the thinner parts.
                 half3 throughDir = normalize(mainLight.direction + normalWS * _SSSDistortion);
@@ -153,10 +166,12 @@ Shader "BounJam/Jelly"
 
                 half fresnel = pow(1.0 - thickness, _RimPower);
                 half3 reflection = GlossyEnvironmentReflection(reflect(-viewDir, normalWS), input.positionWS, 0.05h, 1.0h);
-                color += reflection * fresnel * _Reflection + _RimColor.rgb * fresnel * _RimStrength;
+                color += reflection * fresnel * _Reflection + _RimColor.rgb * fresnel * _RimStrength * (1.0 + 0.5 * _Solid);
 
+                // Hardened facets catch a tighter, brighter glint.
                 half3 halfDir = normalize(mainLight.direction + viewDir);
-                half highlight = pow(saturate(dot(normalWS, halfDir)), _Shininess) * _Specular * shadow;
+                half shininess = _Shininess * (1.0 + 2.0 * _Solid);
+                half highlight = pow(saturate(dot(normalWS, halfDir)), shininess) * _Specular * (1.0 + 0.5 * _Solid) * shadow;
                 color += mainLight.color * highlight;
 
                 return half4(MixFog(color, input.fogFactor), 1);
