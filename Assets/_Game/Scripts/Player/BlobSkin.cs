@@ -41,10 +41,10 @@ namespace BounJam
         [Header("Speed Flattening")]
         [Tooltip("How flat it gets at full speed: 0 = stays round, 0.5 = half height (and wider, same volume).")]
         [Range(0f, 0.8f)]
-        [SerializeField] float flattenAtFullSpeed = 0.45f;
+        [SerializeField] float flattenAtFullSpeed = 0.6f;
         [Tooltip("Extra stretch along the movement direction at full speed.")]
         [Range(0f, 0.5f)]
-        [SerializeField] float stretchAtFullSpeed = 0.15f;
+        [SerializeField] float stretchAtFullSpeed = 0.25f;
         [Tooltip("How quickly the shape follows speed changes.")]
         [SerializeField] float flattenStiffness = 120f;
         [Tooltip("Lower = more bounce between flat and tall when speeding up or stopping.")]
@@ -197,12 +197,7 @@ namespace BounJam
             for (int f = 0; f < triangles.Length; f += 3)
             {
                 Vector3 a = positions[triangles[f]], b = positions[triangles[f + 1]], c = positions[triangles[f + 2]];
-                float denominator = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
-                if (Mathf.Abs(denominator) < 1e-8f) continue;
-                float wa = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / denominator;
-                float wb = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / denominator;
-                float wc = 1f - wa - wb;
-                if (wa < 0f || wb < 0f || wc < 0f) continue;
+                if (!Footprint(a, b, c, point, out float wa, out float wb, out float wc)) continue;
 
                 float height = wa * a.y + wb * b.y + wc * c.y;
                 if (height <= bestHeight) continue;
@@ -218,6 +213,42 @@ namespace BounJam
             sample.Velocity = velocities[ia] * bestA + velocities[ib] * bestB + velocities[ic] * bestC;
             sample.Normal = normal.y >= 0f ? normal : -normal;
             return true;
+        }
+
+        /// <summary>
+        /// Is the point inside the skin? Works in both forms. A ray straight up from inside a closed surface crosses
+        /// it an odd number of times, so this counts the skin triangles above the point.
+        /// </summary>
+        public bool Contains(Vector3 point)
+        {
+            if (!initialised) return false;
+            float reach = radius * 3f;
+            if ((point - body.position).sqrMagnitude > reach * reach) return false;
+
+            int crossings = 0;
+            for (int f = 0; f < triangles.Length; f += 3)
+            {
+                Vector3 a = PointAt(triangles[f]), b = PointAt(triangles[f + 1]), c = PointAt(triangles[f + 2]);
+                if (Footprint(a, b, c, point, out float wa, out float wb, out float wc)
+                    && wa * a.y + wb * b.y + wc * c.y > point.y)
+                    crossings++;
+            }
+            return (crossings & 1) == 1;
+        }
+
+        /// <summary>A skin point in world space; frozen points move rigidly with the body.</summary>
+        Vector3 PointAt(int i) => IsFrozen ? body.position + body.rotation * frozenLocal[i] : positions[i];
+
+        /// <summary>Barycentric weights of the point's x and z in the triangle's footprint; false when outside it.</summary>
+        static bool Footprint(Vector3 a, Vector3 b, Vector3 c, Vector3 point, out float wa, out float wb, out float wc)
+        {
+            wa = wb = wc = 0f;
+            float denominator = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+            if (Mathf.Abs(denominator) < 1e-8f) return false;
+            wa = ((b.z - c.z) * (point.x - c.x) + (c.x - b.x) * (point.z - c.z)) / denominator;
+            wb = ((c.z - a.z) * (point.x - c.x) + (a.x - c.x) * (point.z - c.z)) / denominator;
+            wc = 1f - wa - wb;
+            return wa >= 0f && wb >= 0f && wc >= 0f;
         }
 
         void Awake()
@@ -390,8 +421,9 @@ namespace BounJam
 
             // In the air too: a blob that jumps or flows off an edge at speed stays spread out, instead of snapping back
             // to round and flinging a ship off its top.
+            // Ease-out: the squeeze sets in early, so it shows during the slow build-up to top speed too.
             float speed01 = Mathf.Clamp01(motor.NormalizedSpeed);
-            float eased = speed01 * speed01 * (3f - 2f * speed01);
+            float eased = 1f - (1f - speed01) * (1f - speed01);
             float breath = idleBreath * Mathf.Sin(Time.time * idleBreathRate * 2f * Mathf.PI) * (1f - eased);
             float target = flattenAtFullSpeed * eased + breath;
             flattenVelocity += (flattenStiffness * (target - flatten) - flattenDamping * flattenVelocity) * dt;

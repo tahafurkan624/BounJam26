@@ -17,6 +17,7 @@ GameObject:
   - component: {fileID: 2383094784220977415}
   - component: {fileID: 5158639386208523797}
   - component: {fileID: 4668114821618807158}
+  - component: {fileID: 7523813637989892083}
   m_Layer: 7
   m_Name: Blob
   m_TagString: Untagged
@@ -122,6 +123,10 @@ MonoBehaviour:
     maxSpeed: 1.8
     acceleration: 15
     braking: 6
+  swim:
+    maxSpeed: 2.2
+    acceleration: 5
+    braking: 1.5
   airControl: 0.3
   jumpHeight: 0.8
   jumpBuffer: 0.15
@@ -136,6 +141,8 @@ MonoBehaviour:
   snapMaxSpeed: 9
   maxStepHeight: 0.25
   stepClimbSpeed: 2.5
+  shoreClimbHeight: 0.6
+  shoreClimbSpeed: 1.5
 --- !u!114 &6149260719953501708
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -157,8 +164,8 @@ MonoBehaviour:
   surfaceTension: 40
   pressure: 300
   gravitySag: 0.3
-  flattenAtFullSpeed: 0.45
-  stretchAtFullSpeed: 0.15
+  flattenAtFullSpeed: 0.6
+  stretchAtFullSpeed: 0.25
   flattenStiffness: 120
   flattenDamping: 9.5
   landingSquash: 0.5
@@ -238,6 +245,27 @@ MonoBehaviour:
     m_Bits: 65
   tolerance: 0.15
   memory: 1
+--- !u!114 &7523813637989892083
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8562089fb9c8901fc8b9b1f48d3cbdb9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobWater
+  skinRenderer: {fileID: 6615839950219197294}
+  dissolveDepth: 0.02
+  dissolveMessage: You dissolved in the water!
+  dissolveTime: 0.8
+  sinkDrag: 6
+  buoyancy: 2.4
+  verticalDamping: 5
+  angularDrag: 4
+  swimSubmersion: 0.1
 --- !u!1 &1213435513202305914
 GameObject:
   m_ObjectHideFlags: 0
