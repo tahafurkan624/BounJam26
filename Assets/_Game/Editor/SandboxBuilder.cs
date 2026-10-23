@@ -8,8 +8,8 @@ namespace BounJam.EditorTools
 {
     /// <summary>
     /// Builds the greybox sandbox: a walled arena with every test piece (ramp, steps, low tunnel, narrow gap, bumps,
-    /// grate, crates, buttons, gate, lift, hot plate, water pool, a test dock), the blob, the ship, the camera and level
-    /// logic.
+    /// grate, crates, buttons, gate, lift, hot plate, water pool, iron ball, magnet tower, a test dock), the blob, the
+    /// ship, the camera and level logic.
     /// It never completes; R or falling restarts it. Running it again replaces everything it created in the scene;
     /// the template's light and volume stay.
     /// </summary>
@@ -36,6 +36,8 @@ namespace BounJam.EditorTools
 
             Palette palette = CreatePalette();
             Transform level = BuildArena(palette);
+            MagnetKit.SandboxPieces(level, palette);
+            MagnetKit.UpgradeBlobPrefab();
             var (blob, ship) = PlacePlayer(palette, Spawn, Spawn + Vector3.up * CoreRadius + ShipOnBlobOffset);
             // A dock to try delivering, but no next scene: the sandbox never completes.
             ShipDock dock = Dock("Test Dock", level, new Vector3(14f, 0f, -13f), palette, ship);

@@ -115,6 +115,11 @@ namespace BounJam
         public Vector3 GroundNormal { get; private set; } = Vector3.up;
         public Vector3 Velocity => body.linearVelocity;
         public MoveSettings ActiveSettings => isSolid ? (IsSwimming ? swim : solid) : liquid;
+        /// <summary>
+        /// While true, something else steers the body (a magnet carrying the blob): the motor doesn't move, brake
+        /// or jump, and the blob counts as airborne.
+        /// </summary>
+        public bool IsDriven { get; set; }
         /// <summary>Raised on the physics step the blob takes off, with the upward speed the jump added, m/s.</summary>
         public event Action<float> Jumped;
 
@@ -170,6 +175,19 @@ namespace BounJam
 
         void FixedUpdate()
         {
+            if (IsDriven)
+            {
+                // No coyote-time jump once let go in mid-air either: that waits for the next landing.
+                ClearGround();
+                stepsSinceGrounded++;
+                hasJumped = true;
+                jumpRequestTime = float.NegativeInfinity;
+                stepContact = false;
+                solidGroundContact = false;
+                solidCrateContact = false;
+                return;
+            }
+
             if (isSolid)
             {
                 MoveSolid();

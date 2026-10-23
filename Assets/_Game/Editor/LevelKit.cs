@@ -505,6 +505,7 @@ namespace BounJam.EditorTools
             formSettings.FindProperty("skinRenderer").objectReferenceValue = skin.GetComponent<MeshRenderer>();
             formSettings.ApplyModifiedPropertiesWithoutUndo();
             AddBlobWater(root);
+            MagnetKit.AddBlobParts(root);
             AddGroundGuard(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);

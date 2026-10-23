@@ -18,6 +18,8 @@ GameObject:
   - component: {fileID: 5158639386208523797}
   - component: {fileID: 4668114821618807158}
   - component: {fileID: 7523813637989892083}
+  - component: {fileID: 84139967821418514}
+  - component: {fileID: 3615704392870151330}
   m_Layer: 7
   m_Name: Blob
   m_TagString: Untagged
@@ -266,6 +268,37 @@ MonoBehaviour:
   verticalDamping: 5
   angularDrag: 4
   swimSubmersion: 0.1
+--- !u!114 &84139967821418514
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cf50c976d9a80b35391e9f587a076245, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobCargo
+  checkRadius: 1.5
+  sinkGap: 0.03
+  spread: 0.17
+  settleTime: 0.15
+  sway: 0.006
+  maxSway: 0.08
+--- !u!114 &3615704392870151330
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3c2213d7a0b124098e3c9e45bcd8592, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobMagnetism
+  spinDamping: 15
 --- !u!1 &1213435513202305914
 GameObject:
   m_ObjectHideFlags: 0

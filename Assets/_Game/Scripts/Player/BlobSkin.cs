@@ -224,6 +224,10 @@ namespace BounJam
             if (!initialised) return false;
             float reach = radius * 3f;
             if ((point - body.position).sqrMagnitude > reach * reach) return false;
+            // The rest shape has a skin point straight above the core, shared by six triangles; a ray through it would
+            // count six crossings. Nudged a fraction of a millimetre, the ray can't line up with points like that.
+            point.x += 1.3e-4f;
+            point.z += 0.7e-4f;
 
             int crossings = 0;
             for (int f = 0; f < triangles.Length; f += 3)
