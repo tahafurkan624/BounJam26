@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 31693631431984764}
   - component: {fileID: 869615503459930808}
   - component: {fileID: 7878003550436116097}
+  - component: {fileID: 1438651386763661507}
   m_Layer: 9
   m_Name: PaperShip
   m_TagString: Untagged
@@ -126,6 +127,7 @@ MonoBehaviour:
   - {x: 0, y: 0.06, z: 0.28}
   - {x: 0, y: 0.06, z: -0.28}
   centerOfMass: {x: 0, y: 0.04, z: 0}
+  maxDepenetrationSpeed: 1.5
   buoyancy: 350
   maxDepth: 0.25
   verticalDamping: 15
@@ -137,6 +139,23 @@ MonoBehaviour:
   adhesionDistance: 0.15
   adhesionPull: 40
   adhesionDrag: 0.6
+--- !u!114 &1438651386763661507
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 344895281899961177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be82a7ebee006224893d84a98c643cc0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.GroundGuard
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 65
+  tolerance: 0.15
+  memory: 1
 --- !u!1 &6899353863910381285
 GameObject:
   m_ObjectHideFlags: 0

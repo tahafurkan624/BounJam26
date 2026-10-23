@@ -16,6 +16,7 @@ GameObject:
   - component: {fileID: 6149260719953501708}
   - component: {fileID: 2383094784220977415}
   - component: {fileID: 5158639386208523797}
+  - component: {fileID: 4668114821618807158}
   m_Layer: 7
   m_Name: Blob
   m_TagString: Untagged
@@ -120,7 +121,7 @@ MonoBehaviour:
   solid:
     maxSpeed: 2.2
     acceleration: 15
-    braking: 0
+    braking: 6
   airControl: 0.3
   groundMask:
     serializedVersion: 2
@@ -206,11 +207,33 @@ MonoBehaviour:
   solidCollider: {fileID: 2383094784220977415}
   skinRenderer: {fileID: 6615839950219197294}
   solidMass: 5
+  momentumKept: 0.25
   solidAngularDamping: 2
   cooldown: 0.25
   hardenTime: 0.12
   meltTime: 0.3
   freezePop: 0.06
+  overlapMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  maxDepenetrationSpeed: 3
+--- !u!114 &4668114821618807158
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be82a7ebee006224893d84a98c643cc0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.GroundGuard
+  groundMask:
+    serializedVersion: 2
+    m_Bits: 65
+  tolerance: 0.15
+  memory: 1
 --- !u!1 &1213435513202305914
 GameObject:
   m_ObjectHideFlags: 0

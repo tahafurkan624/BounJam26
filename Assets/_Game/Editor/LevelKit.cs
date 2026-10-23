@@ -446,6 +446,7 @@ namespace BounJam.EditorTools
             formSettings.FindProperty("solidCollider").objectReferenceValue = solidCollider;
             formSettings.FindProperty("skinRenderer").objectReferenceValue = skin.GetComponent<MeshRenderer>();
             formSettings.ApplyModifiedPropertiesWithoutUndo();
+            AddGroundGuard(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
             Object.DestroyImmediate(root);
@@ -490,10 +491,20 @@ namespace BounJam.EditorTools
             sail.size = new Vector3(0.05f, sailHeight, bounds.size.z * 0.35f);
 
             root.AddComponent<ShipBuoyancy>();
+            AddGroundGuard(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, ShipPrefabPath);
             Object.DestroyImmediate(root);
             return prefab;
+        }
+
+        /// <summary>Never let this body end up inside or under the floor it stands on (static level and moving platforms).</summary>
+        static void AddGroundGuard(GameObject root)
+        {
+            var guard = root.AddComponent<GroundGuard>();
+            var settings = new SerializedObject(guard);
+            settings.FindProperty("groundMask").intValue = LayerMask.GetMask("Default", "Environment");
+            settings.ApplyModifiedPropertiesWithoutUndo();
         }
 
         static Mesh BuildRestPreviewMesh()

@@ -26,9 +26,9 @@ namespace BounJam
         [Tooltip("Movement is relative to this camera's facing. Defaults to the main camera.")]
         [SerializeField] Transform cameraTransform;
         [SerializeField] MoveSettings liquid = new MoveSettings { maxSpeed = 7f, acceleration = 35f, braking = 25f };
-        [Tooltip("Solid form: pushes itself along the input direction with this much force and no active braking; " +
-                 "friction stops it, and its frozen shape decides whether it rolls or slides.")]
-        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 2.2f, acceleration = 15f, braking = 0f };
+        [Tooltip("Solid form: pushes itself along the input direction (its frozen shape decides whether it rolls or " +
+                 "slides) and brakes, spin included, when there's no input.")]
+        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 2.2f, acceleration = 15f, braking = 6f };
         [Tooltip("Fraction of acceleration and braking available while airborne.")]
         [Range(0f, 1f)]
         [SerializeField] float airControl = 0.3f;
@@ -148,7 +148,8 @@ namespace BounJam
 
         /// <summary>
         /// Solid form: a heavy push along the input direction at the centre of mass, only while resting on something
-        /// and below top speed. No braking and no ground helpers; the frozen shape rolls, tips or slides on its own.
+        /// and below top speed; the frozen shape rolls, tips or slides on its own while pushed. Without input it
+        /// brakes, so it doesn't roll or slide on (and off edges) by itself. No liquid ground helpers.
         /// </summary>
         void MoveSolid()
         {
@@ -159,7 +160,11 @@ namespace BounJam
             solidCrateContact = false;
 
             Vector3 wish = WishDirection();
-            if (wish.sqrMagnitude < 0.0001f) return;
+            if (wish.sqrMagnitude < 0.0001f)
+            {
+                if (IsGrounded) BrakeSolid();
+                return;
+            }
             // A resting solid falls asleep and stops reporting contacts; wake it so the next step sees the ground.
             if (body.IsSleeping()) body.WakeUp();
             // Leaning on a crate counts as footing too: a round crystal shoving a crate can lift off the floor a little.
@@ -169,6 +174,17 @@ namespace BounJam
             float speedAlongWish = Vector3.Dot(planar, wish.normalized);
             if (speedAlongWish < solid.maxSpeed * wish.magnitude)
                 body.AddForce(wish * solid.acceleration, ForceMode.Acceleration);
+        }
+
+        void BrakeSolid()
+        {
+            float dt = Time.fixedDeltaTime;
+            Vector3 planar = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
+            Vector3 slowed = Vector3.MoveTowards(planar, Vector3.zero, solid.braking * dt);
+            body.AddForce(slowed - planar, ForceMode.VelocityChange);
+            // A rolling shape would spin itself back up to speed through friction, so slow the spin as well
+            // (spin rate ~ speed / radius, with a radius of about half a metre).
+            body.angularVelocity = Vector3.MoveTowards(body.angularVelocity, Vector3.zero, solid.braking * 2f * dt);
         }
 
         void OnCollisionStay(Collision collision)

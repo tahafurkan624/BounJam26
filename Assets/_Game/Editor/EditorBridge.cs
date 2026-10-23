@@ -267,6 +267,8 @@ namespace BounJam.EditorTools
             }
             if (target.TryGetComponent(out BlobMotor motor))
                 result += $" grounded={motor.IsGrounded} sleeping={motor.Body.IsSleeping()}";
+            if (target.TryGetComponent(out GroundGuard guard))
+                result += $" rescues={guard.Rescues}";
             if (target.TryGetComponent(out BlobSkin skin))
                 result += string.Format(CultureInfo.InvariantCulture, " flatten={0:0.00} volume={1:0.00}", skin.Flatten, skin.VolumeRatio);
             // Overlay UI isn't in camera screenshots, so report what each HUD text says and how visible it is.

@@ -23,6 +23,10 @@ namespace BounJam
 
         [Header("Solid Body")]
         [SerializeField] float solidMass = 5f;
+        [Tooltip("Share of the liquid's speed the crystal keeps when it hardens. Low = it sets where it is instead of " +
+                 "sliding or rolling on (and off edges).")]
+        [Range(0f, 1f)]
+        [SerializeField] float momentumKept = 0.25f;
         [Tooltip("Rotation damping when solid: odd frozen shapes tip over slowly instead of spinning wildly.")]
         [SerializeField] float solidAngularDamping = 2f;
 
@@ -140,6 +144,8 @@ namespace BounJam
             body.constraints = RigidbodyConstraints.None;
             body.ResetCenterOfMass();
             body.ResetInertiaTensor();
+            body.linearVelocity *= momentumKept;
+            body.angularVelocity = Vector3.zero;
             motor.SetSolid(true);
 
             IsSolid = true;
