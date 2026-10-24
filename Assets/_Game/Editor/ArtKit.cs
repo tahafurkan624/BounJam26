@@ -33,6 +33,8 @@ namespace BounJam.EditorTools
         const string CheckerShaderName = "BounJam/Platform Checker";
 
         const float PlatformSize = 2f;
+        /// <summary>A floor grate panel's side, m: as wide as a platform block.</summary>
+        public const float FloorGrateSize = 2f;
         // The modelled button is 0.3 m tall; squashed and sunk a little, it's low enough to slide crates onto.
         const float ButtonSquash = 0.4f;
         const float ButtonSink = 0.035f;
@@ -45,7 +47,7 @@ namespace BounJam.EditorTools
         struct Materials
         {
             public Material EyeBlack, EyeShine, PushBlock, PushBlockPanel, ButtonBase, ButtonLightOff, ButtonLightOn;
-            public Material PlatformTop, PlatformSide, GrateFrame, GrateBars, GrateBase;
+            public Material PlatformTop, PlatformSide, GrateFrame, GrateBars, GrateBase, DrainInside;
             public Material WallBody, WallBrick, WallCap, WallPlinth, GatePanel, GateStripe, GateRoller, GateLamp;
         }
 
@@ -64,6 +66,7 @@ namespace BounJam.EditorTools
             GrateFrame = Lit("Grate_Frame", new Color(0.8f, 0.8f, 0.8f), 0.62f),
             GrateBars = Lit("Grate_Bars", new Color(0.485f, 0.527f, 0.578f), 0.7f, metallic: 0.9f),
             GrateBase = Lit("Grate_Base", new Color(0.102f, 0.114f, 0.133f), 0.55f, metallic: 0.6f),
+            DrainInside = Lit("Drain_Inside", new Color(0.004f, 0.005f, 0.007f), 0.15f),
             WallBody = Lit("Wall_Body", new Color(0.55f, 0.62f, 0.95f), 0.55f),
             WallBrick = Lit("Wall_Brick", new Color(0.72f, 0.78f, 1.0f), 0.6f),
             WallCap = Lit("Wall_Cap", new Color(1.0f, 0.8f, 0.3f), 0.65f),
@@ -293,6 +296,48 @@ namespace BounJam.EditorTools
                 AddBox(solid, new Vector3(plate.min.x, plate.max.y, frame.min.z), new Vector3(plate.max.x, frame.max.y, frame.max.z));
             }
             return root;
+        }
+
+        /// <summary>
+        /// One floor grate panel, <see cref="FloorGrateSize"/> square, lying flat with its top at the origin of
+        /// <paramref name="parent"/>: slats in a frame, resting on crossbars, in the wall grate's colours. Only seen; the
+        /// floor grate it's part of holds the collider.
+        /// </summary>
+        public static GameObject FloorGratePanel(string name, Transform parent)
+        {
+            const float frame = 0.1f, frameHeight = 0.06f, slat = 0.035f, slatHeight = 0.045f, slatSink = 0.008f, crossbar = 0.05f;
+            const int slats = 14, crossbars = 3;
+            Materials m = CreateMaterials();
+            var root = new GameObject(name) { layer = LayerMask.NameToLayer("LiquidPassable") };
+            root.transform.SetParent(parent, false);
+            Mesh cube = Resources.GetBuiltinResource<Mesh>("Cube.fbx");
+
+            float half = FloorGrateSize * 0.5f, inner = FloorGrateSize - 2f * frame;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Bar("Frame", root.transform, cube, new Vector3(side * (half - frame * 0.5f), -frameHeight * 0.5f, 0f),
+                    new Vector3(frame, frameHeight, FloorGrateSize), m.GrateFrame);
+                Bar("Frame", root.transform, cube, new Vector3(0f, -frameHeight * 0.5f, side * (half - frame * 0.5f)),
+                    new Vector3(inner, frameHeight, frame), m.GrateFrame);
+            }
+            // Slats along Z, a little below the frame; the crossbars they rest on run along X under them.
+            for (int i = 0; i < slats; i++)
+                Bar("Slat", root.transform, cube, new Vector3((i + 0.5f) * inner / slats - inner * 0.5f, -slatSink - slatHeight * 0.5f, 0f),
+                    new Vector3(slat, slatHeight, inner), m.GrateBars);
+            for (int i = 0; i < crossbars; i++)
+                Bar("Crossbar", root.transform, cube, new Vector3(0f, -slatSink - slatHeight - crossbar * 0.5f, (i + 0.5f) * inner / crossbars - inner * 0.5f),
+                    new Vector3(inner, crossbar, crossbar), m.GrateBase);
+            return root;
+        }
+
+        /// <summary>The near-black lining of a drain under a floor grate, so it reads as a hole.</summary>
+        public static Material DrainMaterial() => CreateMaterials().DrainInside;
+
+        static void Bar(string name, Transform parent, Mesh cube, Vector3 center, Vector3 size, Material material)
+        {
+            GameObject bar = Model(name, parent, cube, material);
+            bar.transform.localPosition = center;
+            bar.transform.localScale = size;
         }
 
         /// <summary>SM_Wall's length and height (SM_HalfWall's if <paramref name="low"/>), and the thickness of its brick faces.</summary>

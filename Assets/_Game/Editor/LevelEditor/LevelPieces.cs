@@ -40,6 +40,7 @@ namespace BounJam.EditorTools
             Kind.Water => new Vector3(4f, 1f, 4f),
             Kind.Pool => new Vector3(8f, 1.6f, 8f),
             Kind.Grate => new Vector3(2f, 1.5f, 0.3f),
+            Kind.FloorGrate => new Vector3(8f, 1.6f, 8f),
             _ => Vector3.one,
         };
 
@@ -52,8 +53,8 @@ namespace BounJam.EditorTools
             _ => PrimitiveBoundsHandle.Axes.All,
         };
 
-        /// <summary>Platforms, pools and water have their top at the pivot (level with the floor); the rest stand on the floor at it.</summary>
-        public static bool PivotOnTop(Kind kind) => kind == Kind.Platform || kind == Kind.Pool || kind == Kind.Water;
+        /// <summary>Platforms, pools, floor grates and water have their top at the pivot (level with the floor); the rest stand on the floor at it.</summary>
+        public static bool PivotOnTop(Kind kind) => kind == Kind.Platform || kind == Kind.Pool || kind == Kind.FloorGrate || kind == Kind.Water;
 
         /// <summary>The space the piece takes up, in its own space.</summary>
         public static Bounds LocalBounds(LevelPiece piece)
@@ -80,7 +81,8 @@ namespace BounJam.EditorTools
         // ---------------------------------------------------------------- Creating and building
 
         /// <summary>A new piece of <paramref name="kind"/> under <paramref name="parent"/>, built and recorded for undo.</summary>
-        public static LevelPiece Create(Kind kind, string name, Transform parent, Vector3 position, Quaternion rotation, Vector3 size)
+        public static LevelPiece Create(Kind kind, string name, Transform parent, Vector3 position, Quaternion rotation, Vector3 size,
+                                        LevelPiece.FloorType floor = LevelPiece.FloorType.Concrete)
         {
             var go = new GameObject(GameObjectUtility.GetUniqueNameForSibling(parent, name));
             go.transform.SetParent(parent, false);
@@ -88,7 +90,8 @@ namespace BounJam.EditorTools
             var piece = go.AddComponent<LevelPiece>();
             piece.PieceKind = kind;
             piece.Size = size;
-            if (kind == Kind.Pool)
+            piece.Floor = floor;
+            if (kind == Kind.Pool || kind == Kind.FloorGrate)
             {
                 // A hole with a 1.5 m wide walk all round it, at least 1 m across.
                 piece.PoolSize = new Vector2(Mathf.Max(1f, size.x - 3f), Mathf.Max(1f, size.z - 3f));
@@ -137,10 +140,10 @@ namespace BounJam.EditorTools
             switch (piece.PieceKind)
             {
                 case Kind.Platform:
-                    LevelParts.Platform("Platform", space, new Vector3(0f, -size.y * 0.5f, 0f), size);
+                    LevelParts.Platform("Platform", space, new Vector3(0f, -size.y * 0.5f, 0f), size, piece.Floor);
                     break;
                 case Kind.Wall:
-                    LevelParts.Wall(space, size);
+                    LevelParts.Wall(space, size, piece.Floor);
                     break;
                 case Kind.Ramp:
                     LevelParts.Ramp(space, size);
@@ -153,14 +156,16 @@ namespace BounJam.EditorTools
                     break;
                 case Kind.Pool:
                 {
-                    // The hole stays inside the floor, and the water inside the hole.
-                    var hole = Vector2.Min(piece.PoolSize, new Vector2(size.x, size.z));
-                    Vector2 room = (new Vector2(size.x, size.z) - hole) * 0.5f;
-                    var offset = new Vector2(Mathf.Clamp(piece.PoolOffset.x, -room.x, room.x), Mathf.Clamp(piece.PoolOffset.y, -room.y, room.y));
-                    var floor = new Rect(-size.x * 0.5f, -size.z * 0.5f, size.x, size.z);
-                    var pool = new Rect(offset - hole * 0.5f, hole);
+                    Rect floor = Footprint(piece, out Rect pool);
+                    // The water stays inside the hole.
                     float waterBelow = Mathf.Min(piece.WaterBelowTop, size.y - 0.1f);
-                    LevelParts.Pool(space, floor, pool, size.y, waterBelow);
+                    LevelParts.Pool(space, floor, pool, size.y, waterBelow, piece.Floor);
+                    break;
+                }
+                case Kind.FloorGrate:
+                {
+                    Rect floor = Footprint(piece, out Rect hole);
+                    LevelParts.FloorGrate(space, floor, hole, size.y, piece.Floor);
                     break;
                 }
                 case Kind.Grate:
@@ -172,9 +177,24 @@ namespace BounJam.EditorTools
             }
         }
 
+        /// <summary>
+        /// A pool's or floor grate's floor, centred on the pivot, and the hole sunk into it, kept inside the floor.
+        /// </summary>
+        static Rect Footprint(LevelPiece piece, out Rect hole)
+        {
+            Vector3 size = piece.Size;
+            var holeSize = Vector2.Min(piece.PoolSize, new Vector2(size.x, size.z));
+            Vector2 room = (new Vector2(size.x, size.z) - holeSize) * 0.5f;
+            var offset = new Vector2(Mathf.Clamp(piece.PoolOffset.x, -room.x, room.x), Mathf.Clamp(piece.PoolOffset.y, -room.y, room.y));
+            hole = new Rect(offset - holeSize * 0.5f, holeSize);
+            return new Rect(-size.x * 0.5f, -size.z * 0.5f, size.x, size.z);
+        }
+
+        // A concrete floor stays out of it, so pieces built before floors had a type aren't rebuilt for it.
         static string Signature(LevelPiece p)
             => string.Join("|", p.PieceKind.ToString(), Format(p.Size), Format(p.PoolSize), Format(p.PoolOffset),
-                           Format(p.WaterBelowTop), Format(p.BladeDistance), Format(p.FirstExit), Format(p.SecondExit));
+                           Format(p.WaterBelowTop), Format(p.BladeDistance), Format(p.FirstExit), Format(p.SecondExit))
+               + (p.Floor == LevelPiece.FloorType.Concrete ? "" : $"|{p.Floor}");
 
         static string Format(float f) => f.ToString("R", CultureInfo.InvariantCulture);
         static string Format(Vector2 v) => $"{Format(v.x)},{Format(v.y)}";

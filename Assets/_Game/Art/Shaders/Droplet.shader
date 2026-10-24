@@ -72,6 +72,8 @@ Shader "BounJam/Droplet"
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            // Forward+ leaves the per-object light data at zero; without this keyword the sun never reaches the drop.
+            #pragma multi_compile _ _CLUSTER_LIGHT_LOOP
             #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
@@ -296,7 +298,9 @@ Shader "BounJam/Droplet"
                 color = lerp(color, rimShade, _EdgeDarkness * smoothstep(0.3h, 1.0h, edge));
 
                 half fresnel = pow(edge, _RimPower);
-                half3 reflection = GlossyEnvironmentReflection(reflect(-viewDir, normalWS), input.positionWS, 0.05h, 1.0h);
+                // The screen-uv overload is the one that exists with and without Forward+.
+                half3 reflection = GlossyEnvironmentReflection(reflect(-viewDir, normalWS), input.positionWS, 0.05h, 1.0h,
+                    GetNormalizedScreenSpaceUV(input.positionCS));
                 color += reflection * fresnel * _Reflection + _RimColor.rgb * fresnel * _RimStrength;
 
                 // Sharp close up; on a drop a few pixels wide it widens so the glint still covers about a pixel. At

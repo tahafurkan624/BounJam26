@@ -27,7 +27,7 @@ Material:
     m_Floats:
     - _CellSize: 0.5
     m_Colors:
-    - _ColorA: {r: 0.98669523, g: 0.9776915, b: 0.95468706, a: 1}
-    - _ColorB: {r: 0.98669523, g: 0.9776915, b: 0.95468706, a: 1}
+    - _ColorA: {r: 0.922, g: 0.867, b: 0.729, a: 1}
+    - _ColorB: {r: 0.922, g: 0.867, b: 0.729, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

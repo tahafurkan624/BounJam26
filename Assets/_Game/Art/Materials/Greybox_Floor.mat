@@ -28,7 +28,7 @@ Material:
     - _CellSize: 1
     - _LineWidth: 0.04
     m_Colors:
-    - _BaseColor: {r: 0.62, g: 0.63, b: 0.66, a: 1}
-    - _LineColor: {r: 0.5, g: 0.51, b: 0.54, a: 1}
+    - _BaseColor: {r: 0.969, g: 0.953, b: 0.91, a: 1}
+    - _LineColor: {r: 0.89, g: 0.863, b: 0.784, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

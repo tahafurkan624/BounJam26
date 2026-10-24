@@ -132,6 +132,8 @@ namespace BounJam
         Vector3 shorePoint;
         IReadOnlyList<Collider> solidShapes;
         int pushableLayer;
+        // The ground mask without grates: the liquid flows through them, so it never stands on one.
+        LayerMask liquidGroundMask;
 
         public Rigidbody Body => body;
         public bool IsGrounded { get; private set; }
@@ -203,6 +205,7 @@ namespace BounJam
             if (input == null) input = GetComponent<PlayerInputReader>();
             if (cameraTransform == null && Camera.main != null) cameraTransform = Camera.main.transform;
             pushableLayer = LayerMask.NameToLayer("Pushable");
+            liquidGroundMask = groundMask & ~LayerMask.GetMask("LiquidPassable");
         }
 
         void OnEnable()
@@ -493,7 +496,7 @@ namespace BounJam
             Vector3 into = -Vector3.ProjectOnPlane(contact.normal, Vector3.up).normalized;
             Vector3 origin = contact.point + into * StepTopInset;
             origin.y = bottom + maxStepHeight + ContactGap;
-            return Physics.Raycast(origin, Vector3.down, out RaycastHit top, maxStepHeight + ContactGap, groundMask,
+            return Physics.Raycast(origin, Vector3.down, out RaycastHit top, maxStepHeight + ContactGap, liquidGroundMask,
                                    QueryTriggerInteraction.Ignore)
                    && top.point.y >= contact.point.y - ContactGap
                    && Vector3.Angle(top.normal, Vector3.up) <= maxGroundAngle;
@@ -506,7 +509,7 @@ namespace BounJam
             Vector3 origin = transform.TransformPoint(core.center);
             float distance = radius - castRadius + groundProbeDistance;
 
-            IsGrounded = Physics.SphereCast(origin, castRadius, Vector3.down, out RaycastHit hit, distance, groundMask, QueryTriggerInteraction.Ignore)
+            IsGrounded = Physics.SphereCast(origin, castRadius, Vector3.down, out RaycastHit hit, distance, liquidGroundMask, QueryTriggerInteraction.Ignore)
                          && Vector3.Angle(hit.normal, Vector3.up) <= maxGroundAngle;
             GroundNormal = IsGrounded ? hit.normal : Vector3.up;
             groundGap = IsGrounded ? hit.distance - (radius - castRadius) : float.PositiveInfinity;
@@ -528,7 +531,9 @@ namespace BounJam
             Vector3 center = transform.TransformPoint(core.center);
             float bottom = center.y - CoreRadius;
             // Ground just under the core is a landing, not a gap.
-            if (Physics.Raycast(center, Vector3.down, CoreRadius + bridgeDrop, groundMask, QueryTriggerInteraction.Ignore)) return;
+            if (Physics.Raycast(center, Vector3.down, CoreRadius + bridgeDrop, liquidGroundMask, QueryTriggerInteraction.Ignore)) return;
+            // Over a drain the jelly drips through the grate instead of spanning it.
+            if (FloorGrate.IsOver(center, CoreRadius + maxStepHeight)) return;
             bool behind = FindGround(center, -forward, skin.ReachBehind - bridgeGrip, bottom, out float behindDistance, out float behindHeight);
             float reach = skin.ReachAhead - bridgeGrip;
             if (behind) reach = Mathf.Max(reach, skin.ReachAhead + skin.ReachBehind - 2f * bridgeGrip - behindDistance);
@@ -556,7 +561,7 @@ namespace BounJam
             {
                 Vector3 origin = center + direction * distance;
                 origin.y = bottom + maxStepHeight;
-                if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, maxStepHeight + bridgeDrop, groundMask,
+                if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, maxStepHeight + bridgeDrop, liquidGroundMask,
                                     QueryTriggerInteraction.Ignore)
                     && hit.normal.y >= minNormalY)
                 {
@@ -594,7 +599,7 @@ namespace BounJam
 
             float castRadius = CoreRadius * 0.9f;
             Vector3 origin = transform.TransformPoint(core.center);
-            if (!Physics.SphereCast(origin, castRadius, Vector3.down, out RaycastHit hit, snapDistance, groundMask, QueryTriggerInteraction.Ignore)
+            if (!Physics.SphereCast(origin, castRadius, Vector3.down, out RaycastHit hit, snapDistance, liquidGroundMask, QueryTriggerInteraction.Ignore)
                 || Vector3.Angle(hit.normal, Vector3.up) > maxGroundAngle)
                 return;
 

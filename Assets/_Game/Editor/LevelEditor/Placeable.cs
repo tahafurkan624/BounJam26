@@ -36,6 +36,8 @@ namespace BounJam.EditorTools
         public Kind? Piece;
         /// <summary>A shaped piece's size when it's clicked down rather than drawn.</summary>
         public Vector3 Size;
+        /// <summary>What a shaped piece's floor is made of, for the kinds that have one.</summary>
+        public LevelPiece.FloorType Floor;
         /// <summary>A fixed piece's prefab, made the first time it's needed.</summary>
         public System.Func<GameObject> Prefab;
         /// <summary>How far above the floor point the prefab's root goes, on top of where the prefab keeps it.</summary>
@@ -54,6 +56,9 @@ namespace BounJam.EditorTools
         {
             Shaped(Kind.Platform, "Platform", "Ground", "Ground", true,
                    "Floor to walk on, its top on the build height. Drag to draw one."),
+            Shaped(Kind.Platform, "Tropical Floor", "Ground", "Ground", true,
+                   "Floor of tropical log blocks to walk on, its top on the build height. Drag to draw one.",
+                   floor: LevelPiece.FloorType.Tropical),
             Shaped(Kind.Ramp, "Ramp", "Ground", "Ground", false,
                    "Rises toward the arrow. Drag to draw its footprint; set its rise in the Inspector.", directional: true),
             Shaped(Kind.Wall, "Wall", "Ground", "Ground", false, "A 4 m long, 1.5 m tall wall. Drag along a line to draw one."),
@@ -61,6 +66,9 @@ namespace BounJam.EditorTools
                    size: new Vector3(2f, 1.5f, 0.5f)),
             Shaped(Kind.Wall, "Low Wall", "Ground", "Ground", false, "A 4 m long wall only 0.7 m tall. Drag along a line to draw one.",
                    size: new Vector3(4f, 0.7f, 0.5f)),
+            Shaped(Kind.Wall, "Wood Wall", "Ground", "Ground", false,
+                   "A 4 m long, 1.5 m tall wall of tropical logs, to go with the tropical floor. Drag along a line to draw one.",
+                   floor: LevelPiece.FloorType.Tropical),
             new Placeable
             {
                 Name = "Tile", Category = "Ground", Group = "Ground", How = Placement.Click,
@@ -74,6 +82,9 @@ namespace BounJam.EditorTools
             Shaped(Kind.Water, "Water", "Water & Hazards", "Water", true, "A block of water whose surface is on the build height, level with the floor."),
             Shaped(Kind.HotPlate, "Hot Plate", "Water & Hazards", "Hazards", false,
                    "Burns the ship if it's dropped on it; the blob crosses safely."),
+            Shaped(Kind.FloorGrate, "Floor Grate", "Water & Hazards", "Hazards", true,
+                   "A floor with a grated drain in it: the liquid drips through and is lost; ice, the ship and crates cross. " +
+                   "Drag to draw the floor."),
 
             Fixed("Button", "Machines", "Machines", "Pressed by the frozen blob, a crate or the ship. Link it to gates, lifts and magnets.",
                   "Button", t => Button("Button", t, Vector3.zero, CreatePalette()), ButtonBounds),
@@ -141,13 +152,14 @@ namespace BounJam.EditorTools
                                  t => GardenKit.Tile($"Tile {look}", t, look, new Vector3(0f, GardenKit.TileDepth, 0f)));
 
         static Placeable Shaped(Kind kind, string name, string category, string group, bool onBuildPlane, string tooltip,
-                                bool directional = false, Placement how = Placement.Draw, Vector3? size = null)
+                                bool directional = false, Placement how = Placement.Draw, Vector3? size = null,
+                                LevelPiece.FloorType floor = LevelPiece.FloorType.Concrete)
         {
             Vector3 clicked = size ?? LevelPieces.DefaultSize(kind);
             return new Placeable
             {
                 Name = name, Category = category, Group = group, Tooltip = tooltip, How = how, OnBuildPlane = onBuildPlane,
-                Directional = directional, Piece = kind, Size = clicked, Footprint = LevelPieces.LocalBounds(kind, clicked),
+                Directional = directional, Piece = kind, Size = clicked, Floor = floor, Footprint = LevelPieces.LocalBounds(kind, clicked),
             };
         }
 

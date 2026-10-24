@@ -15,13 +15,14 @@ namespace BounJam.EditorTools
     {
         static readonly Color HandleColor = new Color(1f, 0.78f, 0.2f);
 
-        SerializedProperty kind, size, poolSize, poolOffset, waterBelowTop, bladeDistance, firstExit, secondExit;
+        SerializedProperty kind, size, floor, poolSize, poolOffset, waterBelowTop, bladeDistance, firstExit, secondExit;
         readonly BoxBoundsHandle box = new BoxBoundsHandle { handleColor = HandleColor, wireframeColor = HandleColor };
 
         void OnEnable()
         {
             kind = serializedObject.FindProperty("kind");
             size = serializedObject.FindProperty("size");
+            floor = serializedObject.FindProperty("floor");
             poolSize = serializedObject.FindProperty("poolSize");
             poolOffset = serializedObject.FindProperty("poolOffset");
             waterBelowTop = serializedObject.FindProperty("waterBelowTop");
@@ -44,9 +45,11 @@ namespace BounJam.EditorTools
                 {
                     case Kind.Platform:
                         SizeFields("Width", "Thickness", "Length");
+                        EditorGUILayout.PropertyField(floor);
                         break;
                     case Kind.Wall:
                         SizeFields("Width", "Height", "Thickness");
+                        EditorGUILayout.PropertyField(floor, new GUIContent("Made Of", "Concrete brick, or tropical wood logs."));
                         break;
                     case Kind.Ramp:
                         SizeFields("Width", "Rise", "Run");
@@ -64,12 +67,19 @@ namespace BounJam.EditorTools
                         break;
                     case Kind.Pool:
                         SizeFields("Width", "Depth", "Length");
+                        EditorGUILayout.PropertyField(floor);
                         EditorGUILayout.PropertyField(poolSize, new GUIContent("Hole Size", poolSize.tooltip));
                         EditorGUILayout.PropertyField(poolOffset, new GUIContent("Hole Offset", poolOffset.tooltip));
                         EditorGUILayout.PropertyField(waterBelowTop, new GUIContent("Water Below Top", waterBelowTop.tooltip));
                         break;
                     case Kind.Grate:
                         SizeFields("Width", "Height", null);
+                        break;
+                    case Kind.FloorGrate:
+                        SizeFields("Width", "Drain Depth", "Length");
+                        EditorGUILayout.PropertyField(floor);
+                        EditorGUILayout.PropertyField(poolSize, new GUIContent("Grate Size", poolSize.tooltip));
+                        EditorGUILayout.PropertyField(poolOffset, new GUIContent("Grate Offset", poolOffset.tooltip));
                         break;
                     case Kind.PiercerPipe:
                         EditorGUILayout.PropertyField(bladeDistance);

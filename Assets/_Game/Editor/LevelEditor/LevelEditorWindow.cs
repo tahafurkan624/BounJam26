@@ -705,7 +705,7 @@ namespace BounJam.EditorTools
             if (armed.Piece is LevelPiece.Kind kind)
             {
                 Drawn(out Vector3 position, out Vector3 size);
-                made = LevelPieces.Create(kind, armed.Name, parent, position, Turn, size).gameObject;
+                made = LevelPieces.Create(kind, armed.Name, parent, position, Turn, size, armed.Floor).gameObject;
             }
             else made = Spawn(armed, parent, dragStart, Turn);
             Selection.activeGameObject = made;
