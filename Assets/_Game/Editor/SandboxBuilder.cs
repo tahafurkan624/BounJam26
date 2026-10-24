@@ -115,7 +115,7 @@ namespace BounJam.EditorTools
             Transform grate = Group("Grate Wall", level);
             Box("Grate Wall Left", grate, new Vector3(5f, 0.75f, -8f), new Vector3(6f, 1.5f, 0.5f), m.Wall);
             Box("Grate Wall Right", grate, new Vector3(15.1f, 0.75f, -8f), new Vector3(5.8f, 1.5f, 0.5f), m.Wall);
-            Box("Grate", grate, new Vector3(10f, 0.75f, -8f), new Vector3(4.4f, 1.5f, 0.15f), m.Grate, "LiquidPassable");
+            ArtKit.Grate("Grate", grate, new Vector3(10f, 0.75f, -8f), new Vector2(4.4f, 1.5f), m.Grate);
 
             // Pushable crates: only the solid form moves them; heavy enough to hold a button down.
             Transform crates = Group("Crates", level);

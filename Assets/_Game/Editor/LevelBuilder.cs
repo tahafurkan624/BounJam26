@@ -95,7 +95,7 @@ namespace BounJam.EditorTools
             Box("Wall Left", level, new Vector3(-2.75f, 0.75f, 8f), new Vector3(2.5f, 1.5f, 0.5f), m.Wall);
             Mover("Gate", level, new Vector3(0f, 0.75f, 8f), new Vector3(3f, 1.5f, 0.5f), m.Door,
                   new[] { button }, new Vector3(0f, -1.55f, 0f), speed: 3f, holdTime: 3f);
-            Box("Grate", level, new Vector3(2.25f, 0.75f, 8f), new Vector3(1.5f, 1.5f, 0.15f), m.Grate, "LiquidPassable");
+            ArtKit.Grate("Grate", level, new Vector3(2.25f, 0.75f, 8f), new Vector2(1.5f, 1.5f), m.Grate);
             Box("Wall Right", level, new Vector3(3.5f, 0.75f, 8f), new Vector3(1f, 1.5f, 0.5f), m.Wall);
 
             var blob = new Vector3(0f, 0f, -1.5f);

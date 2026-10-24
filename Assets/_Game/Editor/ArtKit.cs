@@ -1,13 +1,16 @@
+using System.Linq;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
 
 namespace BounJam.EditorTools
 {
     /// <summary>
     /// The modelled art from ArtSource/Blender (exported to Assets/_Project/Art/Models) and the level kit pieces built
     /// from it: the blob's balloon rest shape and eyes, the tugboat, the magnet and pocket magnet, push blocks,
-    /// pressure buttons and the 2 m platform blocks that cover floors. Materials are made here from the Blender colours
+    /// pressure buttons, grates and the 2 m platform blocks that cover floors. Materials are made here from the Blender colours
     /// or the baked texture sets (the FBX files carry none) and, like the rest of the kit's, only created when missing.
     /// </summary>
     public static class ArtKit
@@ -22,6 +25,7 @@ namespace BounJam.EditorTools
         const string PushBlockPath = ModelsFolder + "/SM_PushBlock.fbx";
         const string ButtonPath = ModelsFolder + "/SM_PressureButton.fbx";
         const string PlatformPath = ModelsFolder + "/SM_Platform_2x2.fbx";
+        const string GratePath = ModelsFolder + "/SM_Grate.fbx";
         const string CheckerShaderName = "BounJam/Platform Checker";
 
         const float PlatformSize = 2f;
@@ -33,7 +37,7 @@ namespace BounJam.EditorTools
         struct Materials
         {
             public Material EyeBlack, EyeShine, PushBlock, PushBlockPanel, ButtonBase, ButtonLightOff, ButtonLightOn;
-            public Material PlatformTop, PlatformSide;
+            public Material PlatformTop, PlatformSide, GrateFrame, GrateBars, GrateBase;
         }
 
         // Colours are Blender's linear values; Material.SetColor takes sRGB, hence .gamma.
@@ -48,6 +52,9 @@ namespace BounJam.EditorTools
             ButtonLightOn = Lit("Button_LightOn", new Color(1.0f, 0.97f, 0.90f), 0.7f, emission: new Color(2.0f, 1.8f, 1.2f)),
             PlatformTop = Checker("Platform_Top", new Color(1.0f, 0.90f, 0.62f), new Color(1.0f, 0.70f, 0.30f)),
             PlatformSide = Checker("Platform_Side", new Color(0.97f, 0.95f, 0.90f), new Color(0.97f, 0.95f, 0.90f)),
+            GrateFrame = Lit("Grate_Frame", new Color(0.8f, 0.8f, 0.8f), 0.62f),
+            GrateBars = Lit("Grate_Bars", new Color(0.485f, 0.527f, 0.578f), 0.7f, metallic: 0.9f),
+            GrateBase = Lit("Grate_Base", new Color(0.102f, 0.114f, 0.133f), 0.55f, metallic: 0.6f),
         };
 
         // ---------------------------------------------------------------- Blob
@@ -219,6 +226,63 @@ namespace BounJam.EditorTools
             return root;
         }
 
+        /// <summary>
+        /// A grate filling the opening centred on <paramref name="center"/>, <paramref name="size"/> wide and tall, across
+        /// Z: SM_Grate panels side by side, about 2 m each, stretched to fit. The posts and top rail are solid like the
+        /// walls. The wire mesh (the model's ship blocker, an invisible plate over it) and the bottom rail are
+        /// LiquidPassable: the liquid flows through and over them, the solid form, the ship and crates don't. Without the
+        /// model it falls back to a greybox in <paramref name="fallback"/>.
+        /// </summary>
+        public static GameObject Grate(string name, Transform parent, Vector3 center, Vector2 size, Material fallback)
+        {
+            Mesh mesh = TryPart(GratePath, "SM_Grate")?.sharedMesh;
+            if (mesh == null)
+                return LevelKit.Box(name, parent, center, new Vector3(size.x, size.y, 0.15f), fallback, "LiquidPassable");
+
+            var root = new GameObject(name) { layer = LayerMask.NameToLayer("LiquidPassable") };
+            root.transform.SetParent(parent, false);
+            root.transform.position = center;
+
+            // Submeshes deepest first: the feet, the frame, the wire mesh. The FBX importer orders submeshes by which
+            // material it meets first, not by Blender's slots.
+            int[] parts = Enumerable.Range(0, mesh.subMeshCount)
+                                    .OrderByDescending(s => mesh.GetSubMesh(s).bounds.size.z).ToArray();
+            Materials m = CreateMaterials();
+            Material[] deepestFirst = { m.GrateBase, m.GrateFrame, m.GrateBars };
+            var materials = new Material[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+                materials[parts[i]] = deepestFirst[Mathf.Min(i, deepestFirst.Length - 1)];
+            Bounds frame = mesh.GetSubMesh(parts[Mathf.Min(1, parts.Length - 1)]).bounds;
+            Bounds plate = Part(GratePath, "SM_Grate_ShipBlocker").sharedMesh.bounds;
+
+            Bounds bounds = mesh.bounds;
+            int count = Mathf.Max(1, Mathf.RoundToInt(size.x / bounds.size.x));
+            var scale = new Vector3(size.x / count / bounds.size.x, size.y / bounds.size.y, 1f);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject panel = Model($"Panel {i}", root.transform, mesh, materials);
+                panel.transform.localPosition = new Vector3((i + 0.5f) * size.x / count - size.x * 0.5f, 0f, 0f)
+                                                - Vector3.Scale(bounds.center, scale);
+                panel.transform.localScale = scale;
+                AddBox(panel, plate.min, plate.max);
+                AddBox(panel, frame.min, new Vector3(frame.max.x, plate.min.y, frame.max.z));
+
+                var solid = new GameObject("Frame") { layer = LayerMask.NameToLayer("Environment") };
+                solid.transform.SetParent(panel.transform, false);
+                AddBox(solid, new Vector3(frame.min.x, plate.min.y, frame.min.z), new Vector3(plate.min.x, frame.max.y, frame.max.z));
+                AddBox(solid, new Vector3(plate.max.x, plate.min.y, frame.min.z), frame.max);
+                AddBox(solid, new Vector3(plate.min.x, plate.max.y, frame.min.z), new Vector3(plate.max.x, frame.max.y, frame.max.z));
+            }
+            return root;
+        }
+
+        static void AddBox(GameObject go, Vector3 min, Vector3 max)
+        {
+            var collider = go.AddComponent<BoxCollider>();
+            collider.center = (min + max) * 0.5f;
+            collider.size = max - min;
+        }
+
         // ---------------------------------------------------------------- Applying to saved assets
 
         /// <summary>
@@ -240,6 +304,43 @@ namespace BounJam.EditorTools
             LevelKit.RebuildShipPrefab();
             AssetDatabase.SaveAssets();
             Debug.Log("[BounJam] Art models applied to the Blob and PaperShip prefabs.");
+        }
+
+        /// <summary>
+        /// Swaps the greybox grates in the open scene (LiquidPassable cubes named "Grate") for the modelled grate, in
+        /// the same place and size, and saves the scene unless it already had unsaved edits: for scenes with hand edits
+        /// that rebuilding would lose.
+        /// </summary>
+        [MenuItem("BounJam/Dress Grates In Open Scene")]
+        public static void DressGrates()
+        {
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogError("[BounJam] Leave play mode before dressing the grates.");
+                return;
+            }
+
+            Scene scene = SceneManager.GetActiveScene();
+            bool hadUnsavedEdits = scene.isDirty;
+            int passable = LayerMask.NameToLayer("LiquidPassable");
+            int count = 0;
+            foreach (BoxCollider box in Object.FindObjectsByType<BoxCollider>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                GameObject greybox = box.gameObject;
+                if (greybox.name != "Grate" || greybox.layer != passable || !greybox.TryGetComponent(out MeshRenderer renderer))
+                    continue;
+                Transform old = greybox.transform;
+                GameObject grate = Grate(greybox.name, old.parent, old.position, old.lossyScale, renderer.sharedMaterial);
+                grate.transform.SetSiblingIndex(old.GetSiblingIndex());
+                Object.DestroyImmediate(greybox);
+                count++;
+            }
+            if (count == 0) return;
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            // Someone's unsaved work in the scene is theirs to save.
+            if (!hadUnsavedEdits) EditorSceneManager.SaveScene(scene);
+            Debug.Log($"[BounJam] Dressed {count} grate(s) in {scene.name}" + (hadUnsavedEdits ? "; it had unsaved edits, so it's left unsaved." : "."));
         }
 
         // ---------------------------------------------------------------- Helpers
