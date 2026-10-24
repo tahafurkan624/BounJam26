@@ -95,7 +95,7 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.3
+  m_Radius: 0.2
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &4975069014646752162
 MonoBehaviour:
@@ -170,8 +170,8 @@ MonoBehaviour:
   skinFilter: {fileID: 205545502730918417}
   restShape: {fileID: -791839099448564899, guid: 71c5727a64c2dba7fb1ad65fc444349a, type: 3}
   radius: 0.5
-  subdivisions: 2
-  renderSmoothing: 2
+  subdivisions: 3
+  renderSmoothing: 1
   stiffness: 260
   damping: 11
   surfaceTension: 40
@@ -383,7 +383,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobSplit
   isHalf: 0
-  mergeGap: 0.15
+  mergeGap: 0.3
   swellTime: 0.5
 --- !u!114 &942091480777860770
 MonoBehaviour:
@@ -5386,8 +5386,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2205512165441432685}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.007712508, y: 0.9874216, z: 0.050947376, w: 0.1494777}
-  m_LocalPosition: {x: 0.16425836, y: 0.0897937, z: -0.53751254}
+  m_LocalRotation: {x: -0.008853371, y: 0.9876157, z: 0.06051889, w: 0.1444793}
+  m_LocalPosition: {x: 0.2718988, y: 0.406193, z: -0.8894429}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -5477,8 +5477,8 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7623246675538324474}
   serializedVersion: 2
-  m_LocalRotation: {x: -0.0076566623, y: -0.9874611, z: -0.050631575, w: 0.1493269}
-  m_LocalPosition: {x: -0.16433394, y: 0.089801356, z: -0.5375601}
+  m_LocalRotation: {x: -0.008789225, y: -0.9876741, z: -0.06019172, w: 0.1442207}
+  m_LocalPosition: {x: -0.2721348, y: 0.4062009, z: -0.8894854}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
