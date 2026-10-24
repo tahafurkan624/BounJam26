@@ -9,9 +9,9 @@ namespace BounJam.EditorTools
     /// <summary>
     /// The prefabs levels are made of, so a mesh or material changed in one prefab changes in every level. Each fixed
     /// piece (button, gate, crate, magnet, pickups, tiles, the dock) is a prefab in Assets/_Game/Prefabs/Level, and the
-    /// shaped pieces are put together from the part prefabs in its Parts folder (platform blocks, walls, ramps, pool
-    /// walls, hot plates, grate panels and the piercer pipe's parts), scaled or tiled to the piece's size. A prefab is
-    /// made from the level kits the first time it's needed and never rebuilt after, so edits made to it stay.
+    /// shaped pieces are put together from the part prefabs in its Parts folder (platform blocks, wall segments, ramps,
+    /// pool walls, hot plates, grate panels and the piercer pipe's parts), scaled or tiled to the piece's size. A prefab
+    /// is made from the level kits the first time it's needed and never rebuilt after, so edits made to it stay.
     /// </summary>
     public static class LevelParts
     {
@@ -20,6 +20,8 @@ namespace BounJam.EditorTools
 
         const float PlatformBlockSize = 2f;
         const float RampThickness = 0.4f;
+        // Walls lower than this wear the low SM_HalfWall (0.7 m), taller ones SM_Wall (1.5 m).
+        const float LowWallHeight = 1.1f;
         static readonly Vector3 HousingSize = new Vector3(1.6f, 1.5f, 1.5f);
         const float BladeRadius = 0.55f;
 
@@ -58,7 +60,7 @@ namespace BounJam.EditorTools
         {
             GameObject[] parts =
             {
-                Dock, PlatformBlock, WallPart, RampPart, PoolWallPart, HotPlatePart, GratePanel,
+                Dock, PlatformBlock, WallPart, HalfWallPart, RampPart, PoolWallPart, HotPlatePart, GratePanel,
                 PipeSegment, PipeHousing, PipeOpening, PipeShipOpening, PipeSaw,
             };
             foreach (Placeable piece in Placeable.All)
@@ -100,8 +102,12 @@ namespace BounJam.EditorTools
             Object.DestroyImmediate(platform);
         });
 
+        /// <summary>One SM_Wall segment, 2 m long and 1.5 m tall, standing on its pivot along X; only seen, the wall holds the collider.</summary>
+        static GameObject WallPart => Part("Wall", t => ArtKit.WallSegment("Wall", t, false, CreatePalette().Wall));
+        /// <summary>The same in the low SM_HalfWall, 0.7 m tall.</summary>
+        static GameObject HalfWallPart => Part("Half Wall", t => ArtKit.WallSegment("Half Wall", t, true, CreatePalette().Wall));
+
         // Unit cubes with a collider, scaled to size.
-        static GameObject WallPart => Part("Wall", t => Box("Wall", t, Vector3.zero, Vector3.one, CreatePalette().Wall));
         static GameObject RampPart => Part("Ramp", t => Box("Ramp", t, Vector3.zero, Vector3.one, CreatePalette().Structure));
         static GameObject PoolWallPart => Part("Pool Wall", t => Box("Pool Wall", t, Vector3.zero, Vector3.one, CreatePalette().Structure));
 
@@ -204,12 +210,30 @@ namespace BounJam.EditorTools
             return root;
         }
 
-        /// <summary>A wall standing on the origin.</summary>
+        /// <summary>
+        /// A wall standing on the origin along its longer side, X or Z: one box collider, covered in wall segments side
+        /// by side, about 2 m each and stretched to fit. Walls lower than <see cref="LowWallHeight"/> are low walls.
+        /// </summary>
         public static void Wall(Transform parent, Vector3 size)
         {
-            Transform wall = Instance(WallPart, parent, "Wall").transform;
-            wall.localPosition = new Vector3(0f, size.y * 0.5f, 0f);
-            wall.localScale = size;
+            var root = new GameObject("Wall") { layer = LayerMask.NameToLayer("Environment") };
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = new Vector3(0f, size.y * 0.5f, 0f);
+            root.AddComponent<BoxCollider>().size = size;
+
+            bool low = size.y < LowWallHeight, alongZ = size.z > size.x;
+            GameObject segment = low ? HalfWallPart : WallPart;
+            Vector3 natural = ArtKit.WallSize(low);
+            float length = alongZ ? size.z : size.x, thickness = alongZ ? size.x : size.z;
+            Vector3 along = alongZ ? Vector3.forward : Vector3.right;
+            Quaternion turn = alongZ ? Quaternion.Euler(0f, 90f, 0f) : Quaternion.identity;
+            int count = Mathf.Max(1, Mathf.RoundToInt(length / natural.x));
+            for (int i = 0; i < count; i++)
+            {
+                Transform part = Instance(segment, root.transform, $"Segment {i}").transform;
+                part.SetLocalPositionAndRotation(along * ((i + 0.5f) * length / count - length * 0.5f) + Vector3.down * (size.y * 0.5f), turn);
+                part.localScale = new Vector3(length / count / natural.x, size.y / natural.y, thickness / natural.z);
+            }
         }
 
         /// <summary>A ramp whose footprint is centred on the origin, rising <c>size.y</c> toward +Z over <c>size.z</c>.</summary>

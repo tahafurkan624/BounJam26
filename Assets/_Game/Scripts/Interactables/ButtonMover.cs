@@ -118,7 +118,11 @@ namespace BounJam
             Vector3 start = Application.isPlaying ? restPosition : transform.position;
             Gizmos.color = Color.cyan;
             Gizmos.DrawLine(start, start + activeOffset);
-            Gizmos.DrawWireCube(start + activeOffset, transform.lossyScale);
+            // Its box where the offset takes it (a gate's panel keeps its box above its pivot on the floor).
+            var shape = GetComponent<BoxCollider>();
+            Vector3 center = shape != null ? transform.TransformVector(shape.center) : Vector3.zero;
+            Vector3 size = shape != null ? Vector3.Scale(shape.size, transform.lossyScale) : transform.lossyScale;
+            Gizmos.DrawWireCube(start + center + activeOffset, size);
         }
     }
 }

@@ -10,8 +10,9 @@ namespace BounJam.EditorTools
     /// <summary>
     /// The modelled art from ArtSource/Blender (exported to Assets/_Project/Art/Models) and the level kit pieces built
     /// from it: the blob's balloon rest shape and eyes, the tugboat, the magnet and pocket magnet, push blocks,
-    /// pressure buttons, grates and the 2 m platform blocks that cover floors. Materials are made here from the Blender colours
-    /// or the baked texture sets (the FBX files carry none) and, like the rest of the kit's, only created when missing.
+    /// pressure buttons, grates, walls, sliding gates and the 2 m platform blocks that cover floors. Materials are made
+    /// here from the Blender colours or the baked texture sets (the FBX files carry none) and, like the rest of the
+    /// kit's, only created when missing.
     /// </summary>
     public static class ArtKit
     {
@@ -26,6 +27,9 @@ namespace BounJam.EditorTools
         const string ButtonPath = ModelsFolder + "/SM_PressureButton.fbx";
         const string PlatformPath = ModelsFolder + "/SM_Platform_2x2.fbx";
         const string GratePath = ModelsFolder + "/SM_Grate.fbx";
+        const string WallPath = ModelsFolder + "/SM_Wall.fbx";
+        const string HalfWallPath = ModelsFolder + "/SM_HalfWall.fbx";
+        const string GatePath = ModelsFolder + "/SM_SlidingGate.fbx";
         const string CheckerShaderName = "BounJam/Platform Checker";
 
         const float PlatformSize = 2f;
@@ -33,11 +37,16 @@ namespace BounJam.EditorTools
         const float ButtonSquash = 0.4f;
         const float ButtonSink = 0.035f;
         const float ButtonPressDepth = 0.05f;
+        // The wall models' brick faces; their caps and plinths stand a little proud of them.
+        const float WallThickness = 0.5f;
+        // The sliding gate's opening, between its posts and up to the top of its panel.
+        static readonly Vector2 GateOpening = new Vector2(2f, 1.5f);
 
         struct Materials
         {
             public Material EyeBlack, EyeShine, PushBlock, PushBlockPanel, ButtonBase, ButtonLightOff, ButtonLightOn;
             public Material PlatformTop, PlatformSide, GrateFrame, GrateBars, GrateBase;
+            public Material WallBody, WallBrick, WallCap, WallPlinth, GatePanel, GateStripe, GateRoller, GateLamp;
         }
 
         // Colours are Blender's linear values; Material.SetColor takes sRGB, hence .gamma.
@@ -55,6 +64,14 @@ namespace BounJam.EditorTools
             GrateFrame = Lit("Grate_Frame", new Color(0.8f, 0.8f, 0.8f), 0.62f),
             GrateBars = Lit("Grate_Bars", new Color(0.485f, 0.527f, 0.578f), 0.7f, metallic: 0.9f),
             GrateBase = Lit("Grate_Base", new Color(0.102f, 0.114f, 0.133f), 0.55f, metallic: 0.6f),
+            WallBody = Lit("Wall_Body", new Color(0.55f, 0.62f, 0.95f), 0.55f),
+            WallBrick = Lit("Wall_Brick", new Color(0.72f, 0.78f, 1.0f), 0.6f),
+            WallCap = Lit("Wall_Cap", new Color(1.0f, 0.8f, 0.3f), 0.65f),
+            WallPlinth = Lit("Wall_Plinth", new Color(0.36f, 0.4f, 0.8f), 0.5f),
+            GatePanel = Lit("Gate_Panel", new Color(1.0f, 0.38f, 0.28f), 0.65f),
+            GateStripe = Lit("Gate_Stripe", new Color(0.98f, 0.97f, 0.93f), 0.6f),
+            GateRoller = Lit("Gate_Roller", new Color(0.15f, 0.16f, 0.25f), 0.5f, metallic: 0.4f),
+            GateLamp = Lit("Gate_Lamp", new Color(1.0f, 0.55f, 0.1f), 0.7f, emission: new Color(2.0f, 1.55f, 0.7f)),
         };
 
         // ---------------------------------------------------------------- Blob
@@ -276,6 +293,73 @@ namespace BounJam.EditorTools
                 AddBox(solid, new Vector3(plate.min.x, plate.max.y, frame.min.z), new Vector3(plate.max.x, frame.max.y, frame.max.z));
             }
             return root;
+        }
+
+        /// <summary>SM_Wall's length and height (SM_HalfWall's if <paramref name="low"/>), and the thickness of its brick faces.</summary>
+        public static Vector3 WallSize(bool low)
+        {
+            Mesh mesh = TryPart(low ? HalfWallPath : WallPath, low ? "SM_HalfWall" : "SM_Wall")?.sharedMesh;
+            if (mesh == null) return new Vector3(2f, low ? 0.7f : 1.5f, WallThickness);
+            return new Vector3(mesh.bounds.size.x, mesh.bounds.size.y, WallThickness);
+        }
+
+        /// <summary>
+        /// One segment of wall, SM_Wall or the low SM_HalfWall, standing on the origin of <paramref name="parent"/> along
+        /// X. Only seen: the wall it's part of has one box collider for all its segments. Without the model it falls
+        /// back to a greybox in <paramref name="fallback"/>.
+        /// </summary>
+        public static GameObject WallSegment(string name, Transform parent, bool low, Material fallback)
+        {
+            Mesh mesh = TryPart(low ? HalfWallPath : WallPath, low ? "SM_HalfWall" : "SM_Wall")?.sharedMesh;
+            if (mesh == null)
+            {
+                Vector3 size = WallSize(low);
+                GameObject box = LevelKit.Box(name, parent, parent.TransformPoint(new Vector3(0f, size.y * 0.5f, 0f)), size, fallback);
+                Object.DestroyImmediate(box.GetComponent<Collider>());
+                return box;
+            }
+
+            // In the order the importer gives the submeshes (the order Blender's faces first use each material).
+            Materials m = CreateMaterials();
+            GameObject segment = Model(name, parent, mesh, m.WallBody, m.WallBrick, m.WallCap, m.WallPlinth);
+            segment.layer = LayerMask.NameToLayer("Environment");
+            return segment;
+        }
+
+        /// <summary>
+        /// Dresses <paramref name="gate"/>, the centre of an opening <paramref name="size"/> wide and tall across Z, in
+        /// the SM_SlidingGate model, stretched to fit its 2 m by 1.5 m opening. The frame round the opening stays put:
+        /// its posts are solid like the walls, the lintel and lamp over the opening only seen, so the ship riding the
+        /// blob passes under them. Returns the panel, with a box collider of its own, for a ButtonMover to drive.
+        /// Without the model it falls back to a greybox panel in <paramref name="fallback"/>.
+        /// </summary>
+        public static GameObject SlidingGate(Transform gate, Vector2 size, Material fallback)
+        {
+            Mesh frameMesh = TryPart(GatePath, "SM_SlidingGate_Frame")?.sharedMesh;
+            Mesh panelMesh = TryPart(GatePath, "SM_SlidingGate_Panel")?.sharedMesh;
+            if (frameMesh == null || panelMesh == null)
+                return LevelKit.Box("Panel", gate, gate.position, new Vector3(size.x, size.y, 0.5f), fallback);
+
+            Materials m = CreateMaterials();
+            var floor = new Vector3(0f, -size.y * 0.5f, 0f);
+            var stretch = new Vector3(size.x / GateOpening.x, size.y / GateOpening.y, 1f);
+
+            GameObject frame = Model("Frame", gate, frameMesh, m.WallBody, m.WallPlinth, m.WallCap, m.GateRoller, m.GateLamp);
+            frame.layer = LayerMask.NameToLayer("Environment");
+            frame.transform.localPosition = floor;
+            frame.transform.localScale = stretch;
+            Bounds bounds = frameMesh.bounds;
+            float post = GateOpening.x * 0.5f, top = GateOpening.y;
+            AddBox(frame, new Vector3(bounds.min.x, 0f, bounds.min.z), new Vector3(-post, top, bounds.max.z));
+            AddBox(frame, new Vector3(post, 0f, bounds.min.z), new Vector3(bounds.max.x, top, bounds.max.z));
+
+            GameObject panel = Model("Panel", gate, panelMesh, m.GatePanel, m.GateStripe, m.GateRoller);
+            panel.layer = LayerMask.NameToLayer("Environment");
+            panel.transform.localPosition = floor;
+            panel.transform.localScale = stretch;
+            Bounds leaf = panelMesh.bounds;
+            AddBox(panel, new Vector3(-post, 0f, leaf.min.z), new Vector3(post, top, leaf.max.z));
+            return panel;
         }
 
         static void AddBox(GameObject go, Vector3 min, Vector3 max)

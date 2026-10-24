@@ -309,9 +309,11 @@ namespace BounJam.EditorTools
             for (int i = 0; i < buttons.Count; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = buttons[i];
         }
 
-        // From the parents too, for a part of a piece selected in the Hierarchy.
+        // From the parents too, for a part of a piece selected in the Hierarchy, or from anywhere in a placed piece, for
+        // a gate's mover on its panel.
         static T[] Components<T>(GameObject[] objects) where T : Component
-            => objects.Select(go => go.GetComponentInParent<T>()).Where(c => c != null).Distinct().ToArray();
+            => objects.Select(go => go.GetComponentInParent<T>() ?? PrefabUtility.GetOutermostPrefabInstanceRoot(go)?.GetComponentInChildren<T>())
+                      .Where(c => c != null).Distinct().ToArray();
 
         static string Count(int n, string thing) => n == 1 ? $"1 {thing}" : $"{n} {thing}s";
 

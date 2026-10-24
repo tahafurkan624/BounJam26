@@ -41,7 +41,7 @@ namespace BounJam.EditorTools
                 fresh.name = old.name;
                 fresh.transform.SetSiblingIndex(o.GetSiblingIndex());
                 fresh.transform.SetLocalPositionAndRotation(o.localPosition, o.localRotation);
-                fresh.transform.localScale = o.localScale;
+                fresh.transform.localScale = KeptScale(old, fresh);
                 if (fresh.activeSelf != old.activeSelf) fresh.SetActive(old.activeSelf);
                 Undo.RegisterCreatedObjectUndo(fresh, "Use Level Prefabs");
                 Pair(o, fresh.transform, map, tuned);
@@ -89,6 +89,20 @@ namespace BounJam.EditorTools
             return TileLook(go) is string look ? TilePrefix + look : null;
         }
 
+        /// <summary>
+        /// The old piece's scale; for a greybox gate, a box scaled to its size, the stretch that gives the modelled gate
+        /// the same opening instead.
+        /// </summary>
+        static Vector3 KeptScale(GameObject old, GameObject fresh)
+        {
+            Vector3 scale = old.transform.localScale;
+            if (PieceName(old) != "Gate" || fresh.TryGetComponent(out ButtonMover _)) return scale;
+            var mover = fresh.GetComponentInChildren<ButtonMover>(true);
+            if (mover == null || !mover.TryGetComponent(out BoxCollider panel)) return scale;
+            Vector3 opening = Vector3.Scale(panel.size, panel.transform.localScale);
+            return new Vector3(scale.x / opening.x, scale.y / opening.y, 1f);
+        }
+
         static GameObject PrefabFor(GameObject go)
         {
             string name = PieceName(go);
@@ -111,7 +125,8 @@ namespace BounJam.EditorTools
 
         /// <summary>
         /// Matches the old piece's objects and components with the prefab's: children by name (in order among siblings
-        /// with the same name), components by type. Game scripts and rigidbodies get their tuning copied over later.
+        /// with the same name), components by type, game scripts and rigidbodies further in if the prefab keeps them
+        /// lower down. Those get their tuning copied over later.
         /// </summary>
         static void Pair(Transform old, Transform fresh, Dictionary<Object, Object> map, List<(Component, Component)> tuned)
         {
@@ -124,6 +139,9 @@ namespace BounJam.EditorTools
             {
                 if (component == null || component is Transform) continue;
                 Component match = candidates.FirstOrDefault(c => c != null && c.GetType() == component.GetType() && !used.Contains(c));
+                // Moved further in by the prefab, like a gate's mover onto its panel.
+                if (match == null && (component is MonoBehaviour || component is Rigidbody))
+                    match = fresh.GetComponentsInChildren(component.GetType(), true).FirstOrDefault(c => !used.Contains(c));
                 if (match == null) continue;
                 used.Add(match);
                 map[component] = match;

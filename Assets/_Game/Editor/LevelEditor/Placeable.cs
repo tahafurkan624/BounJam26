@@ -59,6 +59,8 @@ namespace BounJam.EditorTools
             Shaped(Kind.Wall, "Wall", "Ground", "Ground", false, "A 4 m long, 1.5 m tall wall. Drag along a line to draw one."),
             Shaped(Kind.Wall, "Half Wall", "Ground", "Ground", false, "A wall half as long: 2 m. Drag along a line to draw one.",
                    size: new Vector3(2f, 1.5f, 0.5f)),
+            Shaped(Kind.Wall, "Low Wall", "Ground", "Ground", false, "A 4 m long wall only 0.7 m tall. Drag along a line to draw one.",
+                   size: new Vector3(4f, 0.7f, 0.5f)),
             new Placeable
             {
                 Name = "Tile", Category = "Ground", Group = "Ground", How = Placement.Click,
@@ -75,13 +77,13 @@ namespace BounJam.EditorTools
 
             Fixed("Button", "Machines", "Machines", "Pressed by the frozen blob, a crate or the ship. Link it to gates, lifts and magnets.",
                   "Button", t => Button("Button", t, Vector3.zero, CreatePalette()), ButtonBounds),
-            Fixed("Gate", "Machines", "Machines", "Sinks into the floor while a linked button is pressed, and for 3 s after.",
-                  "Gate", t => Mover("Gate", t, new Vector3(0f, 0.75f, 0f), new Vector3(3f, 1.5f, 0.5f), CreatePalette().Door,
-                                     new PressureButton[0], new Vector3(0f, -1.55f, 0f), speed: 3f, holdTime: 3f),
+            Fixed("Gate", "Machines", "Machines", "Its panel sinks into the floor while a linked button is pressed, and for 3 s after.",
+                  "Gate", t => Gate("Gate", t, new Vector3(0f, 0.75f, 0f), new Vector2(3f, 1.5f), new PressureButton[0],
+                                    new Vector3(0f, -1.55f, 0f), speed: 3f, holdTime: 3f, CreatePalette()),
                   new Bounds(new Vector3(0f, 0.75f, 0f), new Vector3(3f, 1.5f, 0.5f))),
-            Fixed("Half Gate", "Machines", "Machines", "A gate as wide as a half wall (2 m): sinks while a linked button is pressed, and for 3 s after.",
-                  "Half Gate", t => Mover("Half Gate", t, new Vector3(0f, 0.75f, 0f), new Vector3(2f, 1.5f, 0.5f), CreatePalette().Door,
-                                          new PressureButton[0], new Vector3(0f, -1.55f, 0f), speed: 3f, holdTime: 3f),
+            Fixed("Half Gate", "Machines", "Machines", "A gate as wide as a half wall (2 m): its panel sinks while a linked button is pressed, and for 3 s after.",
+                  "Half Gate", t => Gate("Half Gate", t, new Vector3(0f, 0.75f, 0f), new Vector2(2f, 1.5f), new PressureButton[0],
+                                         new Vector3(0f, -1.55f, 0f), speed: 3f, holdTime: 3f, CreatePalette()),
                   new Bounds(new Vector3(0f, 0.75f, 0f), new Vector3(2f, 1.5f, 0.5f))),
             Fixed("Lift", "Machines", "Machines", "Shuttles 1.8 m up and down while a linked button is pressed, carrying what's on it.",
                   "Lift", t => Mover("Lift", t, new Vector3(0f, 0.1f, 0f), new Vector3(2f, 0.2f, 2f), CreatePalette().Lift,

@@ -160,8 +160,26 @@ namespace BounJam.EditorTools
         public static ButtonMover Mover(string name, Transform parent, Vector3 position, Vector3 size, Material material,
                                         PressureButton[] buttons, Vector3 activeOffset, float speed, float holdTime,
                                         bool cycle = false, bool carriesRiders = false)
+            => Drive(Box(name, parent, position, size, material), buttons, activeOffset, speed, holdTime, cycle, carriesRiders);
+
+        /// <summary>
+        /// A sliding gate across Z filling an opening <paramref name="size"/> wide and tall, centred on
+        /// <paramref name="position"/>: the SM_SlidingGate frame round the opening stays put while its panel, driven by
+        /// buttons like a <see cref="Mover"/>, moves by <paramref name="activeOffset"/>.
+        /// </summary>
+        public static ButtonMover Gate(string name, Transform parent, Vector3 position, Vector2 size, PressureButton[] buttons,
+                                       Vector3 activeOffset, float speed, float holdTime, Palette m)
         {
-            GameObject go = Box(name, parent, position, size, material);
+            var gate = new GameObject(name) { layer = LayerMask.NameToLayer("Environment") };
+            gate.transform.SetParent(parent, false);
+            gate.transform.position = position;
+            return Drive(ArtKit.SlidingGate(gate.transform, size, m.Door), buttons, activeOffset, speed, holdTime);
+        }
+
+        /// <summary>Makes <paramref name="go"/>, with its box collider, a kinematic body its buttons move.</summary>
+        static ButtonMover Drive(GameObject go, PressureButton[] buttons, Vector3 activeOffset, float speed, float holdTime,
+                                 bool cycle = false, bool carriesRiders = false)
+        {
             var body = go.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.interpolation = RigidbodyInterpolation.Interpolate;
