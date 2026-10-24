@@ -5,8 +5,8 @@ namespace BounJam
 {
     /// <summary>
     /// Soft skin around the blob's core. Every skin point is pulled by a spring toward a rest shape (the modelled
-    /// balloon, or a sphere) that sits on the ground, flattens with speed and stretches out the longer it keeps flowing the
-    /// same way (keeping its volume), smoothed toward its
+    /// balloon, or a sphere) that sits on the ground, flattens with speed, stretches out the longer it keeps flowing the
+    /// same way and spreads into a flat puddle once it stands still (keeping its volume), smoothed toward its
     /// neighbours (surface tension) and pushed outward when volume is lost (pressure). Raycasts from the core keep the
     /// points out of the world, so the liquid squishes against floors, walls and obstacles. Runs right after each
     /// physics step and drives the skin mesh, whose sides and tail turn ragged while stretched.
@@ -72,6 +72,23 @@ namespace BounJam
         [SerializeField] float idleBreath = 0.04f;
         [Tooltip("Idle breaths per second.")]
         [SerializeField] float idleBreathRate = 0.8f;
+
+        [Header("Standing Puddle")]
+        [Tooltip("How flat the liquid spreads out once it stands still on the ground: 0 = keeps the round rest shape, " +
+                 "0.35 = about two thirds of the height (and a little wider, same volume), so a resting puddle reads apart " +
+                 "from the moving streak.")]
+        [Range(0f, 0.8f)]
+        [SerializeField] float restSpread = 0.35f;
+        [Tooltip("Below this share of top speed on the ground the liquid starts spreading out.")]
+        [Range(0f, 1f)]
+        [SerializeField] float spreadBelowSpeed = 0.25f;
+        [Tooltip("Slowing down faster than this, m/s², counts as stopping, so it spreads out while it brakes instead of " +
+                 "first popping back up into a round bead.")]
+        [SerializeField] float spreadWhileBraking = 8f;
+        [Tooltip("Seconds of standing still to spread out fully.")]
+        [SerializeField] float spreadTime = 0.5f;
+        [Tooltip("Seconds to gather back up after moving off.")]
+        [SerializeField] float gatherTime = 0.25f;
 
         [Header("Draping")]
         [Tooltip("Lower skin points look this far down for ground and sink onto it, so the liquid drapes over bumps and edges, m.")]
@@ -143,6 +160,8 @@ namespace BounJam
         // 0..1: how much of the sustained stretch has built up, and the way it built up along (flat).
         float stretchCharge;
         Vector3 stretchHeading;
+        // 0..1: how far it has spread out into the standing puddle.
+        float spreadCharge;
         bool wasGrounded;
         Vector3 previousCoreVelocity;
         Vector3 frameUp = Vector3.up;
@@ -153,8 +172,10 @@ namespace BounJam
         public Vector3[] Points => positions;
         /// <summary>Centre of the rest shape the skin is pulled toward.</summary>
         public Vector3 ShapeCenter { get; private set; }
-        /// <summary>0 = round, positive = flattened by speed, negative = briefly taller than round.</summary>
+        /// <summary>0 = round, positive = flattened by speed or spread out standing still, negative = briefly taller than round.</summary>
         public float Flatten => flatten;
+        /// <summary>0..1: how far it has spread out into the flat standing puddle.</summary>
+        public float Spread { get; private set; }
         /// <summary>Current volume divided by rest volume.</summary>
         public float VolumeRatio { get; private set; } = 1f;
         /// <summary>Up of the shape: the ground normal while grounded, world up in the air.</summary>
@@ -550,9 +571,12 @@ namespace BounJam
             frameForward = frameForward.sqrMagnitude > 1e-4f ? frameForward.normalized : Vector3.ProjectOnPlane(Vector3.forward, frameUp).normalized;
 
             // The physics step has already stopped the fall, so the impact speed comes from the step before.
+            // A puddle skips it: it's flat already, and the squash would crush its thin layer and splash the ship off.
             if (grounded && !wasGrounded)
-                flattenVelocity += landingSquash * Mathf.Max(0f, -Vector3.Dot(previousCoreVelocity, frameUp));
+                flattenVelocity += landingSquash * (1f - Spread) * Mathf.Max(0f, -Vector3.Dot(previousCoreVelocity, frameUp));
             wasGrounded = grounded;
+            float slowing = (Vector3.ProjectOnPlane(previousCoreVelocity, frameUp).magnitude - planar.magnitude) / dt;
+            LandPuddle(coreVelocity);
             previousCoreVelocity = coreVelocity;
 
             // In the air too: a blob that jumps or flows off an edge at speed stays spread out, instead of snapping back
@@ -561,7 +585,10 @@ namespace BounJam
             float speed01 = Mathf.Clamp01(motor.NormalizedSpeed);
             float eased = 1f - (1f - speed01) * (1f - speed01);
             float breath = idleBreath * Mathf.Sin(Time.time * idleBreathRate * 2f * Mathf.PI) * (1f - eased);
-            float target = flattenAtFullSpeed * eased + breath;
+            UpdateSpread(speed01, slowing > spreadWhileBraking, grounded, dt);
+            // Ease-out: it slumps quickly at first, while the speed flattening is still falling away.
+            Spread = 1f - (1f - spreadCharge) * (1f - spreadCharge);
+            float target = Mathf.Lerp(flattenAtFullSpeed * eased, restSpread, Spread) + breath;
             flattenVelocity += (flattenStiffness * (target - flatten) - flattenDamping * flattenVelocity) * dt;
             flatten = Mathf.Clamp(flatten + flattenVelocity * dt, -0.3f, 0.8f);
             UpdateStretchCharge(coreVelocity, speed01, grounded, dt);
@@ -592,6 +619,33 @@ namespace BounJam
             if (grounded) stretchCharge = Mathf.MoveTowards(stretchCharge, 1f, dt / stretchBuildTime);
         }
 
+        /// <summary>
+        /// Standing still (or braking to a stop) on the ground the liquid spreads out into a puddle, and gathers back up
+        /// once it moves off. In the air it holds, so a standing jump doesn't round up under the ship and throw it.
+        /// </summary>
+        void UpdateSpread(float speed01, bool braking, bool grounded, float dt)
+        {
+            if (speed01 > spreadBelowSpeed && !braking)
+                spreadCharge = Mathf.MoveTowards(spreadCharge, 0f, dt / Mathf.Max(0.01f, gatherTime));
+            else if (grounded)
+                spreadCharge = Mathf.MoveTowards(spreadCharge, 1f, dt / Mathf.Max(0.01f, spreadTime));
+        }
+
+        /// <summary>
+        /// A spread-out puddle is too thin to soak up its own fall: when the core hits the floor the jelly would crash
+        /// through itself, and the pressure would splash it out and fling the ship off the top. So the part of the fall
+        /// the core just lost, the jelly loses too, as much as it's spread. (Take-off is <see cref="OnJumped"/>.)
+        /// </summary>
+        void LandPuddle(Vector3 coreVelocity)
+        {
+            if (Spread <= 0f) return;
+            float falling = -Vector3.Dot(previousCoreVelocity, frameUp);
+            float stopped = Mathf.Clamp(Vector3.Dot(coreVelocity - previousCoreVelocity, frameUp), 0f, Mathf.Max(0f, falling));
+            if (stopped <= 0f) return;
+            Vector3 kick = frameUp * (stopped * Spread);
+            for (int i = 0; i < velocities.Length; i++) velocities[i] += kick;
+        }
+
         void ComputeRestPositions(Vector3 core)
         {
             // The rest shape squashed with the same volume: height shrinks by (1 - flatten), width grows to match.
@@ -603,8 +657,11 @@ namespace BounJam
             shapeAcross = across;
             Quaternion frame = Quaternion.LookRotation(frameForward, frameUp);
 
-            // On the ground the shape rests on the floor rather than around the (smaller) core.
-            Vector3 center = motor.IsGrounded ? core + frameUp * (restHalfHeight * height - motor.CoreRadius) : core;
+            // On the ground the shape rests on the floor rather than around the (smaller) core. A puddle thinner than the
+            // core keeps hanging from its bottom in the air too: centred on the core it would hover, then drop onto the
+            // floor at landing and fling the ship off its top.
+            float onFloor = restHalfHeight * height - motor.CoreRadius;
+            Vector3 center = core + frameUp * (motor.IsGrounded ? onFloor : Mathf.Min(0f, onFloor) * Spread);
             ShapeCenter = center;
 
             bool drape = motor.IsGrounded && drapeStrength > 0f;
