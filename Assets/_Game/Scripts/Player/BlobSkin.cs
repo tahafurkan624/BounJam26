@@ -4,10 +4,11 @@ using UnityEngine;
 namespace BounJam
 {
     /// <summary>
-    /// Soft skin around the blob's core. Every skin point is pulled by a spring toward a rest ellipsoid that sits on
-    /// the ground and flattens with speed (keeping its volume), smoothed toward its neighbours (surface tension) and
-    /// pushed outward when volume is lost (pressure). Raycasts from the core keep the points out of the world, so the
-    /// liquid squishes against floors, walls and obstacles. Runs right after each physics step and drives the skin mesh.
+    /// Soft skin around the blob's core. Every skin point is pulled by a spring toward a rest shape (the modelled
+    /// balloon, or a sphere) that sits on the ground and flattens with speed (keeping its volume), smoothed toward its
+    /// neighbours (surface tension) and pushed outward when volume is lost (pressure). Raycasts from the core keep the
+    /// points out of the world, so the liquid squishes against floors, walls and obstacles. Runs right after each
+    /// physics step and drives the skin mesh.
     /// </summary>
     [RequireComponent(typeof(BlobMotor))]
     public class BlobSkin : MonoBehaviour
@@ -16,7 +17,9 @@ namespace BounJam
         [SerializeField] MeshFilter skinFilter;
 
         [Header("Shape")]
-        [Tooltip("Radius of the round blob at rest, m.")]
+        [Tooltip("Modelled rest shape, pivot at the bottom centre (needs Read/Write enabled). Empty = a sphere of the radius below.")]
+        [SerializeField] Mesh restShape;
+        [Tooltip("Radius of the round blob at rest when there's no rest shape, m.")]
         [SerializeField] float radius = 0.5f;
         [Tooltip("Skin detail: 1 = 42 points, 2 = 162, 3 = 642.")]
         [Range(1, 3)]
@@ -80,6 +83,11 @@ namespace BounJam
         Coroutine simulation;
 
         Vector3[] restDirections;
+        // Each point's place in the round rest shape, from the shape's centre; flattening scales these.
+        Vector3[] restOffsets;
+        float restHalfHeight;
+        // Farthest rest point from the centre, m.
+        float extent;
         int[] triangles;
         int[][] neighbours;
         float restVolume;
@@ -103,7 +111,8 @@ namespace BounJam
         bool wasGrounded;
         Vector3 previousCoreVelocity;
         Vector3 frameUp = Vector3.up;
-        Vector3 frameForward = Vector3.forward;
+        // Starts facing -Z, toward the follow camera, so the eyes are in view until the blob first moves.
+        Vector3 frameForward = Vector3.back;
 
         /// <summary>Current skin point positions in world space (last physics step).</summary>
         public Vector3[] Points => positions;
@@ -113,6 +122,12 @@ namespace BounJam
         public float Flatten => flatten;
         /// <summary>Current volume divided by rest volume.</summary>
         public float VolumeRatio { get; private set; } = 1f;
+        /// <summary>Up of the shape: the ground normal while grounded, world up in the air.</summary>
+        public Vector3 Up => frameUp;
+        /// <summary>The way the blob is heading (or last headed), flat on <see cref="Up"/>.</summary>
+        public Vector3 Forward => frameForward;
+        /// <summary>Middle of the rendered skin this frame, in the skin's local space.</summary>
+        public Vector3 LocalCenter { get; private set; }
 
         /// <summary>The blob's top surface at one spot, from <see cref="TrySampleSurface"/>.</summary>
         public struct SurfaceSample
@@ -186,7 +201,7 @@ namespace BounJam
             sample = default;
             if (!initialised || IsFrozen) return false;
 
-            float reach = radius * 3f;
+            float reach = extent * 3f;
             float dx = point.x - ShapeCenter.x, dz = point.z - ShapeCenter.z;
             if (dx * dx + dz * dz > reach * reach) return false;
 
@@ -222,7 +237,7 @@ namespace BounJam
         public bool Contains(Vector3 point)
         {
             if (!initialised) return false;
-            float reach = radius * 3f;
+            float reach = extent * 3f;
             if ((point - body.position).sqrMagnitude > reach * reach) return false;
             // The rest shape has a skin point straight above the core, shared by six triangles; a ray through it would
             // count six crossings. Nudged a fraction of a millimetre, the ray can't line up with points like that.
@@ -242,6 +257,47 @@ namespace BounJam
 
         /// <summary>A skin point in world space; frozen points move rigidly with the body.</summary>
         Vector3 PointAt(int i) => IsFrozen ? body.position + body.rotation * frozenLocal[i] : positions[i];
+
+        /// <summary>
+        /// Where a ray from inside the skin leaves the surface rendered this frame, all in the skin's local space.
+        /// False while frozen or before the first physics step.
+        /// </summary>
+        public bool TryFindSurface(Vector3 localOrigin, Vector3 direction, out Vector3 point, out Vector3 normal)
+        {
+            point = normal = Vector3.zero;
+            return initialised && !IsFrozen
+                   && MeshRay.Exit(smoothVertices, smoothing.Triangles, localOrigin, direction, out point, out normal);
+        }
+
+        /// <summary>
+        /// The skin points' rest places, as offsets from the middle of the shape: where a ray from the centre of
+        /// <paramref name="shape"/> along each direction leaves its surface. <paramref name="halfHeight"/> is how far
+        /// its bottom is below that centre. Without a readable shape it's a sphere of <paramref name="sphereRadius"/>.
+        /// </summary>
+        public static Vector3[] RestOffsets(Mesh shape, Vector3[] directions, float sphereRadius, out float halfHeight)
+        {
+            var offsets = new Vector3[directions.Length];
+            halfHeight = sphereRadius;
+            if (shape != null && !shape.isReadable)
+                Debug.LogWarning($"[BounJam] Blob rest shape '{shape.name}' isn't readable; using a sphere.");
+            if (shape == null || !shape.isReadable)
+            {
+                for (int i = 0; i < directions.Length; i++) offsets[i] = directions[i] * sphereRadius;
+                return offsets;
+            }
+
+            Vector3[] vertices = shape.vertices;
+            int[] shapeTriangles = shape.triangles;
+            Bounds bounds = shape.bounds;
+            halfHeight = bounds.extents.y;
+            for (int i = 0; i < directions.Length; i++)
+            {
+                offsets[i] = MeshRay.Exit(vertices, shapeTriangles, bounds.center, directions[i], out Vector3 hit, out _)
+                    ? hit - bounds.center
+                    : Vector3.Scale(directions[i], bounds.extents);
+            }
+            return offsets;
+        }
 
         /// <summary>Barycentric weights of the point's x and z in the triangle's footprint; false when outside it.</summary>
         static bool Footprint(Vector3 a, Vector3 b, Vector3 c, Vector3 point, out float wa, out float wb, out float wc)
@@ -305,7 +361,13 @@ namespace BounJam
             currentOffsets = new Vector3[count];
             coarseVertices = new Vector3[count];
 
-            for (int i = 0; i < count; i++) coarseVertices[i] = restDirections[i] * radius;
+            restOffsets = RestOffsets(restShape, restDirections, radius, out restHalfHeight);
+            extent = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                coarseVertices[i] = restOffsets[i];
+                extent = Mathf.Max(extent, restOffsets[i].magnitude);
+            }
             restVolume = IcoSphere.Volume(coarseVertices, triangles);
 
             smoothing = LoopSubdivision.Build(count, triangles, renderSmoothing);
@@ -371,7 +433,7 @@ namespace BounJam
             float pressureAcceleration = pressure * (1f - VolumeRatio);
 
             Vector3 sag = Physics.gravity * gravitySag;
-            float escapeDistance = radius * 4f;
+            float escapeDistance = extent * 4f;
             for (int i = 0; i < positions.Length; i++)
             {
                 Vector3 p = positions[i];
@@ -437,7 +499,7 @@ namespace BounJam
 
         void ComputeRestPositions(Vector3 core)
         {
-            // Ellipsoid with the same volume as the sphere: height shrinks by (1 - flatten), width grows to match.
+            // The rest shape squashed with the same volume: height shrinks by (1 - flatten), width grows to match.
             float height = 1f - flatten;
             float width = 1f / Mathf.Sqrt(height);
             float along = width * (1f + stretch);
@@ -445,14 +507,15 @@ namespace BounJam
             Quaternion frame = Quaternion.LookRotation(frameForward, frameUp);
 
             // On the ground the shape rests on the floor rather than around the (smaller) core.
-            Vector3 center = motor.IsGrounded ? core + frameUp * (radius * height - motor.CoreRadius) : core;
+            Vector3 center = motor.IsGrounded ? core + frameUp * (restHalfHeight * height - motor.CoreRadius) : core;
             ShapeCenter = center;
 
             bool drape = motor.IsGrounded && drapeStrength > 0f;
             for (int i = 0; i < restDirections.Length; i++)
             {
                 Vector3 d = restDirections[i];
-                Vector3 rest = center + frame * new Vector3(d.x * across * radius, d.y * height * radius, d.z * along * radius);
+                Vector3 o = restOffsets[i];
+                Vector3 rest = center + frame * new Vector3(o.x * across, o.y * height, o.z * along);
                 if (drape && d.y < -0.05f) rest = Drape(rest, Mathf.Clamp01(-d.y * 1.4f));
                 restPositions[i] = rest;
             }
@@ -494,8 +557,13 @@ namespace BounJam
             float t = body.interpolation == RigidbodyInterpolation.Interpolate
                 ? Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime)
                 : 1f;
+            Vector3 sum = Vector3.zero;
             for (int i = 0; i < coarseVertices.Length; i++)
+            {
                 coarseVertices[i] = Vector3.LerpUnclamped(previousOffsets[i], currentOffsets[i], t);
+                sum += coarseVertices[i];
+            }
+            LocalCenter = sum / coarseVertices.Length;
             smoothing.Apply(coarseVertices, smoothVertices);
 
             mesh.SetVertices(smoothVertices);

@@ -19,15 +19,14 @@ namespace BounJam.EditorTools
         public const string BlobPrefabPath = "Assets/_Game/Prefabs/Blob.prefab";
         public const string ShipPrefabPath = "Assets/_Game/Prefabs/PaperShip.prefab";
         public const string WaterPrefabPath = "Assets/_Game/Prefabs/Water.prefab";
-        const string ShipModelPath = "Assets/_Game/Art/Models/PaperShip.fbx";
         const string RestPreviewMeshPath = "Assets/_Game/Art/Models/Blob_RestPreview.asset";
         const string VolumeProfilePath = "Assets/Settings/SampleSceneProfile.asset";
         const string GridShaderName = "BounJam/Greybox Grid";
 
         public const float CoreRadius = 0.3f;
         const float BlobRadius = 0.5f;
-        // Dropped from just above the resting blob so it settles onto the jelly.
-        public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 1.0f, 0f);
+        // Dropped from just above the resting blob's flat top so it settles onto the jelly.
+        public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 0.5f, 0f);
         static readonly Vector3 CameraOffset = new Vector3(0f, 8f, -6.5f);
         const float CameraFieldOfView = 40f;
 
@@ -96,9 +95,12 @@ namespace BounJam.EditorTools
             return go;
         }
 
-        /// <summary>A floor slab whose top surface is at <paramref name="top"/>; 1 m thick.</summary>
+        /// <summary>
+        /// A floor slab whose top surface is at <paramref name="top"/>; 1 m thick, covered in platform blocks
+        /// (<paramref name="material"/> only if the platform model is missing).
+        /// </summary>
         public static GameObject Floor(string name, Transform parent, float x, float z, float width, float depth, float top, Material material)
-            => Box(name, parent, new Vector3(x, top - 0.5f, z), new Vector3(width, 1f, depth), material);
+            => ArtKit.Platform(name, parent, new Vector3(x, top - 0.5f, z), new Vector3(width, 1f, depth), material);
 
         /// <summary>
         /// A ramp rising toward +Z from (x, bottom, startZ) by <paramref name="rise"/> metres at <paramref name="angle"/> degrees.
@@ -119,8 +121,12 @@ namespace BounJam.EditorTools
 
         public static void Crate(string name, Transform parent, Vector3 position, float size, float mass, Palette m)
         {
-            GameObject crate = Box(name, parent, position, Vector3.one * size, m.Crate, "Pushable");
-            crate.GetComponent<Collider>().sharedMaterial = m.CratePhysics;
+            var crate = new GameObject(name) { layer = LayerMask.NameToLayer("Pushable") };
+            crate.transform.SetParent(parent, false);
+            crate.transform.position = position;
+            crate.transform.localScale = Vector3.one * size;
+            crate.AddComponent<BoxCollider>().sharedMaterial = m.CratePhysics;
+            ArtKit.PushBlock(crate.transform);
             var body = crate.AddComponent<Rigidbody>();
             body.mass = mass;
             body.interpolation = RigidbodyInterpolation.Interpolate;
@@ -133,15 +139,10 @@ namespace BounJam.EditorTools
             root.transform.SetParent(parent, false);
             root.transform.position = position;
 
-            // Visual plate only: no collider, so nothing snags on its edge.
-            GameObject plate = Decoration(PrimitiveType.Cube, "Plate", root.transform, new Vector3(0f, 0.02f, 0f),
-                                          new Vector3(1.2f, 0.04f, 1.2f), m.ButtonIdle);
-            var plateRenderer = plate.GetComponent<MeshRenderer>();
-
             var button = root.AddComponent<PressureButton>();
+            // The modelled ring, cap and light ring; visual only, no collider, so nothing snags on its edge.
+            ArtKit.DressButton(button, m.ButtonIdle);
             var settings = new SerializedObject(button);
-            settings.FindProperty("cap").objectReferenceValue = plate.transform;
-            settings.FindProperty("capRenderer").objectReferenceValue = plateRenderer;
             settings.FindProperty("idleMaterial").objectReferenceValue = m.ButtonIdle;
             settings.FindProperty("pressedMaterial").objectReferenceValue = m.ButtonPressed;
             settings.FindProperty("detectMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Pushable", "Ship");
@@ -207,10 +208,10 @@ namespace BounJam.EditorTools
         {
             Transform root = Group(name, parent);
             // Four slabs around the hole: full-width strips south and north, short pieces west and east.
-            Slab("Floor South", root, floor.xMin, floor.xMax, floor.yMin, pool.yMin, top, 1f, m.Floor);
-            Slab("Floor North", root, floor.xMin, floor.xMax, pool.yMax, floor.yMax, top, 1f, m.Floor);
-            Slab("Floor West", root, floor.xMin, pool.xMin, pool.yMin, pool.yMax, top, 1f, m.Floor);
-            Slab("Floor East", root, pool.xMax, floor.xMax, pool.yMin, pool.yMax, top, 1f, m.Floor);
+            FloorSlab("Floor South", root, floor.xMin, floor.xMax, floor.yMin, pool.yMin, top, m.Floor);
+            FloorSlab("Floor North", root, floor.xMin, floor.xMax, pool.yMax, floor.yMax, top, m.Floor);
+            FloorSlab("Floor West", root, floor.xMin, pool.xMin, pool.yMin, pool.yMax, top, m.Floor);
+            FloorSlab("Floor East", root, pool.xMax, floor.xMax, pool.yMin, pool.yMax, top, m.Floor);
 
             // The basin: a bottom under the hole and, below the floor slab, walls closing it in.
             float bottom = top - depth;
@@ -228,6 +229,13 @@ namespace BounJam.EditorTools
             float surface = top - waterBelowFloor;
             return WaterVolume("Water", root, new Vector3(pool.center.x, (bottom + surface) * 0.5f, pool.center.y),
                                new Vector3(pool.width, surface - bottom, pool.height), m);
+        }
+
+        /// <summary>Like <see cref="Floor"/>, spanning x0..x1 and z0..z1. Empty spans are skipped.</summary>
+        static void FloorSlab(string name, Transform parent, float x0, float x1, float z0, float z1, float top, Material material)
+        {
+            if (x1 - x0 < 0.001f || z1 - z0 < 0.001f) return;
+            Floor(name, parent, (x0 + x1) * 0.5f, (z0 + z1) * 0.5f, x1 - x0, z1 - z0, top, material);
         }
 
         /// <summary>A box spanning x0..x1 and z0..z1, <paramref name="thickness"/> thick under <paramref name="top"/>. Empty spans are skipped.</summary>
@@ -470,11 +478,11 @@ namespace BounJam.EditorTools
             motorSettings.FindProperty("groundMask").intValue = ~LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Triggers", "Ignore Raycast");
             motorSettings.ApplyModifiedPropertiesWithoutUndo();
 
-            // The skin mesh is rebuilt every frame in play mode; the saved mesh is only the round rest shape,
-            // so the blob is visible in the editor too.
+            // The skin mesh is rebuilt every frame in play mode; the saved mesh is only the rest shape (set with the
+            // eyes by ArtKit.AddBlobArt), so the blob is visible in the editor too.
             var skin = new GameObject("Skin") { layer = root.layer };
             skin.transform.SetParent(root.transform, false);
-            skin.AddComponent<MeshFilter>().sharedMesh = BuildRestPreviewMesh();
+            skin.AddComponent<MeshFilter>();
             skin.AddComponent<MeshRenderer>().sharedMaterial = material;
 
             var skinSim = root.AddComponent<BlobSkin>();
@@ -482,6 +490,7 @@ namespace BounJam.EditorTools
             skinSettings.FindProperty("skinFilter").objectReferenceValue = skin.GetComponent<MeshFilter>();
             skinSettings.FindProperty("collisionMask").intValue = LayerMask.GetMask("Default", "Environment", "Pushable", "Interactable");
             skinSettings.ApplyModifiedPropertiesWithoutUndo();
+            ArtKit.AddBlobArt(root);
 
             // Solid form: a convex collider that takes the frozen shape, with real friction.
             PhysicsMaterial solidPhysics = LoadOrCreate($"{MaterialsFolder}/Blob_Solid_Physics.asset", () => new PhysicsMaterial("Blob Solid")
@@ -523,6 +532,12 @@ namespace BounJam.EditorTools
                 PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
                 Debug.Log("[BounJam] Blob prefab: added water handling.");
             }
+            if (!root.TryGetComponent(out BlobEyes _))
+            {
+                ArtKit.AddBlobArt(root);
+                PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
+                Debug.Log("[BounJam] Blob prefab: added the modelled body and eyes.");
+            }
             PrefabUtility.UnloadPrefabContents(root);
         }
 
@@ -553,10 +568,8 @@ namespace BounJam.EditorTools
 
         static GameObject BuildShipPrefab(Material paper)
         {
-            Mesh mesh = null;
-            foreach (Object asset in AssetDatabase.LoadAllAssetsAtPath(ShipModelPath))
-                if (asset is Mesh found) mesh = found;
-            if (mesh == null) throw new System.InvalidOperationException($"No mesh in {ShipModelPath}; run Tools/Blender/make_paper_ship.py first.");
+            Mesh mesh = ArtKit.ShipMesh();
+            Mesh hullShape = ArtKit.ShipHullMesh();
 
             var root = new GameObject("PaperShip") { layer = LayerMask.NameToLayer("Ship") };
             var model = new GameObject("Model") { layer = root.layer };
@@ -564,29 +577,22 @@ namespace BounJam.EditorTools
             model.AddComponent<MeshFilter>().sharedMesh = mesh;
             model.AddComponent<MeshRenderer>().sharedMaterial = paper;
 
-            // The boat's length should run along Z; turn the model if the export came out sideways.
-            Bounds bounds = mesh.bounds;
-            if (bounds.size.x > bounds.size.z)
-            {
-                model.transform.localRotation = Quaternion.Euler(0f, 90f, 0f);
-                bounds.size = new Vector3(bounds.size.z, bounds.size.y, bounds.size.x);
-            }
-
             var body = root.AddComponent<Rigidbody>();
             body.mass = 0.25f;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             body.angularDamping = 0.5f;
 
-            // Hull plus a slim sail box, so low ceilings and overhangs can knock the ship off the blob.
-            const float hullHeight = 0.14f;
-            var hull = root.AddComponent<BoxCollider>();
-            hull.center = new Vector3(0f, bounds.min.y + hullHeight * 0.5f, 0f);
-            hull.size = new Vector3(bounds.size.x, hullHeight, bounds.size.z * 0.9f);
-            float sailHeight = bounds.max.y - (bounds.min.y + hullHeight);
+            // The modelled hull plus a slim box for the sail above it, so low ceilings and overhangs can knock the
+            // ship off the blob.
+            var hull = root.AddComponent<MeshCollider>();
+            hull.sharedMesh = hullShape;
+            hull.convex = true;
+            Bounds bounds = mesh.bounds, hullBounds = hullShape.bounds;
+            float sailBottom = hullBounds.min.y + hullBounds.size.y * 0.6f; // about the rim amidships
             var sail = root.AddComponent<BoxCollider>();
-            sail.center = new Vector3(0f, bounds.min.y + hullHeight + sailHeight * 0.5f, 0f);
-            sail.size = new Vector3(0.05f, sailHeight, bounds.size.z * 0.35f);
+            sail.center = new Vector3(0f, (sailBottom + bounds.max.y) * 0.5f, 0f);
+            sail.size = new Vector3(0.05f, bounds.max.y - sailBottom, bounds.size.z * 0.25f);
 
             root.AddComponent<ShipBuoyancy>();
             AddGroundGuard(root);
@@ -605,22 +611,30 @@ namespace BounJam.EditorTools
             settings.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        static Mesh BuildRestPreviewMesh()
+        /// <summary>The skin at rest on the floor, for the editor; <paramref name="restShape"/> as on <see cref="BlobSkin"/>.</summary>
+        internal static Mesh BuildRestPreviewMesh(Mesh restShape)
         {
-            // Same topology and smoothing as the runtime skin, so the editor preview matches play mode.
+            // Same topology, rest shape and smoothing as the runtime skin, so the editor preview matches play mode.
             IcoSphere.Build(2, out Vector3[] directions, out int[] triangles);
-            var coarse = new Vector3[directions.Length];
-            var restCenter = new Vector3(0f, BlobRadius - CoreRadius, 0f);
-            for (int i = 0; i < directions.Length; i++) coarse[i] = restCenter + directions[i] * BlobRadius;
+            Vector3[] coarse = BlobSkin.RestOffsets(restShape, directions, BlobRadius, out float halfHeight);
+            var restCenter = new Vector3(0f, halfHeight - CoreRadius, 0f);
+            for (int i = 0; i < coarse.Length; i++) coarse[i] += restCenter;
 
             LoopSubdivision smoothing = LoopSubdivision.Build(coarse.Length, triangles, 2);
             var vertices = new Vector3[smoothing.VertexCount];
             smoothing.Apply(coarse, vertices);
 
-            var mesh = new Mesh { name = "Blob Rest Preview", vertices = vertices, triangles = smoothing.Triangles };
+            // Updated in place, so the prefab's reference to it holds.
+            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(RestPreviewMeshPath);
+            bool created = mesh == null;
+            if (created) mesh = new Mesh { name = "Blob Rest Preview" };
+            mesh.Clear();
+            mesh.vertices = vertices;
+            mesh.triangles = smoothing.Triangles;
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-            AssetDatabase.CreateAsset(mesh, RestPreviewMeshPath);
+            if (created) AssetDatabase.CreateAsset(mesh, RestPreviewMeshPath);
+            else EditorUtility.SetDirty(mesh);
             return mesh;
         }
 

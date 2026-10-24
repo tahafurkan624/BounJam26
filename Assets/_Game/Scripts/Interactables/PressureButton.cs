@@ -17,6 +17,10 @@ namespace BounJam
         [SerializeField] Renderer capRenderer;
         [SerializeField] Material idleMaterial;
         [SerializeField] Material pressedMaterial;
+        [Tooltip("Optional ring that lights up while pressed.")]
+        [SerializeField] Renderer lightRenderer;
+        [SerializeField] Material lightOffMaterial;
+        [SerializeField] Material lightOnMaterial;
 
         [Tooltip("Total mass standing on the button needed to press it, kg. " +
                  "Liquid blob 1, paper ship 0.25, solid blob 5, crates 3-4.")]
@@ -76,6 +80,7 @@ namespace BounJam
         {
             if (cap != null) cap.localPosition = capRestPosition + Vector3.down * (IsPressed ? pressDepth : 0f);
             if (capRenderer != null) capRenderer.sharedMaterial = IsPressed ? pressedMaterial : idleMaterial;
+            if (lightRenderer != null) lightRenderer.sharedMaterial = IsPressed ? lightOnMaterial : lightOffMaterial;
         }
 
         void OnDrawGizmos()

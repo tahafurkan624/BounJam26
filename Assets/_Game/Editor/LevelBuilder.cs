@@ -110,7 +110,7 @@ namespace BounJam.EditorTools
         {
             Floor("Ground", level, 0f, 0f, 12f, 16f, 0f, m.Floor);
             const float deck = 2f;
-            Box("Upper Deck", level, new Vector3(0f, deck - 3f, 11f), new Vector3(8f, 6f, 6f), m.Structure);
+            ArtKit.Platform("Upper Deck", level, new Vector3(0f, deck - 3f, 11f), new Vector3(8f, 6f, 6f), m.Structure);
 
             PressureButton button = Button("Button", level, new Vector3(-3.5f, 0f, -2.5f), m);
             Crate("Crate", level, new Vector3(-3.5f, 0.5f, 1.5f), 1f, 4f, m);

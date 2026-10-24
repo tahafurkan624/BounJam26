@@ -70,7 +70,7 @@ namespace BounJam.EditorTools
 
             // 15 degree ramp up to a 2 m platform with open edges to fall off.
             Transform ramp = Group("Ramp And Platform", level);
-            Box("Platform", ramp, new Vector3(11f, 1f, 9f), new Vector3(10f, 2f, 8f), m.Structure);
+            ArtKit.Platform("Platform", ramp, new Vector3(11f, 1f, 9f), new Vector3(10f, 2f, 8f), m.Structure);
             float rampRun = 2f / Mathf.Tan(15f * Mathf.Deg2Rad);
             Ramp("Ramp", ramp, 11f, 5f - rampRun, 0f, 2f, 4f, 15f, m.Structure);
 

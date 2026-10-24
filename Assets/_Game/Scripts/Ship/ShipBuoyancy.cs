@@ -16,9 +16,9 @@ namespace BounJam
         [Tooltip("Points on the hull, in local space, that test for and receive buoyancy.")]
         [SerializeField] Vector3[] floatPoints =
         {
-            new Vector3(0.07f, 0.01f, 0.18f), new Vector3(-0.07f, 0.01f, 0.18f),
-            new Vector3(0.07f, 0.01f, -0.18f), new Vector3(-0.07f, 0.01f, -0.18f),
-            new Vector3(0f, 0.06f, 0.28f), new Vector3(0f, 0.06f, -0.28f),
+            new Vector3(0.075f, 0.01f, 0.25f), new Vector3(-0.075f, 0.01f, 0.25f),
+            new Vector3(0.075f, 0.01f, -0.25f), new Vector3(-0.075f, 0.01f, -0.25f),
+            new Vector3(0f, 0.06f, 0.38f), new Vector3(0f, 0.06f, -0.38f),
         };
         [Tooltip("Local centre of mass; low keeps the ship upright.")]
         [SerializeField] Vector3 centerOfMass = new Vector3(0f, 0.04f, 0f);
