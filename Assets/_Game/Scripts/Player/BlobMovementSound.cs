@@ -10,8 +10,11 @@ namespace BounJam
     /// it holds by itself. Slowing below the lower stop speed, and staying there for the stop delay, sets State to 1: the
     /// event plays its ending and stops on its own. Only speed along the ground counts, so a fall or a straight-up jump
     /// doesn't slosh. Moving again before an ending is over stops that ending and starts a fresh event, so a blob never
-    /// plays more than one at a time. A piece a pipe carries, or a dissolved one, counts as not moving. The event is 3D
-    /// and follows the blob; each piece of a cut blob plays its own.
+    /// plays more than one at a time. A piece a pipe carries, a dissolved one or the crystal (see
+    /// <see cref="BlobIceSound"/>) counts as not moving. The event is 3D and follows the blob; each piece of a cut blob
+    /// plays its own.
+    /// Melting back into jelly starts the event too. If the blob sets off within the melt play time, that same sound goes
+    /// on as its movement sound, uncut and not started again; if it stays put, the sound is cut short and fades out.
     /// </summary>
     [RequireComponent(typeof(BlobMotor))]
     public class BlobMovementSound : MonoBehaviour
@@ -31,20 +34,31 @@ namespace BounJam
         [Tooltip("The speed has to stay below the stop speed this long before the ending plays, so a bump that stalls " +
                  "the blob for a moment doesn't cut the loop, s.")]
         [SerializeField] float stopDelay = 0.1f;
+        [Tooltip("How long the sound melting starts plays when the blob doesn't set off, s. Setting off before then " +
+                 "keeps it going as the movement sound.")]
+        [SerializeField] float meltPlayTime = 0.5f;
+        [Tooltip("How long the cut melt sound takes to fade out, s.")]
+        [SerializeField] float meltFadeOut = 0.2f;
 
         Rigidbody body;
         BlobMotor motor;
+        BlobForm form;
         BlobSplit split;
         BlobWater water;
         EventInstance instance;
         EventInstance ending; // the last instance let go of, which may still be playing its ending
+        EventInstance fading; // a cut melt sound on its way out
         bool moving;
+        bool melting; // the instance was started by melting, and the blob hasn't set off since
         float slowTime; // how long the speed has been below the stop speed while moving, s
+        float meltLeft; // how long the melt sound plays on before it's cut, unless the blob sets off, s
+        float fadeLeft; // how long the cut melt sound has left to fade out, s
 
         void Awake()
         {
             body = GetComponent<Rigidbody>();
             motor = GetComponent<BlobMotor>();
+            form = GetComponent<BlobForm>();
             split = GetComponent<BlobSplit>();
             water = GetComponent<BlobWater>();
             if (movementEvent.IsNull)
@@ -54,13 +68,37 @@ namespace BounJam
             }
         }
 
+        void OnEnable()
+        {
+            if (form != null) form.FormChanged += OnFormChanged;
+        }
+
         void Update()
         {
+            if (fading.isValid())
+            {
+                fadeLeft -= Time.deltaTime;
+                if (fadeLeft > 0f) fading.setVolume(fadeLeft / meltFadeOut);
+                else StopFading();
+            }
+
             bool carried = (split != null && split.InPipe) || (water != null && water.IsDissolved);
-            float speed = carried ? 0f : Vector3.ProjectOnPlane(motor.Velocity, motor.GroundNormal).magnitude;
+            // The crystal has its own sounds (BlobIceSound).
+            bool solid = form != null && form.IsSolid;
+            float speed = carried || solid ? 0f : Vector3.ProjectOnPlane(motor.Velocity, motor.GroundNormal).magnitude;
             if (!moving)
             {
                 if (speed > startSpeed) StartMoving();
+                return;
+            }
+            if (melting)
+            {
+                if (speed > startSpeed)
+                {
+                    melting = false;
+                    slowTime = 0f;
+                }
+                else if ((meltLeft -= Time.deltaTime) <= 0f) CutMelt();
                 return;
             }
             if (speed >= stopSpeed) slowTime = 0f;
@@ -70,7 +108,18 @@ namespace BounJam
         // Disabled or destroyed mid-move (a level restart, a half flowing back into the other): end it the usual way.
         void OnDisable()
         {
+            if (form != null) form.FormChanged -= OnFormChanged;
             if (moving) StopMoving();
+            StopFading();
+        }
+
+        // Already sloshing (melted again before the last slosh ended): that sound just goes on.
+        void OnFormChanged(bool solid)
+        {
+            if (solid || moving) return;
+            StartMoving();
+            melting = true;
+            meltLeft = meltPlayTime;
         }
 
         void StartMoving()
@@ -90,9 +139,28 @@ namespace BounJam
         void StopMoving()
         {
             moving = false;
+            melting = false;
             instance.setParameterByName(stateParameter, StateStopping);
             instance.release();
             ending = instance;
+        }
+
+        /// <summary>Melted and stayed put: the melt sound fades out quickly instead of playing its ending.</summary>
+        void CutMelt()
+        {
+            moving = false;
+            melting = false;
+            StopFading();
+            fading = instance;
+            fadeLeft = meltFadeOut;
+        }
+
+        void StopFading()
+        {
+            if (!fading.isValid()) return;
+            fading.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
+            fading.release();
+            fading.clearHandle();
         }
     }
 }

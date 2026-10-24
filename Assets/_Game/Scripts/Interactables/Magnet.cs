@@ -9,7 +9,8 @@ namespace BounJam
     /// <see cref="BlobMagnetism"/>). Pressing one of its on-buttons switches it on, and it stays on until one of its
     /// off-buttons is pressed. The field comes out of the front face (this object's position and forward): it reaches
     /// up to its range, only in front of the face and only where nothing solid is in between, and holds the blob a
-    /// little in front of the face. The face glows while it's on, and a beam shows while it pulls.
+    /// little in front of the face. The face glows while it's on, and a beam shows while it pulls. It plays event:/Magnet
+    /// while it draws the blob in, fading out once the blob is held at the hold point or let go.
     /// </summary>
     public class Magnet : MonoBehaviour
     {
@@ -43,8 +44,14 @@ namespace BounJam
 
         // The sight line starts just in front of the face, clear of the magnet's own housing.
         const float SightStart = 0.05f;
+        // The pull sound plays while the blob is farther than this from the hold point, m...
+        const float PullingDistance = 0.15f;
+        // ...and fades out over this long once it's there, s.
+        const float SoundFadeOut = 0.3f;
 
         static readonly List<Magnet> all = new List<Magnet>();
+
+        LoopingSound pullSound;
 
         /// <summary>Every magnet in the loaded scenes, on or off.</summary>
         public static IReadOnlyList<Magnet> All => all;
@@ -68,6 +75,16 @@ namespace BounJam
         {
             IsActive = startActive;
             ApplyLook();
+            pullSound = new LoopingSound(GameSounds.Magnet.Reference, transform, SoundFadeOut);
+        }
+
+        void Update()
+        {
+            bool pulling = IsActive && Pulling != null
+                           && (Pulling.position - HoldPoint).sqrMagnitude > PullingDistance * PullingDistance;
+            if (pulling && !pullSound.IsPlaying) pullSound.Play();
+            else if (!pulling) pullSound.Stop();
+            pullSound.Tick(Time.deltaTime);
         }
 
         void OnEnable()
@@ -80,6 +97,7 @@ namespace BounJam
         void OnDisable()
         {
             all.Remove(this);
+            pullSound?.Release();
             Subscribe(onButtons, OnOnButton, false);
             Subscribe(offButtons, OnOffButton, false);
         }

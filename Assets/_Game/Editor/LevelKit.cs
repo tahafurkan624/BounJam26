@@ -24,10 +24,10 @@ namespace BounJam.EditorTools
         const string GridShaderName = "BounJam/Greybox Grid";
 
         // Small enough to fit a one-tile (0.5 m) corridor with room to spare.
-        public const float CoreRadius = 0.2f;
-        const float BlobRadius = 0.5f;
+        public const float CoreRadius = 0.16f;
+        const float BlobRadius = 0.4f;
         // Dropped from just above the top of the jelly standing still, so it settles onto it as it swells up.
-        public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 1.05f, 0f);
+        public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 0.84f, 0f);
         static readonly Vector3 CameraOffset = new Vector3(0f, 8f, -6.5f);
         const float CameraFieldOfView = 40f;
         public const string CameraGroupName = "CM Blob Group";
@@ -648,6 +648,7 @@ namespace BounJam.EditorTools
 
             root.AddComponent<ShipBuoyancy>();
             root.AddComponent<ShipSplash>();
+            SoundKit.AddShipParts(root);
             AddGroundGuard(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, ShipPrefabPath);

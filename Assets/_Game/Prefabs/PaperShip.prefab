@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 7878003550436116097}
   - component: {fileID: 1438651386763661507}
   - component: {fileID: 4183729561048273615}
+  - component: {fileID: 127843173435331597}
   m_Layer: 9
   m_Name: PaperShip
   m_TagString: Untagged
@@ -84,7 +85,7 @@ BoxCollider:
   m_Enabled: 1
   serializedVersion: 3
   m_Size: {x: 0.25825518, y: 0.14105463, z: 0.20192057}
-  m_Center: {x: -0.040627585, y: 0.43214, z: -0.11996028}
+  m_Center: {x: -0.040627584, y: 0.43214, z: -0.11996028}
 --- !u!114 &7878003550436116097
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -146,7 +147,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c3553a428c54cde41ae81377b9ba85ec, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipSplash
   impactMinSpeed: 1.5
   impactDroplets: 4
@@ -165,6 +166,36 @@ MonoBehaviour:
   dropletLifetime: 1.5
   hullMargin: 0.03
   surfaceOffset: 0.02
+--- !u!114 &127843173435331597
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 344895281899961177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c5dc6082b1d5ede4e8a0d7f3801e16c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipSounds
+  splashEvent:
+    Guid:
+      Data1: 865693147
+      Data2: 1110478497
+      Data3: 451495335
+      Data4: 176298283
+    Path: event:/Water_Splash
+  minTimeOut: 0.15
+  minAirTime: 0.25
+  dropEvent:
+    Guid:
+      Data1: -831967039
+      Data2: 1201018837
+      Data3: -356287358
+      Data4: 803907070
+    Path: event:/Ship_Drop
+  minHitSpeed: 1
+  hitGap: 0.25
 --- !u!1 &6899353863910381285
 GameObject:
   m_ObjectHideFlags: 0

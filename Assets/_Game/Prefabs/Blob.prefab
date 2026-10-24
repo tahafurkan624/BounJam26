@@ -26,6 +26,8 @@ GameObject:
   - component: {fileID: 942091480777860770}
   - component: {fileID: 2433984640001264320}
   - component: {fileID: 775918541435872094}
+  - component: {fileID: 4536000459180954674}
+  - component: {fileID: 3565212882080446199}
   m_Layer: 7
   m_Name: Blob
   m_TagString: Untagged
@@ -96,7 +98,7 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.2
+  m_Radius: 0.16
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &4975069014646752162
 MonoBehaviour:
@@ -170,7 +172,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobSkin
   skinFilter: {fileID: 205545502730918417}
   restShape: {fileID: -791839099448564899, guid: 71c5727a64c2dba7fb1ad65fc444349a, type: 3}
-  radius: 0.5
+  radius: 0.4
   subdivisions: 3
   renderSmoothing: 1
   stiffness: 260
@@ -252,6 +254,9 @@ MonoBehaviour:
   fitTolerance: 0.03
   maxPieces: 16
   minPieceSize: 0.06
+  dropShare: 0.5
+  carveLook: 1
+  carveMargin: 0.05
   overlapMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -336,8 +341,8 @@ MonoBehaviour:
   leftEye: {fileID: 8199743485157044125}
   rightEye: {fileID: 1420962728991504524}
   spread: 17
-  raise: 0.03
-  sink: 0.012
+  raise: 0.024
+  sink: 0.0096
   turnRate: 25
 --- !u!114 &5969995101131588584
 MonoBehaviour:
@@ -446,6 +451,83 @@ MonoBehaviour:
   startSpeed: 0.5
   stopSpeed: 0.2
   stopDelay: 0.1
+  meltPlayTime: 0.5
+  meltFadeOut: 0.2
+--- !u!114 &4536000459180954674
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c616d3f0fc8a99241abdef58def181cf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobSounds
+  jumpEvent:
+    Guid:
+      Data1: 264135622
+      Data2: 1321209022
+      Data3: 1916444840
+      Data4: -352229361
+    Path: event:/Water_Jump
+  freezeEvent:
+    Guid:
+      Data1: -987460103
+      Data2: 1108507736
+      Data3: 238260141
+      Data4: -31544241
+    Path: event:/Water_Freeze
+  splitEvent:
+    Guid:
+      Data1: 435770625
+      Data2: 1131936769
+      Data3: -2048270657
+      Data4: 1816278658
+    Path: event:/Water_Split
+  mergeEvent:
+    Guid:
+      Data1: 1552147238
+      Data2: 1223771000
+      Data3: -475883131
+      Data4: 1889253514
+    Path: event:/Water_Merge
+  splitFadeOut: 0.3
+--- !u!114 &3565212882080446199
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 70f94eb34b7519f4592c4dc9aba2d98d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobIceSound
+  iceMovementEvent:
+    Guid:
+      Data1: 1916338407
+      Data2: 1233700902
+      Data3: 2111631250
+      Data4: 251803488
+    Path: event:/Ice_Movement
+  iceOnWaterEvent:
+    Guid:
+      Data1: -1825777478
+      Data2: 1159492556
+      Data3: 679169193
+      Data4: -2111590386
+    Path: event:/Ice_On_Water
+  startSpeed: 0.3
+  stopSpeed: 0.15
+  stopDelay: 0.1
+  turnSpeed: 1
+  settledTurnSpeed: 0.2
+  settleTime: 0.1
+  rotateSoundLength: 3
+  fadeOut: 0.2
 --- !u!1 &336757933177050986
 GameObject:
   m_ObjectHideFlags: 0
@@ -5421,8 +5503,8 @@ Transform:
   m_GameObject: {fileID: 2205512165441432685}
   serializedVersion: 2
   m_LocalRotation: {x: -0.008853371, y: 0.9876157, z: 0.06051889, w: 0.1444793}
-  m_LocalPosition: {x: 0.2718988, y: 0.406193, z: -0.8894429}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: 0.21751904, y: 0.3249544, z: -0.71155435}
+  m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8319107224240828589}
@@ -5512,8 +5594,8 @@ Transform:
   m_GameObject: {fileID: 7623246675538324474}
   serializedVersion: 2
   m_LocalRotation: {x: -0.008789225, y: -0.9876741, z: -0.06019172, w: 0.1442207}
-  m_LocalPosition: {x: -0.2721348, y: 0.4062009, z: -0.8894854}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalPosition: {x: -0.21770784, y: 0.3249607, z: -0.7115883}
+  m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 8319107224240828589}

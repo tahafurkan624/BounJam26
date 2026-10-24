@@ -10,6 +10,8 @@ namespace BounJam
     /// through). An optional hold time keeps it active after the buttons are released, which allows timing puzzles:
     /// press as a solid, melt, rush through as liquid. In cycle mode it shuttles back and forth while powered, like an
     /// elevator you board at either end.
+    /// Each trip starts with a sound: a gate or door plays event:/Doors once as it starts opening or closing; a lift plays
+    /// event:/Elevator as it sets off, faded out when it arrives (the sound is longer than a trip).
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class ButtonMover : MonoBehaviour
@@ -37,10 +39,15 @@ namespace BounJam
 
         // Extra look-ahead beyond one step, m.
         const float SafetyMargin = 0.05f;
+        // How long a lift's sound takes to fade out once it arrives, s.
+        const float ElevatorFadeOut = 0.4f;
 
         Rigidbody body;
         BoxCollider box;
         Vector3 restPosition;
+        // Where the current trip goes; a new target starts a new trip, and its sound.
+        Vector3 tripTarget;
+        LoopingSound elevator;
         float activeUntil = float.NegativeInfinity;
         bool headingOut = true;
         float pauseUntil = float.NegativeInfinity;
@@ -59,7 +66,13 @@ namespace BounJam
             body.isKinematic = true;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             restPosition = body.position;
+            tripTarget = restPosition;
+            if (carriesRiders) elevator = new LoopingSound(GameSounds.Elevator.Reference, transform, ElevatorFadeOut, body);
         }
+
+        void OnDisable() => elevator?.Release();
+
+        void Update() => elevator?.Tick(Time.deltaTime);
 
         void FixedUpdate()
         {
@@ -79,12 +92,30 @@ namespace BounJam
                 }
             }
 
+            if (target != tripTarget)
+            {
+                tripTarget = target;
+                StartTrip();
+            }
+
             Vector3 next = Vector3.MoveTowards(body.position, target, speed * Time.fixedDeltaTime);
             if (next != body.position && IsBlocked(next - body.position)) next = body.position;
             if (next != body.position) body.MovePosition(next);
+            else if (next == target) elevator?.Stop();
 
             float travel = activeOffset.magnitude;
             Progress = travel > 0f ? Vector3.Distance(next, restPosition) / travel : 0f;
+        }
+
+        void StartTrip()
+        {
+            if (elevator == null) GameSounds.Doors.PlayAt(body.position);
+            else
+            {
+                // A lift sent back mid-trip starts its sound over.
+                elevator.Release();
+                elevator.Play();
+            }
         }
 
         /// <summary>Is a body this mover mustn't push sitting where its next step would go?</summary>

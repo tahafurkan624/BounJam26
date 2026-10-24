@@ -10,7 +10,8 @@ namespace BounJam
     /// <summary>
     /// Runs one level: shows its title, completes it when the ship is delivered to the dock, fails it when the ship
     /// or the blob is lost (fell below the kill height, or a hazard reported it), and moves on by itself: the next
-    /// level after a short celebration, or a restart after a short pause. Restart (R) reloads at any time.
+    /// level after a short celebration, or a restart after a short pause. Restart (R) reloads at any time. Completing it
+    /// plays event:/Level on its Success label, losing it on its Fail label.
     /// </summary>
     public class LevelManager : MonoBehaviour
     {
@@ -92,6 +93,7 @@ namespace BounJam
         {
             if (Current != State.Playing) return;
             Current = State.Failed;
+            GameSounds.Level.PlayAt(SoundPoint(), GameSounds.LevelParameter, GameSounds.LevelFail);
             if (hud != null) hud.ShowMessage(reason);
             Ended?.Invoke(State.Failed, reason);
             StartCoroutine(LoadAfter(SceneManager.GetActiveScene().name, failDelay));
@@ -109,10 +111,22 @@ namespace BounJam
         {
             if (Current != State.Playing || string.IsNullOrEmpty(nextScene)) return;
             Current = State.Complete;
+            GameSounds.Level.PlayAt(SoundPoint(), GameSounds.LevelParameter, GameSounds.LevelSuccess);
             string message = isFinalLevel ? "All ships delivered!\nThanks for playing" : "Delivered!";
             if (hud != null) hud.ShowMessage(message);
             Ended?.Invoke(State.Complete, message);
             if (!HoldOnComplete) StartCoroutine(LoadAfter(nextScene, isFinalLevel ? completeDelay * 2f : completeDelay));
+        }
+
+        /// <summary>
+        /// Where the level's sound plays from: the blob's pieces, which the sounds fade with distance from (see
+        /// FmodListenerSetup), so it's heard in full wherever the level ends.
+        /// </summary>
+        static Vector3 SoundPoint()
+        {
+            var pieces = FindAnyObjectByType<BlobCameraGroup>();
+            if (pieces != null) return pieces.transform.position;
+            return Camera.main != null ? Camera.main.transform.position : Vector3.zero;
         }
 
         void OnRestartPressed(InputAction.CallbackContext _) => Restart();

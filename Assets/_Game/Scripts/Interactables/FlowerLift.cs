@@ -100,9 +100,13 @@ namespace BounJam
             if (graph.IsValid()) graph.Destroy();
         }
 
-        /// <summary>Starts it growing: from a sprout, or (<paramref name="sprout"/> false) as a bud already waiting at the bottom.</summary>
+        /// <summary>
+        /// Starts it growing: from a sprout, playing event:/Tree once, or (<paramref name="sprout"/> false) as a bud
+        /// already waiting at the bottom.
+        /// </summary>
         public void Grow(bool sprout)
         {
+            if (sprout) GameSounds.Tree.PlayAt(transform.position);
             Enter(sprout ? Stage.Sprouting : Stage.Bottom);
             previousStage = stage;
             previousTime = time;

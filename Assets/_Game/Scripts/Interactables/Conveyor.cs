@@ -12,6 +12,8 @@ namespace BounJam
     /// belt turns anticlockwise: forward along the +X side, back along the -X side; a negative speed reverses it.
     /// Every part is built from the settings when the game starts, so one prefab makes conveyors of any length; in the
     /// editor the gizmo shows the outline.
+    /// It hums with event:/Conveyor_Belt the whole time, started again each time it ends, from the point on the belt
+    /// nearest the blob, so the blob hears it only once it's within the hearing distance of the belt.
     /// </summary>
     [DefaultExecutionOrder(-20)]
     public class Conveyor : MonoBehaviour
@@ -22,6 +24,12 @@ namespace BounJam
         [SerializeField] float speed = 1.2f;
         [Tooltip("Roughly how far apart the spikes are along the belt, m. Rounded so they're evenly spread.")]
         [SerializeField] float spikeSpacing = 1.8f;
+
+        [Header("Sound")]
+        [Tooltip("The belt's hum is at full volume within this distance of the belt, m...")]
+        [SerializeField] float soundFullDistance = 1.5f;
+        [Tooltip("...and fades out to nothing at this distance, m.")]
+        [SerializeField] float soundHearingDistance = 7f;
 
         [Header("Spike Glow")]
         [Tooltip("Spike glow while it's inside the jelly: freezing now grabs it.")]
@@ -73,6 +81,10 @@ namespace BounJam
         // exactly like the spikes' interpolated rigidbodies.
         float previousTravel;
         float travel;
+        // Kept at the point on the belt nearest the blob; the hum plays from it.
+        Transform soundPoint;
+        Transform listener;
+        LoopingSound hum;
 
         /// <summary>Every conveyor in the loaded scenes.</summary>
         public static IReadOnlyList<Conveyor> All => all;
@@ -93,11 +105,43 @@ namespace BounJam
             BuildBelt();
             MoveSpikes(true);
             PlaceBelt(travel);
+            soundPoint = new GameObject("Belt Sound").transform;
+            soundPoint.SetParent(transform, false);
+            soundPoint.localPosition = Vector3.up * (BeltHeight * 0.5f);
+            hum = new LoopingSound(GameSounds.ConveyorBelt.Reference, soundPoint, 0f);
         }
 
-        void OnEnable() => all.Add(this);
+        void Start()
+        {
+            // What the sounds fade with distance from: the blob's pieces (see FmodListenerSetup).
+            var pieces = FindAnyObjectByType<BlobCameraGroup>();
+            listener = pieces != null ? pieces.transform : Camera.main != null ? Camera.main.transform : null;
+        }
 
-        void OnDisable() => all.Remove(this);
+        void OnEnable()
+        {
+            all.Add(this);
+            if (hum == null) return;
+            hum.Play();
+            hum.Instance.setProperty(FMOD.Studio.EVENT_PROPERTY.MINIMUM_DISTANCE, soundFullDistance);
+            hum.Instance.setProperty(FMOD.Studio.EVENT_PROPERTY.MAXIMUM_DISTANCE, soundHearingDistance);
+        }
+
+        void OnDisable()
+        {
+            all.Remove(this);
+            hum?.Release();
+        }
+
+        void Update()
+        {
+            if (listener != null)
+            {
+                float along = Mathf.Clamp(transform.InverseTransformPoint(listener.position).z, -length * 0.5f, length * 0.5f);
+                soundPoint.localPosition = new Vector3(0f, BeltHeight * 0.5f, along);
+            }
+            hum.Tick(Time.deltaTime);
+        }
 
         void OnDestroy()
         {

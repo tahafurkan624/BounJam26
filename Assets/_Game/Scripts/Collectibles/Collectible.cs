@@ -101,7 +101,10 @@ namespace BounJam
             IsEngulfed = (value || (sameStep && IsEngulfed)) && !IsCollected;
         }
 
-        /// <summary>Called by the blob that froze around it. It stops waiting; the blob moves it from now on.</summary>
+        /// <summary>
+        /// Called by the blob that froze around it. It stops waiting; the blob moves it from now on. Plays
+        /// event:/Item_Collect, labelled for a seed or a pocket magnet.
+        /// </summary>
         public void Collect()
         {
             if (IsCollected) return;
@@ -109,7 +112,17 @@ namespace BounJam
             IsEngulfed = false;
             waiting.Remove(this);
             ShowMarker(false);
+            PlayCollectSound();
             Collected?.Invoke(this);
+        }
+
+        void PlayCollectSound()
+        {
+            string label = TryGetComponent(out IronBall _) ? GameSounds.ItemMagnet
+                : TryGetComponent(out Seed _) ? GameSounds.ItemSeed
+                : null;
+            if (label != null) GameSounds.ItemCollect.PlayAt(transform.position, GameSounds.ItemParameter, label);
+            else GameSounds.ItemCollect.PlayAt(transform.position);
         }
 
         /// <summary>Called by the crystal when it melts: the item falls from where it is and waits to be caught again.</summary>

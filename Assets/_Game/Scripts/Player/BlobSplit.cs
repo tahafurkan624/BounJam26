@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -52,6 +53,13 @@ namespace BounJam
         bool Free => !InPipe && !absorbed && skin.IsReady && !(water != null && water.IsDissolved);
         bool CanMerge => isHalf && Free && !form.IsSolid;
 
+        /// <summary>Raised when a pipe takes this piece in (only ever the whole blob; the second half is born inside).</summary>
+        public event Action EnteredPipe;
+        /// <summary>Raised when a pipe lets this piece out again.</summary>
+        public event Action LeftPipe;
+        /// <summary>Raised on the half that goes on as the whole blob, as the other half flows into it.</summary>
+        public event Action Merged;
+
         /// <summary>True while the ship floats on this piece.</summary>
         public bool CarriesShip => ship != null && ship.isActiveAndEnabled && ship.IsFloating
                                    && skin.TrySampleSurface(ship.Body.worldCenterOfMass, out _);
@@ -98,6 +106,7 @@ namespace BounJam
             core.enabled = false;
             body.useGravity = false;
             body.linearVelocity = Vector3.zero;
+            EnteredPipe?.Invoke();
         }
 
         /// <summary>Out of the pipe, moving at <paramref name="velocity"/>, in the player's hands again.</summary>
@@ -109,6 +118,7 @@ namespace BounJam
             body.linearVelocity = velocity;
             foreach (Behaviour behaviour in steering) behaviour.enabled = true;
             InPipe = false;
+            LeftPipe?.Invoke();
         }
 
         /// <summary>Hides the skin and everything else drawn as part of the blob, without touching their own switches.</summary>
@@ -176,6 +186,7 @@ namespace BounJam
             isHalf = false;
             name = wholeName;
             size.Grow((size.Volume + other.size.Volume) / size.Volume, swellTime);
+            Merged?.Invoke();
         }
     }
 }

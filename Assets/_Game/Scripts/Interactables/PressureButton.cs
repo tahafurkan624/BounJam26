@@ -8,7 +8,8 @@ namespace BounJam
     /// A floor plate pressed by weight. Every physics step it adds up the mass of the bodies standing on it, so
     /// heavy things press it and light ones don't: the solid blob (5 kg) and crates (3-4 kg) do, the liquid blob
     /// (1 kg) and the paper ship don't. Changing form while standing on it presses or releases it straight away.
-    /// The plate has no collider, so nothing snags on its edge when sliding or pushing onto it.
+    /// The plate has no collider, so nothing snags on its edge when sliding or pushing onto it. Pressing it plays
+    /// event:/Buttons once; letting go is silent.
     /// </summary>
     public class PressureButton : MonoBehaviour
     {
@@ -106,6 +107,7 @@ namespace BounJam
             // Kick the squash: flatten on press, stretch on release; the spring brings it back.
             squashVelocity += (pressed ? -1f : 1f) * squashStrength * 2f * Mathf.PI * springFrequency;
             ApplyLook();
+            if (pressed) GameSounds.Buttons.PlayAt(transform.position);
             PressedChanged?.Invoke(pressed);
         }
 

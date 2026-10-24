@@ -73,10 +73,14 @@ namespace BounJam
             }
         }
 
-        /// <summary>The water goes into the blob now, for good; the drop's model just flies in after it.</summary>
+        /// <summary>
+        /// The water goes into the blob now, for good, with event:/Item_Collect labelled for water; the drop's model just
+        /// flies in after it.
+        /// </summary>
         void Soak(BlobSize piece)
         {
             soaked = true;
+            GameSounds.ItemCollect.PlayAt(transform.position, GameSounds.ItemParameter, GameSounds.ItemWater);
             drinker = piece;
             piece.Soak(volume);
             target = piece.Skin.ShapeCenter;
