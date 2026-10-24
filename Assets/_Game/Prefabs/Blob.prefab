@@ -142,7 +142,7 @@ MonoBehaviour:
   coyoteTime: 0.1
   groundMask:
     serializedVersion: 2
-    m_Bits: 4294958715
+    m_Bits: 7795
   groundProbeDistance: 0.2
   maxGroundAngle: 50
   groundStick: 15
@@ -178,6 +178,9 @@ MonoBehaviour:
   surfaceTension: 40
   pressure: 300
   gravitySag: 0.3
+  standingSize: 1.6
+  swellTime: 0.5
+  shrinkTime: 0.2
   flattenAtFullSpeed: 0.6
   stretchAtFullSpeed: 0.25
   sustainedStretch: 1
@@ -192,11 +195,15 @@ MonoBehaviour:
   idleBreathRate: 0.8
   drapeDistance: 0.6
   drapeStrength: 0.9
+  edgeRaggedness: 0.12
+  edgeBumpSize: 0.3
+  edgeFlow: 0.25
   collisionMask:
     serializedVersion: 2
     m_Bits: 3137
   pointRadius: 0.03
   contactFriction: 0.05
+  wrapThickness: 0.1
 --- !u!64 &2383094784220977415
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -242,6 +249,9 @@ MonoBehaviour:
   hardenTime: 0.12
   meltTime: 0.3
   freezePop: 0.06
+  fitTolerance: 0.03
+  maxPieces: 16
+  minPieceSize: 0.06
   overlapMask:
     serializedVersion: 2
     m_Bits: 4294967295

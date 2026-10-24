@@ -68,12 +68,31 @@ namespace BounJam
         BlobForm blobForm;
         BlobMotor blobMotor;
         float dryAngularDamping;
+        Contact[] contacts = new Contact[0];
+
+        /// <summary>A float point and the jelly at it, as the buoyancy last saw them (before that step's forces).</summary>
+        public struct Contact
+        {
+            /// <summary>In the jelly or clinging just above it; nothing else is set when not.</summary>
+            public bool Touching;
+            /// <summary>The float point in world space.</summary>
+            public Vector3 Point;
+            /// <summary>How far below the jelly's surface, m; negative while clinging above it.</summary>
+            public float Depth;
+            /// <summary>The hull's velocity through the jelly there, m/s.</summary>
+            public Vector3 Relative;
+            public BlobSkin.SurfaceSample Surface;
+        }
 
         /// <summary>True while at least one float point is in or clinging to the jelly.</summary>
         public bool IsFloating { get; private set; }
         /// <summary>Seconds since the ship last touched the jelly.</summary>
         public float TimeSinceFloating { get; private set; }
         public Rigidbody Body => body;
+        /// <summary>The liquid the ship floats on, or last floated on.</summary>
+        public BlobSkin Blob => blob;
+        /// <summary>Each float point's contact with the jelly in the last physics step, in the order of the float points.</summary>
+        public IReadOnlyList<Contact> Contacts => contacts;
 
         void Awake()
         {
@@ -183,12 +202,14 @@ namespace BounJam
 
             int touching = 0;
             Vector3 horizontal = Vector3.zero;
+            if (contacts.Length != floatPoints.Length) contacts = new Contact[floatPoints.Length];
             if (blob != null)
             {
                 float share = 1f / floatPoints.Length;
-                foreach (Vector3 local in floatPoints)
-                    if (ApplyFloatPoint(transform.TransformPoint(local), share, ref horizontal)) touching++;
+                for (int i = 0; i < floatPoints.Length; i++)
+                    if (ApplyFloatPoint(transform.TransformPoint(floatPoints[i]), share, ref horizontal, out contacts[i])) touching++;
             }
+            else System.Array.Clear(contacts, 0, contacts.Length);
 
             IsFloating = touching > 0;
             TimeSinceFloating = IsFloating ? 0f : TimeSinceFloating + Time.fixedDeltaTime;
@@ -209,15 +230,18 @@ namespace BounJam
 
         /// <summary>
         /// Applies vertical buoyancy (or clinging) at one float point and adds its share of the horizontal
-        /// carrying forces to <paramref name="horizontal"/>. Returns whether the point is touching the jelly.
+        /// carrying forces to <paramref name="horizontal"/>. Returns whether the point is touching the jelly, and
+        /// records what it found in <paramref name="contact"/>.
         /// </summary>
-        bool ApplyFloatPoint(Vector3 point, float share, ref Vector3 horizontal)
+        bool ApplyFloatPoint(Vector3 point, float share, ref Vector3 horizontal, out Contact contact)
         {
+            contact = default;
             if (!blob.TrySampleSurface(point, out BlobSkin.SurfaceSample surface)) return false;
             float depth = surface.Height - point.y;
             if (depth <= -adhesionDistance) return false;
 
             Vector3 relative = body.GetPointVelocity(point) - surface.Velocity;
+            contact = new Contact { Touching = true, Point = point, Depth = depth, Relative = relative, Surface = surface };
             Vector3 relativeFlat = new Vector3(relative.x, 0f, relative.z);
             float vertical;
             float drag;

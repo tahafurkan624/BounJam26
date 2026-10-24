@@ -7,9 +7,9 @@ namespace BounJam
     /// <summary>
     /// Plays the FMOD movement event (event:/Water_Movement) while the player moves the blob. Pushing the Move input
     /// starts the event with State at 0: its start, then a loop it holds by itself. Letting go sets State to 1: the event
-    /// plays its ending and stops on its own. Moving again before an ending is over starts a fresh event, so the ending
-    /// isn't cut off. A piece a pipe carries, or a dissolved one, counts as not moving. The event is 3D and follows the
-    /// blob; each piece of a cut blob plays its own.
+    /// plays its ending and stops on its own. Moving again before an ending is over stops that ending and starts a fresh
+    /// event, so a blob never plays more than one at a time. A piece a pipe carries, or a dissolved one, counts as not
+    /// moving. The event is 3D and follows the blob; each piece of a cut blob plays its own.
     /// </summary>
     [RequireComponent(typeof(BlobMotor))]
     public class BlobMovementSound : MonoBehaviour
@@ -30,6 +30,7 @@ namespace BounJam
         BlobSplit split;
         BlobWater water;
         EventInstance instance;
+        EventInstance ending; // the last instance let go of, which may still be playing its ending
         bool moving;
 
         void Reset() => input = GetComponent<PlayerInputReader>();
@@ -65,6 +66,9 @@ namespace BounJam
         void StartMoving()
         {
             moving = true;
+            // Cut the previous ending short so quick stop-and-go doesn't pile up instances. Fade-out keeps any release
+            // the event has in FMOD Studio; without one it stops right away.
+            if (ending.isValid()) ending.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
             instance = RuntimeManager.CreateInstance(movementEvent);
             RuntimeManager.AttachInstanceToGameObject(instance, gameObject, body);
             instance.setParameterByName(stateParameter, StateMoving);
@@ -77,6 +81,7 @@ namespace BounJam
             moving = false;
             instance.setParameterByName(stateParameter, StateStopping);
             instance.release();
+            ending = instance;
         }
     }
 }

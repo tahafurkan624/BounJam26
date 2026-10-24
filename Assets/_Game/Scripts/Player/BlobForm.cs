@@ -54,6 +54,11 @@ namespace BounJam
         [SerializeField] int maxPieces = 16;
         [Tooltip("Thinnest piece a cut may leave, m.")]
         [SerializeField] float minPieceSize = 0.06f;
+        [Tooltip("A piece a cut parts from the rest is dropped when at least this share of the shape inside it is " +
+                 "the obstacle. Closed over a post, the jelly holds the post: the column it stands in is mostly post, " +
+                 "with only slivers of jelly in its corners (a round post).")]
+        [Range(0f, 1f)]
+        [SerializeField] float dropShare = 0.5f;
 
         [Header("Overlaps")]
         [Tooltip("What the new crystal is checked against when it appears. Where it still cuts into something (a ship " +
@@ -70,6 +75,8 @@ namespace BounJam
         const float MinThickness = 0.005f;
         // A point this close to an obstacle's surface counts as inside it, m.
         const float InsideTolerance = 0.001f;
+        // Points along each side of the grid a piece is sampled at, to see whether it's in an obstacle and how much of it is.
+        const int ShareSamples = 5;
         static readonly int SolidProperty = Shader.PropertyToID("_Solid");
 
         BlobMotor motor;
@@ -300,7 +307,8 @@ namespace BounJam
         /// stands in the post or the edge. So the hull is the whole crystal only as long as it doesn't cut into the
         /// level. Otherwise the piece that cuts in deepest is cut in two where <see cref="FrozenShape.ChooseCut"/>
         /// says, and again, until every piece fits or there are as many pieces as allowed. Each piece is the part of
-        /// the shape inside its box, with only the dents inside the box filled in. Whatever still cuts in,
+        /// the shape inside its box, with only the dents inside the box filled in; a part that is mostly the obstacle
+        /// is left out, so where the jelly closed over a post, the crystal sets around it. Whatever still cuts in,
         /// <see cref="ResolveOverlaps"/> deals with.
         /// </summary>
         void BuildCrystal(Vector3[] frozen)
@@ -337,8 +345,9 @@ namespace BounJam
                 upper.SetMinMax(upperMin, upper.max);
                 shape.Clip(lower, lowerPoints);
                 shape.Clip(upper, upperPoints);
-                // A half inside the obstacle is only the skin's triangles cutting through it: no jelly to keep.
-                bool keepLower = !IsInside(lowerPoints, deepest.Obstacle), keepUpper = !IsInside(upperPoints, deepest.Obstacle);
+                // A half that is mostly the obstacle is the skin's triangles closing over it: hardly any jelly to keep.
+                bool keepLower = !IsMostlyObstacle(lowerPoints, deepest.Obstacle);
+                bool keepUpper = !IsMostlyObstacle(upperPoints, deepest.Obstacle);
                 if ((keepLower && !CanBuild(lowerPoints, out _)) || (keepUpper && !CanBuild(upperPoints, out _))
                     || (!keepLower && !keepUpper))
                 {
@@ -399,26 +408,49 @@ namespace BounJam
         }
 
         /// <summary>
-        /// Is this part of the shape (its corners, in the blob's local space) all inside the obstacle? Pressed around a
-        /// corner, the jelly hugs both sides of it and the frozen skin's triangles between them cut right through the
-        /// corner; once the cuts have parted that bit from the rest, there's no jelly in it to keep. Only convex
-        /// colliders can say what's inside them.
+        /// Is this part of the shape (its corners, in the blob's local space) mostly the obstacle? The skin is one
+        /// closed surface, so it can't leave a hole: closed over a post, its triangles run through the post and the
+        /// shape holds it, and pressed around a corner, the triangles between both sides cut right through the corner.
+        /// Once the cuts have parted that bit from the rest, the jelly in it is slivers at most (in the corners of a
+        /// round post's column) and it isn't kept. Looks at a grid over the part: of the points inside the shape, the
+        /// share inside the obstacle. A part too thin for the grid is mostly the obstacle when all its corners are in
+        /// it. Only convex colliders can say what's inside them.
         /// </summary>
-        bool IsInside(List<Vector3> points, Collider obstacle)
+        bool IsMostlyObstacle(List<Vector3> points, Collider obstacle)
         {
-            if (!(obstacle is BoxCollider || obstacle is SphereCollider || obstacle is CapsuleCollider
-                  || obstacle is MeshCollider { convex: true }))
-                return false;
+            if (!CanTellInside(obstacle)) return false;
+            if (points.Count == 0) return true;
             GetPose(obstacle, out Vector3 position, out Quaternion rotation);
-            foreach (Vector3 point in points)
+
+            var extent = new Bounds(points[0], Vector3.zero);
+            foreach (Vector3 point in points) extent.Encapsulate(point);
+            int inShape = 0, inObstacle = 0;
+            for (int x = 0; x < ShareSamples; x++)
+            for (int y = 0; y < ShareSamples; y++)
+            for (int z = 0; z < ShareSamples; z++)
             {
-                // At the moment of freezing the blob has no rotation. A point inside comes back as itself.
-                Vector3 world = body.position + point;
-                if ((Physics.ClosestPoint(world, obstacle, position, rotation) - world).sqrMagnitude > InsideTolerance * InsideTolerance)
-                    return false;
+                // The middles of the grid's cells, so no point lies on the part's sides.
+                var cell = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) / ShareSamples;
+                Vector3 point = extent.min + Vector3.Scale(cell, extent.size);
+                if (!shape.Contains(point)) continue;
+                inShape++;
+                // At the moment of freezing the blob has no rotation.
+                if (Inside(body.position + point, obstacle, position, rotation)) inObstacle++;
             }
+            if (inShape > 0) return inObstacle >= inShape * dropShare;
+
+            foreach (Vector3 point in points)
+                if (!Inside(body.position + point, obstacle, position, rotation)) return false;
             return true;
         }
+
+        /// <summary>Only convex colliders can say what's inside them.</summary>
+        static bool CanTellInside(Collider other)
+            => other is BoxCollider || other is SphereCollider || other is CapsuleCollider || other is MeshCollider { convex: true };
+
+        /// <summary>Is the world point inside the collider, which is at that pose? A point inside comes back as itself.</summary>
+        static bool Inside(Vector3 point, Collider other, Vector3 position, Quaternion rotation)
+            => (Physics.ClosestPoint(point, other, position, rotation) - point).sqrMagnitude <= InsideTolerance * InsideTolerance;
 
         /// <summary>How far the piece cuts into what the liquid flows around, and what it cuts into deepest.</summary>
         float MeasureDepth(Piece piece, out Collider obstacle)
@@ -434,15 +466,44 @@ namespace BounJam
                 Collider other = nearby[i];
                 if (other.attachedRigidbody == body) continue;
                 GetPose(other, out Vector3 otherPosition, out Quaternion otherRotation);
-                if (Physics.ComputePenetration(piece.Collider, position, rotation, other, otherPosition, otherRotation,
-                                               out _, out float distance)
-                    && distance > deepest)
+                if (!Physics.ComputePenetration(piece.Collider, position, rotation, other, otherPosition, otherRotation,
+                                                out _, out float distance))
+                    distance = SampledDepth(piece, other, otherPosition, otherRotation);
+                if (distance > deepest)
                 {
                     deepest = distance;
                     obstacle = other;
                 }
             }
             return deepest;
+        }
+
+        /// <summary>
+        /// How far the piece cuts into <paramref name="other"/>, for when the physics can't say: deep inside a round
+        /// post (the jelly closed over it), <see cref="Physics.ComputePenetration"/> finds no way out and reports no
+        /// overlap at all. Looks at a grid over where their bounds meet; a point inside both means they overlap, and
+        /// the depth is taken as the thinnest side of where the bounds meet. 0 when no point is inside both.
+        /// </summary>
+        float SampledDepth(Piece piece, Collider other, Vector3 otherPosition, Quaternion otherRotation)
+        {
+            if (!CanTellInside(other)) return 0f;
+            // At the moment of freezing the blob has no rotation, so local bounds are world bounds moved.
+            Vector3 position = body.position;
+            Bounds otherBounds = other.bounds;
+            Vector3 min = Vector3.Max(position + piece.Extent.min, otherBounds.min);
+            Vector3 size = Vector3.Min(position + piece.Extent.max, otherBounds.max) - min;
+            if (size.x <= 0f || size.y <= 0f || size.z <= 0f) return 0f;
+
+            for (int x = 0; x < ShareSamples; x++)
+            for (int y = 0; y < ShareSamples; y++)
+            for (int z = 0; z < ShareSamples; z++)
+            {
+                var cell = new Vector3(x + 0.5f, y + 0.5f, z + 0.5f) / ShareSamples;
+                Vector3 point = min + Vector3.Scale(cell, size);
+                if (Inside(point, other, otherPosition, otherRotation) && Inside(point, piece.Collider, position, body.rotation))
+                    return Mathf.Min(size.x, Mathf.Min(size.y, size.z));
+            }
+            return 0f;
         }
 
         /// <summary>One more collider for the crystal, set up like the first.</summary>

@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 31693631431984764}
   - component: {fileID: 7878003550436116097}
   - component: {fileID: 1438651386763661507}
+  - component: {fileID: 4183729561048273615}
   m_Layer: 9
   m_Name: PaperShip
   m_TagString: Untagged
@@ -135,6 +136,18 @@ MonoBehaviour:
     m_Bits: 65
   tolerance: 0.15
   memory: 1
+--- !u!114 &4183729561048273615
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 344895281899961177}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3553a428c54cde41ae81377b9ba85ec, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipSplash
 --- !u!1 &6899353863910381285
 GameObject:
   m_ObjectHideFlags: 0

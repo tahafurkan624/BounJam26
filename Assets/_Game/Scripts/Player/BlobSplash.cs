@@ -157,6 +157,8 @@ namespace BounJam
         Kind lastKind;
         int lastCount;
 
+        /// <summary>The droplet particles this blob throws its water into; others splashing its water (the ship) use them too.</summary>
+        public ParticleSystem Droplets => droplets;
         /// <summary>Droplets thrown since the blob started (for testing).</summary>
         public int Thrown { get; private set; }
         /// <summary>What threw the last droplets and how many, e.g. "Landing 10" (for testing).</summary>
@@ -324,7 +326,13 @@ namespace BounJam
             lastKind = kind;
             lastCount = count;
             // A drip off the back is no upheaval.
-            if (kind != Kind.Drip) stirred = Mathf.Max(stirred, Mathf.Lerp(surfaceSplash.x, surfaceSplash.y, hardness));
+            if (kind != Kind.Drip) Stir(hardness);
+        }
+
+        /// <summary>Stirs up the water's surface like a sharp move this hard (0..1), for something splashing into it.</summary>
+        public void Stir(float hardness)
+        {
+            stirred = Mathf.Max(stirred, Mathf.Lerp(surfaceSplash.x, surfaceSplash.y, hardness));
         }
 
         void LateUpdate()

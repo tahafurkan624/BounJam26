@@ -647,6 +647,7 @@ namespace BounJam.EditorTools
             funnelBox.size = funnel.size;
 
             root.AddComponent<ShipBuoyancy>();
+            root.AddComponent<ShipSplash>();
             AddGroundGuard(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, ShipPrefabPath);
