@@ -16,6 +16,8 @@ namespace BounJam
     {
         [Tooltip("Spikes whose base is closer than this to the core are checked against the jelly, m.")]
         [SerializeField] float checkRadius = 1.5f;
+        [Tooltip("A spike this far outside the jelly still counts as inside it: it glows and freezing grabs it, m.")]
+        [SerializeField] float grabMargin = 0.35f;
         [Tooltip("Fastest the hold moves the crystal, m/s: catches it up after something knocked it off its place, " +
                  "without flinging it.")]
         [SerializeField] float maxFollowSpeed = 10f;
@@ -72,12 +74,13 @@ namespace BounJam
 
             candidate = null;
             if (form.IsSolid || !skin.IsReady) return;
-            float best = checkRadius * checkRadius;
+            float reach = checkRadius + grabMargin;
+            float best = reach * reach;
             foreach (Conveyor conveyor in Conveyor.All)
             foreach (ConveyorSpike spike in conveyor.Spikes)
             {
                 float distance = (spike.PointAlong(0f) - body.position).sqrMagnitude;
-                if (distance > checkRadius * checkRadius || !IsInside(spike)) continue;
+                if (distance > reach * reach || !IsInside(spike)) continue;
                 spike.ReportEngulfed();
                 if (distance > best) continue;
                 best = distance;
@@ -88,7 +91,12 @@ namespace BounJam
         bool IsInside(ConveyorSpike spike)
         {
             foreach (float share in Samples)
-                if (!skin.Contains(spike.PointAlong(share))) return false;
+            {
+                // Tested a margin closer to the core, so a rod just outside the jelly still counts.
+                Vector3 point = spike.PointAlong(share);
+                point += Vector3.ClampMagnitude(body.position - point, grabMargin);
+                if (!skin.Contains(point)) return false;
+            }
             return true;
         }
 

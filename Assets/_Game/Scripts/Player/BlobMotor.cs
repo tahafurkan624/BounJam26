@@ -37,6 +37,10 @@ namespace BounJam
         [Tooltip("Fraction of acceleration and braking available while airborne.")]
         [Range(0f, 1f)]
         [SerializeField] float airControl = 0.3f;
+        [Tooltip("Share of gravity pulling the blob down while it falls through the air, so it drops slower than it " +
+                 "rises. Not while something carries it or it swims.")]
+        [Range(0f, 1f)]
+        [SerializeField] float fallGravity = 0.6f;
 
         [Header("Jump")]
         [Tooltip("How high a jump from flat ground lifts the blob, m. Liquid form only.")]
@@ -230,6 +234,7 @@ namespace BounJam
             if (isSolid)
             {
                 MoveSolid();
+                SoftenFall();
                 return;
             }
 
@@ -270,6 +275,7 @@ namespace BounJam
 
             if (IsBridging) HoldBridge();
             else if (IsGrounded) body.AddForce(-GroundNormal * groundStick, ForceMode.Acceleration);
+            else SoftenFall();
 
             // Pressing into a low edge: flow up it instead of relying on a bounce off the corner.
             if (stepContact && wish.sqrMagnitude > 0.01f && Vector3.Dot(wish.normalized, -stepNormal) > 0.3f)
@@ -294,6 +300,13 @@ namespace BounJam
             stepsSinceJump = 0;
             ClearGround();
             Jumped?.Invoke(velocity.y - before);
+        }
+
+        /// <summary>Takes part of gravity's pull off the blob while it drops through the air.</summary>
+        void SoftenFall()
+        {
+            if (IsGrounded || IsSwimming || !body.useGravity || body.linearVelocity.y >= 0f) return;
+            body.AddForce(-Physics.gravity * (1f - fallGravity), ForceMode.Acceleration);
         }
 
         void ClearGround()
