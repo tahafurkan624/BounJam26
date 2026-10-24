@@ -6,16 +6,19 @@ namespace BounJam.EditorTools
 {
     /// <summary>
     /// The modelled art from ArtSource/Blender (exported to Assets/_Project/Art/Models) and the level kit pieces built
-    /// from it: the blob's balloon rest shape and eyes, the paper ship, push blocks, pressure buttons and the 2 m
-    /// platform blocks that cover floors. Materials are made here from the Blender colours (the FBX files carry none)
-    /// and, like the rest of the kit's, only created when missing.
+    /// from it: the blob's balloon rest shape and eyes, the tugboat, the magnet and pocket magnet, push blocks,
+    /// pressure buttons and the 2 m platform blocks that cover floors. Materials are made here from the Blender colours
+    /// or the baked texture sets (the FBX files carry none) and, like the rest of the kit's, only created when missing.
     /// </summary>
     public static class ArtKit
     {
         public const string ModelsFolder = "Assets/_Project/Art/Models";
+        const string PropTexturesFolder = "Assets/_Project/Art/Textures/Props";
         const string BlobBodyPath = ModelsFolder + "/SM_BlobBase.fbx";
         const string BlobEyePath = ModelsFolder + "/SM_BlobEye.fbx";
-        const string ShipPath = ModelsFolder + "/SM_PaperShip.fbx";
+        const string ShipPath = ModelsFolder + "/SM_TugBoat.fbx";
+        const string MagnetPath = ModelsFolder + "/SM_Magnet.fbx";
+        const string PocketMagnetPath = ModelsFolder + "/SM_PocketMagnet.fbx";
         const string PushBlockPath = ModelsFolder + "/SM_PushBlock.fbx";
         const string ButtonPath = ModelsFolder + "/SM_PressureButton.fbx";
         const string PlatformPath = ModelsFolder + "/SM_Platform_2x2.fbx";
@@ -88,11 +91,52 @@ namespace BounJam.EditorTools
 
         // ---------------------------------------------------------------- Ship
 
-        /// <summary>The paper ship's visible mesh (pivot at the bottom of the hull, bow along +Z).</summary>
-        public static Mesh ShipMesh() => Part(ShipPath, "SM_PaperShip").sharedMesh;
+        /// <summary>The tugboat's visible mesh (pivot at the bottom of the hull, bow along -Z).</summary>
+        public static Mesh ShipMesh() => Part(ShipPath, "SM_TugBoat").sharedMesh;
 
-        /// <summary>Convex hull of the ship's hull, without the sail.</summary>
-        public static Mesh ShipHullMesh() => Part(ShipPath, "SM_PaperShip_Collider").sharedMesh;
+        /// <summary>Convex hull of the tugboat's hull and cabin, without the funnel.</summary>
+        public static Mesh ShipHullMesh() => Part(ShipPath, "SM_TugBoat_Collider").sharedMesh;
+
+        public static Material ShipMaterial() => Baked("TugBoat", "TugBoat");
+
+        // ---------------------------------------------------------------- Magnets
+
+        /// <summary>
+        /// The magnet's housing in the space of its face: the face centre at the origin pointing along +Z, the housing
+        /// behind it and its base plate below.
+        /// </summary>
+        public static Bounds MagnetBounds() => Part(MagnetPath, "SM_Magnet_Housing").sharedMesh.bounds;
+
+        /// <summary>
+        /// Builds the modelled magnet under <paramref name="frame"/> (the face centre, facing +Z): the housing, solid
+        /// behind the face so the field starts clear of it, and the face disc, returned so the magnet can light it up.
+        /// </summary>
+        public static MeshRenderer DressMagnet(Transform frame, Material housingMaterial, Material faceMaterial)
+        {
+            Mesh housingMesh = Part(MagnetPath, "SM_Magnet_Housing").sharedMesh;
+            GameObject housing = Model("Housing", frame, housingMesh, housingMaterial);
+            housing.layer = LayerMask.NameToLayer("Environment");
+            Bounds bounds = housingMesh.bounds;
+            var solid = housing.AddComponent<BoxCollider>();
+            solid.center = new Vector3(bounds.center.x, bounds.center.y, bounds.min.z * 0.5f);
+            solid.size = new Vector3(bounds.size.x, bounds.size.y, -bounds.min.z);
+
+            GameObject face = Model("Face", frame, Part(MagnetPath, "SM_Magnet_Face").sharedMesh, faceMaterial);
+            return face.GetComponent<MeshRenderer>();
+        }
+
+        /// <summary>
+        /// Adds the pocket magnet model to a collectible: lying flat, centred on <paramref name="item"/> with its
+        /// underside <paramref name="radius"/> below it, on the floor.
+        /// </summary>
+        public static MeshRenderer PocketMagnet(Transform item, float radius, Material material)
+        {
+            Mesh mesh = Part(PocketMagnetPath, "SM_PocketMagnet").sharedMesh;
+            GameObject model = Model("Model", item, mesh, material);
+            Bounds bounds = mesh.bounds;
+            model.transform.localPosition = -new Vector3(bounds.center.x, bounds.min.y + radius, bounds.center.z);
+            return model.GetComponent<MeshRenderer>();
+        }
 
         // ---------------------------------------------------------------- Level pieces
 
@@ -270,5 +314,46 @@ namespace BounJam.EditorTools
                 material.enableInstancing = true;
                 return material;
             });
+
+        /// <summary>
+        /// A lit material wearing a baked texture set from the props folder: T_<paramref name="set"/>_Albedo, _Normal
+        /// and _MetallicSmoothness (smoothness in its alpha). With an <paramref name="emission"/> colour, emission stays
+        /// switched on; black still lets renderers glow through their own property blocks.
+        /// </summary>
+        public static Material Baked(string name, string set, Color? emission = null)
+            => LevelKit.LoadOrCreate($"{LevelKit.MaterialsFolder}/{name}.mat", () =>
+            {
+                var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                material.SetColor("_BaseColor", Color.white);
+                material.SetTexture("_BaseMap", PropTexture(set, "Albedo", TextureImporterType.Default, true));
+                material.SetTexture("_BumpMap", PropTexture(set, "Normal", TextureImporterType.NormalMap, false));
+                material.EnableKeyword("_NORMALMAP");
+                // Smoothness from the map's alpha, scaled by _Smoothness.
+                material.SetTexture("_MetallicGlossMap", PropTexture(set, "MetallicSmoothness", TextureImporterType.Default, false));
+                material.EnableKeyword("_METALLICSPECGLOSSMAP");
+                material.SetFloat("_Smoothness", 1f);
+                if (emission is Color glow)
+                {
+                    material.EnableKeyword("_EMISSION");
+                    material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                    material.SetColor("_EmissionColor", glow);
+                }
+                material.enableInstancing = true;
+                return material;
+            });
+
+        static Texture2D PropTexture(string set, string map, TextureImporterType type, bool sRGB)
+        {
+            string path = $"{PropTexturesFolder}/T_{set}_{map}.png";
+            if (AssetImporter.GetAtPath(path) is TextureImporter importer
+                && (importer.textureType != type || importer.sRGBTexture != sRGB))
+            {
+                importer.textureType = type;
+                importer.sRGBTexture = sRGB;
+                importer.SaveAndReimport();
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(path)
+                   ?? throw new System.InvalidOperationException($"No texture {path}.");
+        }
     }
 }

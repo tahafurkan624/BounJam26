@@ -35,7 +35,7 @@ namespace BounJam.EditorTools
 
         public struct Palette
         {
-            public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob, Paper;
+            public Material Floor, Wall, Structure, Obstacle, Crate, Grate, Blob;
             public Material Door, Lift, ButtonIdle, ButtonPressed, HotPlate, DockPad, DockPost, Water;
             public PhysicsMaterial CratePhysics;
         }
@@ -50,7 +50,6 @@ namespace BounJam.EditorTools
             Grate = GridMaterial("Greybox_Grate", new Color(0.30f, 0.55f, 0.95f), new Color(0.12f, 0.25f, 0.55f), 0.2f),
             // The jelly shader's property defaults are the tuned look; the material only needs creating.
             Blob = LoadOrCreate($"{MaterialsFolder}/Blob_Jelly.mat", () => new Material(Shader.Find("BounJam/Jelly"))),
-            Paper = LitMaterial("PaperShip_Paper", new Color(0.93f, 0.91f, 0.84f), 0.15f, Color.black),
             Door = GridMaterial("Greybox_Door", new Color(0.75f, 0.30f, 0.25f), new Color(0.55f, 0.20f, 0.18f), 0.5f),
             Lift = GridMaterial("Greybox_Lift", new Color(0.95f, 0.80f, 0.30f), new Color(0.75f, 0.60f, 0.20f), 0.5f),
             ButtonIdle = LitMaterial("Button_Idle", new Color(0.90f, 0.30f, 0.20f), 0.4f, Color.black),
@@ -316,7 +315,7 @@ namespace BounJam.EditorTools
             blob.transform.position = blobSpawn + Vector3.up * CoreRadius;
 
             GameObject shipPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ShipPrefabPath);
-            if (shipPrefab == null) shipPrefab = BuildShipPrefab(m.Paper);
+            if (shipPrefab == null) shipPrefab = BuildShipPrefab();
             var ship = (GameObject)PrefabUtility.InstantiatePrefab(shipPrefab);
             ship.transform.position = shipSpawn;
             return (blob, ship.GetComponent<ShipBuoyancy>());
@@ -463,7 +462,7 @@ namespace BounJam.EditorTools
         [MenuItem("BounJam/Rebuild Ship Prefab")]
         public static void RebuildShipPrefab()
         {
-            BuildShipPrefab(CreatePalette().Paper);
+            BuildShipPrefab();
             AssetDatabase.SaveAssets();
             Debug.Log("[BounJam] Ship prefab rebuilt.");
         }
@@ -588,16 +587,18 @@ namespace BounJam.EditorTools
             return prefab;
         }
 
-        static GameObject BuildShipPrefab(Material paper)
+        static GameObject BuildShipPrefab()
         {
             Mesh mesh = ArtKit.ShipMesh();
             Mesh hullShape = ArtKit.ShipHullMesh();
 
             var root = new GameObject("PaperShip") { layer = LayerMask.NameToLayer("Ship") };
+            // The tugboat is modelled bow to -Z; turned round, it heads into the level.
             var model = new GameObject("Model") { layer = root.layer };
             model.transform.SetParent(root.transform, false);
+            model.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
             model.AddComponent<MeshFilter>().sharedMesh = mesh;
-            model.AddComponent<MeshRenderer>().sharedMaterial = paper;
+            model.AddComponent<MeshRenderer>().sharedMaterial = ArtKit.ShipMaterial();
 
             var body = root.AddComponent<Rigidbody>();
             body.mass = 0.25f;
@@ -605,16 +606,25 @@ namespace BounJam.EditorTools
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             body.angularDamping = 0.5f;
 
-            // The modelled hull plus a slim box for the sail above it, so low ceilings and overhangs can knock the
-            // ship off the blob.
-            var hull = root.AddComponent<MeshCollider>();
+            // The modelled hull and cabin (turned with the model) plus a box round the funnel and horn above them, so
+            // low ceilings and overhangs can knock the ship off the blob.
+            var hull = model.AddComponent<MeshCollider>();
             hull.sharedMesh = hullShape;
             hull.convex = true;
-            Bounds bounds = mesh.bounds, hullBounds = hullShape.bounds;
-            float sailBottom = hullBounds.min.y + hullBounds.size.y * 0.6f; // about the rim amidships
-            var sail = root.AddComponent<BoxCollider>();
-            sail.center = new Vector3(0f, (sailBottom + bounds.max.y) * 0.5f, 0f);
-            sail.size = new Vector3(0.05f, bounds.max.y - sailBottom, bounds.size.z * 0.25f);
+            float cabinTop = hullShape.bounds.max.y;
+            Bounds funnel = default;
+            bool found = false;
+            foreach (Vector3 vertex in mesh.vertices)
+            {
+                if (vertex.y <= cabinTop) continue;
+                Vector3 point = model.transform.localRotation * vertex;
+                if (found) funnel.Encapsulate(point);
+                else funnel = new Bounds(point, Vector3.zero);
+                found = true;
+            }
+            var funnelBox = root.AddComponent<BoxCollider>();
+            funnelBox.center = funnel.center;
+            funnelBox.size = funnel.size;
 
             root.AddComponent<ShipBuoyancy>();
             AddGroundGuard(root);
