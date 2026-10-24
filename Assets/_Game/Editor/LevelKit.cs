@@ -29,6 +29,9 @@ namespace BounJam.EditorTools
         public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 0.5f, 0f);
         static readonly Vector3 CameraOffset = new Vector3(0f, 8f, -6.5f);
         const float CameraFieldOfView = 40f;
+        public const string CameraGroupName = "CM Blob Group";
+        // Room the camera keeps around each piece of the blob, m.
+        const float CameraPieceRadius = 1f;
 
         public struct Palette
         {
@@ -326,9 +329,17 @@ namespace BounJam.EditorTools
             if (!main.TryGetComponent(out CinemachineBrain _)) main.gameObject.AddComponent<CinemachineBrain>();
             main.GetUniversalAdditionalCameraData().renderPostProcessing = true;
 
+            // The camera follows the blob's pieces as a group: the whole blob, or both halves once a piercer pipe has
+            // cut it, kept in step with them by BlobCameraGroup.
+            var pieces = new GameObject(CameraGroupName);
+            pieces.transform.position = target.position;
+            var group = pieces.AddComponent<CinemachineTargetGroup>();
+            group.AddMember(target, 1f, CameraPieceRadius);
+            pieces.AddComponent<BlobCameraGroup>();
+
             var rig = new GameObject("CM FollowCam");
             var vcam = rig.AddComponent<CinemachineCamera>();
-            vcam.Follow = target;
+            vcam.Follow = group.transform;
             vcam.Lens.FieldOfView = CameraFieldOfView;
 
             // World-space offset and no rotation control: the camera keeps one fixed angle and just slides along.
@@ -336,6 +347,14 @@ namespace BounJam.EditorTools
             follow.FollowOffset = CameraOffset;
             follow.TrackerSettings.BindingMode = BindingMode.WorldSpace;
             follow.TrackerSettings.PositionDamping = new Vector3(0.4f, 0.3f, 0.4f);
+
+            // Pulls back along the view when the halves are far apart, never in closer than the usual offset
+            // (despite its tooltip, a negative dolly moves the camera back).
+            var framing = rig.AddComponent<CinemachineGroupFraming>();
+            framing.SizeAdjustment = CinemachineGroupFraming.SizeAdjustmentModes.DollyOnly;
+            framing.DollyRange = new Vector2(-15f, 0f);
+            framing.FramingSize = 0.7f;
+            framing.Damping = 0.5f;
 
             float pitch = Mathf.Atan2(CameraOffset.y, -CameraOffset.z) * Mathf.Rad2Deg;
             Vector3 position = target.position + CameraOffset;
@@ -515,6 +534,7 @@ namespace BounJam.EditorTools
             formSettings.ApplyModifiedPropertiesWithoutUndo();
             AddBlobWater(root);
             MagnetKit.AddBlobParts(root);
+            PipeKit.AddBlobParts(root);
             AddGroundGuard(root);
             SplashKit.AddBlobParts(root);
 

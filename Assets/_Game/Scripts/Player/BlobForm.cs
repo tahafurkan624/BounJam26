@@ -186,6 +186,14 @@ namespace BounJam
             FormChanged?.Invoke(false);
         }
 
+        /// <summary>Multiplies the liquid and solid masses, for a blob that was cut in half or grew back whole.</summary>
+        public void ScaleMass(float factor)
+        {
+            liquidMass *= factor;
+            solidMass *= factor;
+            body.mass = IsSolid ? solidMass : liquidMass;
+        }
+
         /// <summary>
         /// The crystal is the convex hull of the jelly, so where the jelly was wrapped around something (a crate's
         /// corner, a ship being scooped up) it cuts into it. Left alone, the physics would shove the bodies apart

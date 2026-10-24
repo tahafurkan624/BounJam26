@@ -36,6 +36,9 @@ namespace BounJam
             colliders = GetComponentsInChildren<Collider>(true);
         }
 
+        // Switched back on somewhere else (out of a pipe): the floor it remembers may not be the one under it now.
+        void OnEnable() => lastGround = null;
+
         void FixedUpdate()
         {
             Vector3 center = body.worldCenterOfMass;

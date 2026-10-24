@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -59,7 +60,17 @@ namespace BounJam
         {
             if (Current != State.Playing) return;
             if (ship != null && ship.transform.position.y < killHeight) Fail("The ship was lost!");
-            else if (blob != null && blob.position.y < killHeight) Fail("You fell!");
+            else if (BlobFell()) Fail("You fell!");
+        }
+
+        /// <summary>Did the blob, or either half of it once a piercer pipe has cut it, fall below the kill height?</summary>
+        bool BlobFell()
+        {
+            IReadOnlyList<BlobSplit> pieces = BlobSplit.All;
+            if (pieces.Count == 0) return blob != null && blob.position.y < killHeight;
+            for (int i = 0; i < pieces.Count; i++)
+                if (pieces[i].transform.position.y < killHeight) return true;
+            return false;
         }
 
         /// <summary>Ends the level as lost (hazards call this) and restarts it after a short pause.</summary>

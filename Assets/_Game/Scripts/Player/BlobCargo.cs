@@ -119,6 +119,18 @@ namespace BounJam
             }
         }
 
+        /// <summary>Takes over everything another blob carries (two halves flowing back together), from where it is now.</summary>
+        public void TakeOver(BlobCargo other)
+        {
+            foreach (Item item in other.carried)
+            {
+                item.Offset = item.Transform.position - transform.position;
+                item.OffsetVelocity = Vector3.zero;
+                carried.Add(item);
+            }
+            other.carried.Clear();
+        }
+
         void Catch(Collectible collectible)
         {
             collectible.Collect();

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BounJam
@@ -6,12 +7,13 @@ namespace BounJam
     /// Floats the ship on the liquid blob. Each float point on the hull that is below the jelly surface is pushed up
     /// in proportion to its depth (with damping), and dragged toward the jelly's own velocity, which is what carries
     /// the ship along. A gentle pull toward the blob's top centre keeps it from wandering off, while a little downhill
-    /// push on sloped surfaces lets it slide off if the blob is jerked around too hard.
+    /// push on sloped surfaces lets it slide off if the blob is jerked around too hard. Once a piercer pipe has cut the
+    /// blob in two, the ship floats on whichever half it's on.
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class ShipBuoyancy : MonoBehaviour
     {
-        [Tooltip("The liquid the ship floats on. Found automatically when empty.")]
+        [Tooltip("The liquid the ship starts on. Found automatically when empty.")]
         [SerializeField] BlobSkin blob;
         [Tooltip("Points on the hull, in local space, that test for and receive buoyancy.")]
         [SerializeField] Vector3[] floatPoints =
@@ -88,16 +90,44 @@ namespace BounJam
             }
         }
 
-        void OnEnable()
+        void OnEnable() => Subscribe(true);
+
+        void OnDisable() => Subscribe(false);
+
+        void Subscribe(bool on)
         {
-            if (blobForm != null) blobForm.FormChanged += OnBlobFormChanged;
-            if (blobMotor != null) blobMotor.Jumped += OnBlobJumped;
+            // A half that flowed into the other is gone; there's nothing to unsubscribe from.
+            if (blobForm != null)
+            {
+                if (on) blobForm.FormChanged += OnBlobFormChanged;
+                else blobForm.FormChanged -= OnBlobFormChanged;
+            }
+            if (blobMotor != null)
+            {
+                if (on) blobMotor.Jumped += OnBlobJumped;
+                else blobMotor.Jumped -= OnBlobJumped;
+            }
         }
 
-        void OnDisable()
+        /// <summary>
+        /// With the blob in pieces, float on whichever one is under the hull: while the ship isn't touching its own
+        /// piece (or that piece flowed into the other half), it takes the first piece whose jelly is below it.
+        /// </summary>
+        void FollowPieceUnder()
         {
-            if (blobForm != null) blobForm.FormChanged -= OnBlobFormChanged;
-            if (blobMotor != null) blobMotor.Jumped -= OnBlobJumped;
+            if (IsFloating && blob != null) return;
+            IReadOnlyList<BlobSplit> pieces = BlobSplit.All;
+            for (int i = 0; i < pieces.Count; i++)
+            {
+                BlobSkin skin = pieces[i].Skin;
+                if (skin == blob || !skin.TrySampleSurface(body.worldCenterOfMass, out _)) continue;
+                Subscribe(false);
+                blob = skin;
+                blobForm = skin.GetComponent<BlobForm>();
+                blobMotor = skin.GetComponent<BlobMotor>();
+                Subscribe(true);
+                return;
+            }
         }
 
         /// <summary>
@@ -148,6 +178,7 @@ namespace BounJam
 
         void FixedUpdate()
         {
+            FollowPieceUnder();
             if (IsFloating && blobMotor != null && !blobMotor.IsGrounded) LimitAirborneRise();
 
             int touching = 0;

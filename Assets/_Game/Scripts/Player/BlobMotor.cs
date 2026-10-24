@@ -141,6 +141,18 @@ namespace BounJam
             shoreContact = false;
         }
 
+        /// <summary>
+        /// Scales the core and the heights it measures against it (a blob cut in half, or two halves flowed back
+        /// together). A wall touches the core at its middle; with an unscaled step height, a half's smaller core would
+        /// count every wall as a step and flow up it.
+        /// </summary>
+        public void Resize(float factor)
+        {
+            core.radius *= factor;
+            maxStepHeight *= factor;
+            shoreClimbHeight *= factor;
+        }
+
         /// <summary>Solid form only: true while floating in water.</summary>
         public void SetSwimming(bool value) => IsSwimming = value && isSolid;
         /// <summary>Speed along the ground relative to the current top speed; 0 at rest, about 1 at full speed.</summary>

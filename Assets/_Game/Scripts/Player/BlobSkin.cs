@@ -143,6 +143,18 @@ namespace BounJam
         public bool IsReady => initialised;
 
         /// <summary>
+        /// Scales the rest shape: lengths by <paramref name="factor"/>, the volume by its cube (a blob cut in half, or two
+        /// halves flowed back together). The points keep their places, so the jelly shrinks or swells into the new size.
+        /// </summary>
+        public void Resize(float factor)
+        {
+            for (int i = 0; i < restOffsets.Length; i++) restOffsets[i] *= factor;
+            restHalfHeight *= factor;
+            extent *= factor;
+            restVolume *= factor * factor * factor;
+        }
+
+        /// <summary>
         /// Locks the current shape. Returns the skin points in the blob's local space (at the moment of freezing
         /// the blob has no rotation, so these are the offsets from the core). The first 42 points are an even
         /// coarse subset that's good for building a collider.

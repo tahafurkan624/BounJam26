@@ -154,11 +154,13 @@ namespace BounJam.EditorTools
         static string Stick(string[] args)
         {
             if (!EditorApplication.isPlaying) return "error: stick needs play mode";
-            var reader = UnityEngine.Object.FindAnyObjectByType<PlayerInputReader>();
-            if (reader == null) return "error: no PlayerInputReader in the scene";
+            // Every piece of the blob has its own reader (both halves after a piercer pipe); a half made later needs
+            // the stick again.
+            var readers = UnityEngine.Object.FindObjectsByType<PlayerInputReader>(FindObjectsSortMode.None);
+            if (readers.Length == 0) return "error: no PlayerInputReader in the scene";
             var stick = new Vector2(ParseFloat(args[0]), ParseFloat(args[1]));
-            reader.MoveOverride = stick;
-            return $"ok: move override {Format(stick)}";
+            foreach (PlayerInputReader reader in readers) reader.MoveOverride = stick;
+            return $"ok: move override {Format(stick)} on {readers.Length} reader(s)";
         }
 
         static string Invoke(string[] args)
@@ -294,6 +296,9 @@ namespace BounJam.EditorTools
                 result += $" carried={cargo.Count} iron={cargo.Has<IronBall>()}";
             if (target.TryGetComponent(out BlobMagnetism magnetism))
                 result += $" pulledBy={(magnetism.Current != null ? magnetism.Current.name : "none")}";
+            if (target.TryGetComponent(out BlobSplit split))
+                result += string.Format(CultureInfo.InvariantCulture, " half={0} inPipe={1} pieces={2} mass={3:0.00} core={4:0.000}",
+                                        split.IsHalf, split.InPipe, BlobSplit.All.Count, split.Body.mass, split.Motor.CoreRadius);
             if (target.TryGetComponent(out Collectible collectible))
                 result += $" collected={collectible.IsCollected} engulfed={collectible.IsEngulfed}";
             if (target.TryGetComponent(out Magnet magnet))

@@ -39,6 +39,7 @@ namespace BounJam
         MaterialPropertyBlock block;
         Vector3 markerScale;
         Color glow = Color.black;
+        float engulfedReportTime = float.NegativeInfinity;
 
         /// <summary>Every collectible in the loaded scenes that hasn't been collected yet.</summary>
         public static IReadOnlyList<Collectible> Waiting => waiting;
@@ -67,7 +68,16 @@ namespace BounJam
 
         void OnDisable() => waiting.Remove(this);
 
-        public void SetEngulfed(bool value) => IsEngulfed = value && !IsCollected;
+        /// <summary>
+        /// Each blob piece reports every physics step; the item counts as inside if it's inside any of them, so a
+        /// second piece reporting "not inside me" can't switch the glow off.
+        /// </summary>
+        public void SetEngulfed(bool value)
+        {
+            bool sameStep = Time.fixedTime == engulfedReportTime;
+            engulfedReportTime = Time.fixedTime;
+            IsEngulfed = (value || (sameStep && IsEngulfed)) && !IsCollected;
+        }
 
         /// <summary>Called by the blob that froze around it. It stops waiting; the blob moves it from now on.</summary>
         public void Collect()
