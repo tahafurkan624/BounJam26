@@ -29,7 +29,7 @@ namespace BounJam
         [SerializeField] MoveSettings liquid = new MoveSettings { maxSpeed = 5f, acceleration = 12f, braking = 25f };
         [Tooltip("Solid form: pushes itself along the input direction (its frozen shape decides whether it rolls or " +
                  "slides) and brakes, spin included, when there's no input.")]
-        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 1.8f, acceleration = 15f, braking = 6f };
+        [SerializeField] MoveSettings solid = new MoveSettings { maxSpeed = 1.8f, acceleration = 30f, braking = 6f };
         [Tooltip("Solid form floating in water: paddles along the input direction, no footing needed, and drifts to a " +
                  "stop when there's no input.")]
         [SerializeField] MoveSettings swim = new MoveSettings { maxSpeed = 2.2f, acceleration = 5f, braking = 1.5f };
@@ -301,9 +301,10 @@ namespace BounJam
         }
 
         /// <summary>
-        /// Solid form: a heavy push along the input direction at the centre of mass, only while resting on something
-        /// and below top speed; the frozen shape rolls, tips or slides on its own while pushed. Without input it
-        /// brakes, so it doesn't roll or slide on (and off edges) by itself. No liquid ground helpers.
+        /// Solid form: a heavy push along the input direction (up or down the slope it rests on) at the centre of mass,
+        /// only while resting on something and below top speed; the frozen shape rolls, tips or slides on its own while
+        /// pushed. Without input it brakes, so it doesn't roll or slide on (and off edges) by itself. No liquid ground
+        /// helpers.
         /// </summary>
         void MoveSolid()
         {
@@ -331,10 +332,14 @@ namespace BounJam
             // Leaning on a crate counts as footing too: a round crystal shoving a crate can lift off the floor a little.
             if (!IsGrounded && !pressingCrate) return;
 
-            Vector3 planar = Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up);
-            float speedAlongWish = Vector3.Dot(planar, wish.normalized);
+            // Along the ground, not level: a level push into a ramp partly presses the crystal into it (more friction)
+            // instead of up it.
+            Vector3 up = IsGrounded ? GroundNormal : Vector3.up;
+            Vector3 push = Vector3.ProjectOnPlane(wish, up).normalized * wish.magnitude;
+            Vector3 planar = Vector3.ProjectOnPlane(body.linearVelocity, up);
+            float speedAlongWish = Vector3.Dot(planar, push.normalized);
             if (speedAlongWish < solid.maxSpeed * wish.magnitude)
-                body.AddForce(wish * solid.acceleration, ForceMode.Acceleration);
+                body.AddForce(push * solid.acceleration, ForceMode.Acceleration);
         }
 
         /// <summary>

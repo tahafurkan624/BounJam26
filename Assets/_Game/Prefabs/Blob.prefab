@@ -129,7 +129,7 @@ MonoBehaviour:
     braking: 25
   solid:
     maxSpeed: 1.8
-    acceleration: 15
+    acceleration: 30
     braking: 6
   swim:
     maxSpeed: 2.2

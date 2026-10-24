@@ -9,7 +9,7 @@ namespace BounJam
     /// same way (keeping its volume), smoothed toward its
     /// neighbours (surface tension) and pushed outward when volume is lost (pressure). Raycasts from the core keep the
     /// points out of the world, so the liquid squishes against floors, walls and obstacles. Runs right after each
-    /// physics step and drives the skin mesh.
+    /// physics step and drives the skin mesh, whose sides and tail turn ragged while stretched.
     /// </summary>
     [RequireComponent(typeof(BlobMotor))]
     public class BlobSkin : MonoBehaviour
@@ -80,6 +80,16 @@ namespace BounJam
         [Range(0f, 1f)]
         [SerializeField] float drapeStrength = 0.9f;
 
+        [Header("Ragged Edges")]
+        [Tooltip("How far the sides and tail of the fully stretched liquid jut in and out, m, so a streak doesn't have " +
+                 "a perfect oval outline. Grows with the stretch: the round blob stays smooth, and so does the front. " +
+                 "Only the rendered surface moves.")]
+        [SerializeField] float edgeRaggedness = 0.12f;
+        [Tooltip("Rough size of the bumps along the edge, m.")]
+        [SerializeField] float edgeBumpSize = 0.3f;
+        [Tooltip("How fast the bumps run back along the edge while flowing, as a share of the blob's speed.")]
+        [SerializeField] float edgeFlow = 0.25f;
+
         [Header("Collision")]
         [SerializeField] LayerMask collisionMask = ~0;
         [Tooltip("Gap kept between the skin and surfaces, m.")]
@@ -111,6 +121,17 @@ namespace BounJam
         Vector3[] currentOffsets;
         Vector3[] coarseVertices;
         Vector3[] smoothVertices;
+        // Where on the round rest shape each rendered vertex sits, and how much that spot turns ragged: the sides and
+        // tail, not the top, the underside or the front.
+        Vector3[] edgeDirections;
+        float[] edgeWeights;
+        // The rest shape's footprint scale across and along the heading (see ComputeRestPositions).
+        float shapeAcross = 1f;
+        float shapeAlong = 1f;
+        // Runs up while flowing, so the bumps slide back along the edge, in bumps.
+        float edgeScroll;
+        // Lengths relative to the starting blob (cut in half, grown by droplets).
+        float size = 1f;
         LoopSubdivision smoothing;
         bool initialised;
         Vector3[] frozenLocal;
@@ -169,6 +190,7 @@ namespace BounJam
             for (int i = 0; i < restOffsets.Length; i++) restOffsets[i] *= factor;
             restHalfHeight *= factor;
             extent *= factor;
+            size *= factor;
             restVolume *= factor * factor * factor;
         }
 
@@ -403,6 +425,17 @@ namespace BounJam
 
             smoothing = LoopSubdivision.Build(count, triangles, renderSmoothing);
             smoothVertices = new Vector3[smoothing.VertexCount];
+            // The rest directions smoothed the same way say where on the shape each rendered vertex sits.
+            edgeDirections = new Vector3[smoothing.VertexCount];
+            edgeWeights = new float[smoothing.VertexCount];
+            smoothing.Apply(restDirections, edgeDirections);
+            for (int i = 0; i < edgeDirections.Length; i++)
+            {
+                Vector3 d = edgeDirections[i] = edgeDirections[i].normalized;
+                float side = 1f - d.y * d.y;
+                // The front stays a smooth bead, which also keeps the eyes on it still.
+                edgeWeights[i] = side * side * Mathf.Clamp01((0.65f - d.z) / 0.25f);
+            }
             smoothing.Apply(coarseVertices, smoothVertices);
 
             mesh = new Mesh { name = "Blob Skin" };
@@ -566,6 +599,8 @@ namespace BounJam
             float width = 1f / Mathf.Sqrt(height);
             float along = width * (1f + stretch);
             float across = width / (1f + stretch);
+            shapeAlong = along;
+            shapeAcross = across;
             Quaternion frame = Quaternion.LookRotation(frameForward, frameUp);
 
             // On the ground the shape rests on the floor rather than around the (smaller) core.
@@ -627,10 +662,47 @@ namespace BounJam
             }
             LocalCenter = sum / coarseVertices.Length;
             smoothing.Apply(coarseVertices, smoothVertices);
+            Roughen();
 
             mesh.SetVertices(smoothVertices);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
+        }
+
+        /// <summary>
+        /// Jags the rendered outline of the stretched liquid: the sides and tail jut in and out along the ground,
+        /// following a noise pattern that slides back along the edge while it flows.
+        /// </summary>
+        void Roughen()
+        {
+            float amount = edgeRaggedness * size * Mathf.Clamp01(stretch / Mathf.Max(0.01f, sustainedStretch));
+            if (amount < 1e-4f) return;
+
+            float bump = Mathf.Max(0.05f, edgeBumpSize * size);
+            float speed = Vector3.ProjectOnPlane(body.linearVelocity, frameUp).magnitude;
+            edgeScroll += edgeFlow * speed * Time.deltaTime / bump;
+            if (edgeScroll > 1000f) edgeScroll -= 1000f;
+
+            Vector3 right = Vector3.Cross(frameUp, frameForward);
+            for (int i = 0; i < smoothVertices.Length; i++)
+            {
+                float weight = edgeWeights[i];
+                if (weight < 0.01f) continue;
+                // Straight out of the oval's outline, not away from its middle: on a long streak those differ a lot.
+                Vector3 d = edgeDirections[i];
+                Vector3 outward = (right * (d.x / shapeAcross) + frameForward * (d.z / shapeAlong)).normalized;
+                Vector3 p = smoothVertices[i] - LocalCenter;
+                float x = Vector3.Dot(p, right) / bump, z = Vector3.Dot(p, frameForward) / bump;
+                smoothVertices[i] += outward * (Bumps(x + 37.1f, z + edgeScroll + 11.3f) * amount * weight);
+            }
+        }
+
+        /// <summary>Two octaves of Perlin noise centred on 0, about -1..1. Keep the inputs positive: it mirrors around 0.</summary>
+        static float Bumps(float u, float v)
+        {
+            float n = (Mathf.PerlinNoise(u, v) - 0.5f) * 2.6f
+                      + (Mathf.PerlinNoise(u * 2.3f + 5.2f, v * 2.3f + 1.9f) - 0.5f) * 1.3f;
+            return Mathf.Clamp(n, -1f, 1f);
         }
 
         void OnDrawGizmosSelected()
