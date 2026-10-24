@@ -538,6 +538,7 @@ namespace BounJam.EditorTools
             AddGroundGuard(root);
             SplashKit.AddBlobParts(root);
             DropletKit.AddBlobParts(root);
+            SoundKit.AddBlobParts(root);
 
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(root, BlobPrefabPath);
             Object.DestroyImmediate(root);
