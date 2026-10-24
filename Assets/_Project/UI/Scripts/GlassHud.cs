@@ -1,3 +1,4 @@
+using BlobShip.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -6,8 +7,9 @@ using UnityEngine.UI;
 namespace BounJam
 {
     /// <summary>
-    /// In-game HUD: level pill, carried-cargo counter (hidden when the level has no collectibles), the Liquid / Solid
-    /// switch whose glass lens springs to the blob's current form, the key hint and the pause button.
+    /// In-game HUD: level pill, carried-cargo counter (hidden when the level has no collectibles; the drop icon splashes
+    /// when cargo comes aboard), the Liquid / Solid switch whose glass lens flows to the blob's current form, the key
+    /// hint and the pause button.
     /// </summary>
     public class GlassHud : MonoBehaviour
     {
@@ -17,30 +19,25 @@ namespace BounJam
 
         [Header("Cargo")]
         [SerializeField] GameObject cargoPill;
+        [SerializeField] RectTransform cargoIcon;
         [SerializeField] TMP_Text cargoCount;
         [SerializeField] RectTransform cargoFill;
 
         [Header("Form")]
-        [SerializeField] RectTransform formLens;
-        [Tooltip("Gap between the lens and the switch's rim, canvas units.")]
-        [SerializeField] float lensInset = 7f;
+        [Tooltip("Moves the lens: option 0 is Liquid, 1 is Solid.")]
+        [SerializeField] UILiquidSegmented formSwitch;
         [SerializeField] Graphic[] liquidParts;
         [SerializeField] Graphic[] solidParts;
         [SerializeField] TMP_Text formHint;
         [SerializeField] string hintFormat = "{0}  ·  switch form";
         [SerializeField] Color activeColor = new Color32(0x0B, 0x22, 0x33, 0xFF);
         [SerializeField] Color idleColor = new Color32(0x3A, 0x5A, 0x6E, 0xFF);
-        [Tooltip("Lens spring stiffness and damping: a little overshoot reads as liquid.")]
-        [SerializeField] float lensStiffness = 320f;
-        [SerializeField] float lensDamping = 20f;
 
         [SerializeField] Button pauseButton;
 
         BlobForm form;
         Collectible[] cargo = new Collectible[0];
         int shownHeld = -1;
-        float lensX;
-        float lensVelocity;
         bool shownSolid;
 
         public void Bind(GlassUI owner)
@@ -54,7 +51,6 @@ namespace BounJam
             cargoPill.SetActive(cargo.Length > 0);
             pauseButton.onClick.AddListener(owner.TogglePause);
             formHint.text = string.Format(hintFormat, ToggleKey());
-            lensX = LensTarget(false);
             ApplyForm(false);
         }
 
@@ -71,29 +67,19 @@ namespace BounJam
             return string.IsNullOrEmpty(key) ? "E" : key.Replace(" | ", " / ");
         }
 
-        float LensTarget(bool solid)
-        {
-            float travel = (((RectTransform)formLens.parent).rect.width - formLens.rect.width) * 0.5f - lensInset;
-            return solid ? travel : -travel;
-        }
-
         void Update()
         {
             if (form == null) form = FindAnyObjectByType<BlobForm>();
             bool solid = form != null && form.IsSolid;
             if (solid != shownSolid) ApplyForm(solid);
 
-            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.05f);
-            lensVelocity += (LensTarget(solid) - lensX) * lensStiffness * dt;
-            lensVelocity -= lensVelocity * Mathf.Min(lensDamping * dt, 1f);
-            lensX += lensVelocity * dt;
-            formLens.anchoredPosition = new Vector2(lensX, formLens.anchoredPosition.y);
-
             if (cargo.Length == 0) return;
             int held = 0;
             foreach (Collectible item in cargo)
                 if (item != null && item.IsCollected) held++;
             if (held == shownHeld) return;
+            // Only a pickup splashes, not the first count or a restart.
+            if (shownHeld >= 0 && held > shownHeld && cargoIcon != null) UILiquidFX.Splash(cargoIcon, 10, 0.8f);
             shownHeld = held;
             cargoCount.text = $"{held} / {cargo.Length}";
             cargoFill.anchorMax = new Vector2((float)held / cargo.Length, 1f);
@@ -106,6 +92,7 @@ namespace BounJam
             shownSolid = solid;
             foreach (Graphic part in liquidParts) part.color = solid ? idleColor : activeColor;
             foreach (Graphic part in solidParts) part.color = solid ? activeColor : idleColor;
+            if (formSwitch != null) formSwitch.Select(solid ? 1 : 0);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections;
+using BlobShip.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -8,7 +9,8 @@ namespace BounJam
 {
     /// <summary>
     /// Level-complete card: the delivery message, the time the level took, the cargo carried home (when the level has
-    /// any) and the replay / next-level buttons. While it is bound, the LevelManager waits for the next-level button.
+    /// any) and the replay / next-level buttons, with a splash of the badge and a droplet rain as it lands. While it is
+    /// bound, the LevelManager waits for the next-level button.
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
     public class GlassCompleteCard : MonoBehaviour
@@ -25,6 +27,7 @@ namespace BounJam
         [SerializeField] string finalNextText = "Play again";
         [SerializeField] RectTransform card;
         [SerializeField] float showTime = 0.45f;
+        [SerializeField] UILiquidSequence celebration;
 
         CanvasGroup group;
         Collectible[] cargo = new Collectible[0];
@@ -63,6 +66,7 @@ namespace BounJam
             group.interactable = true;
             group.blocksRaycasts = true;
             StartCoroutine(Pop());
+            if (celebration != null) celebration.Play();
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(nextButton.gameObject);
         }
 

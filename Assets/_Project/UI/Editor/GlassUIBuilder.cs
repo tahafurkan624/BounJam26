@@ -1,4 +1,5 @@
 using System.IO;
+using BlobShip.UI;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -12,6 +13,8 @@ namespace BounJam.EditorTools
     /// needs: the TMP font assets made from the bundled Fredoka / Nunito fonts, the icons set up as sprites and the glass
     /// material. GlassUI loads the prefab by itself in every level, so re-running this after a layout change is all
     /// it takes. Layout is at the 1920×1080 reference resolution of the game's canvases.
+    /// The BlobShip Liquid UI components (Assets/Assets/BlobShip/UI) make it move like liquid: jelly buttons and panels,
+    /// the flowing form lens, bubbles, drips and splashes.
     /// </summary>
     public static class GlassUIBuilder
     {
@@ -119,8 +122,8 @@ namespace BounJam.EditorTools
             RectTransform cargo = Node("CargoPill", hudRoot);
             Place(cargo, new Vector2(0.5f, 1f), new Vector2(0f, -43f), new Vector2(456f, 90f));
             Glass(cargo, 41f);
-            RectTransform drop = Icon(cargo, "drop", 0f, Aqua).rectTransform;
-            Place(drop, new Vector2(0f, 0.5f), new Vector2(24f, 0f), new Vector2(42f, 48f));
+            RectTransform cargoIcon = Icon(cargo, "drop", 0f, Aqua).rectTransform;
+            Place(cargoIcon, new Vector2(0f, 0.5f), new Vector2(24f, 0f), new Vector2(42f, 48f));
             TMP_Text count = Label(cargo, "Count", "0 / 0", display, 34f, Ink);
             Place(count.rectTransform, new Vector2(0f, 0.5f), new Vector2(82f, 14f), new Vector2(220f, 40f));
             TMP_Text cargoName = Label(cargo, "Name", "Cargo", body, 18f, Teal, TextAlignmentOptions.Right);
@@ -135,14 +138,22 @@ namespace BounJam.EditorTools
             Stretch(fill);
             fill.anchorMax = new Vector2(0.6f, 1f);
             Solid(fill, 8.5f, Mint);
+            // Bubbles drift through the filled part; kept clear of the rounded ends.
+            fill.gameObject.AddComponent<RectMask2D>();
+            RectTransform fillBubbles = Node("Bubbles", fill);
+            Stretch(fillBubbles);
+            fillBubbles.offsetMin = new Vector2(6f, 0f);
+            fillBubbles.offsetMax = new Vector2(-6f, 0f);
+            Particles(fillBubbles, LiquidPreset.BarBubbles);
 
             // Pause button, top right.
             RectTransform pauseRect = Node("PauseButton", hudRoot);
             Place(pauseRect, new Vector2(1f, 1f), new Vector2(-48f, -43f), new Vector2(86f, 86f));
             Button pauseButton = MakeButton(Glass(pauseRect, 43f));
             Icon(pauseRect, "pause", 31f, Ink);
+            Liquid(pauseButton);
 
-            // Form switch, bottom centre: the glass lens slides under the active form.
+            // Form switch, bottom centre: the glass lens flows under the active form like a drop.
             RectTransform formSwitch = Node("FormSwitch", hudRoot);
             Place(formSwitch, new Vector2(0.5f, 0f), new Vector2(0f, 100f), new Vector2(504f, 91f));
             Glass(formSwitch, 45.5f);
@@ -150,8 +161,11 @@ namespace BounJam.EditorTools
             Place(lens, new Vector2(0.5f, 0.5f), new Vector2(-122.5f, 0f), new Vector2(245f, 77f));
             GlassGraphic lensGlass = Glass(lens, 38.5f, LensTint, 0.55f, 0.25f, 0.35f);
             lensGlass.color = LensTint;
-            (Graphic liquidIcon, Graphic liquidText) = FormSide(formSwitch, "Liquid", "drop_outline", -122.5f);
-            (Graphic solidIcon, Graphic solidText) = FormSide(formSwitch, "Solid", "crystal", 122.5f);
+            (RectTransform liquidSide, Graphic liquidIcon, Graphic liquidText) = FormSide(formSwitch, "Liquid", "drop_outline", -122.5f);
+            (RectTransform solidSide, Graphic solidIcon, Graphic solidText) = FormSide(formSwitch, "Solid", "crystal", 122.5f);
+            var formFlow = formSwitch.gameObject.AddComponent<UILiquidSegmented>();
+            formFlow.indicator = lens;
+            formFlow.options = new[] { liquidSide, solidSide };
 
             RectTransform hint = Node("Hint", hudRoot);
             Place(hint, new Vector2(0.5f, 0f), new Vector2(0f, 48f), Vector2.zero);
@@ -161,20 +175,21 @@ namespace BounJam.EditorTools
             TMP_Text hintLabel = Label(hint, "Text", "E  ·  switch form", body, 17f, Muted);
 
             Wire(hud, ("group", hudRoot.GetComponent<CanvasGroup>()), ("levelKicker", levelKicker), ("levelLabel", levelLabel), ("cargoPill", cargo.gameObject),
-                ("cargoCount", count), ("cargoFill", fill), ("formLens", lens), ("formHint", hintLabel), ("pauseButton", pauseButton));
+                ("cargoIcon", cargoIcon), ("cargoCount", count), ("cargoFill", fill), ("formSwitch", formFlow), ("formHint", hintLabel),
+                ("pauseButton", pauseButton));
             WireArray(hud, "liquidParts", liquidIcon, liquidText);
             WireArray(hud, "solidParts", solidIcon, solidText);
             return hud;
         }
 
-        static (Graphic icon, Graphic label) FormSide(RectTransform formSwitch, string name, string icon, float x)
+        static (RectTransform side, Graphic icon, Graphic label) FormSide(RectTransform formSwitch, string name, string icon, float x)
         {
             RectTransform side = Node(name, formSwitch);
             Place(side, new Vector2(0.5f, 0.5f), new Vector2(x, 0f), new Vector2(245f, 77f));
             Row(side, 12f, new RectOffset(), TextAnchor.MiddleCenter);
             Image image = Icon(side, icon, 28f, Ink);
             TMP_Text label = Label(side, "Label", name, body, 24f, Ink);
-            return (image, label);
+            return (side, image, label);
         }
 
         static GlassToast BuildToast(Transform parent, string name, Vector2 anchor, Vector2 position, float fontSize, float radius)
@@ -208,6 +223,22 @@ namespace BounJam.EditorTools
             Glass(panel, 48f, Color.white, 0.42f, 0.35f);
             Column(panel, 34f, TextAnchor.UpperLeft, new RectOffset(48, 48, 48, 48), true);
             Fit(panel, false, true);
+            Jelly(panel);
+            // Bubbles rise behind the contents, inside the glass; drops gather on its bottom edge and fall.
+            RectTransform bubbles = Overlay(panel, "Bubbles");
+            Stretch(bubbles);
+            bubbles.offsetMin = new Vector2(30f, 30f);
+            bubbles.offsetMax = new Vector2(-30f, -30f);
+            bubbles.gameObject.AddComponent<RectMask2D>();
+            RectTransform bubbleArea = Node("Emitter", bubbles);
+            Stretch(bubbleArea);
+            Particles(bubbleArea, LiquidPreset.AmbientBubbles);
+            RectTransform drip = Overlay(panel, "Drip");
+            drip.anchorMin = new Vector2(0f, 0f);
+            drip.anchorMax = new Vector2(1f, 0f);
+            drip.pivot = new Vector2(0.5f, 0f);
+            drip.sizeDelta = new Vector2(-2f * 70f, 0f);
+            Particles(drip, LiquidPreset.Drip);
 
             RectTransform header = Node("Header", panel);
             Row(header, 22f, new RectOffset(), TextAnchor.MiddleLeft);
@@ -251,6 +282,7 @@ namespace BounJam.EditorTools
             Row(rect, 17f, new RectOffset(26, 26, 0, 0), TextAnchor.MiddleLeft);
             Icon(rect, icon, 26f, Ink);
             Label(rect, "Label", text, body, 24f, Ink);
+            Liquid(button, 3, 1.6f, 150f);
             return button;
         }
 
@@ -286,6 +318,8 @@ namespace BounJam.EditorTools
             handle.sizeDelta = new Vector2(36f, 0f);
             GlassGraphic knob = Solid(handle, 18f, new Color(0.93f, 1f, 0.98f), 1f, 0.35f);
             knob.raycastTarget = true;
+            // Stretches like a drop while it slides.
+            handle.gameObject.AddComponent<UILiquidStretch>();
 
             slider.fillRect = fill;
             slider.handleRect = handle;
@@ -308,12 +342,16 @@ namespace BounJam.EditorTools
             Stretch(wash);
             GlassGraphic washGlass = Glass(wash, 0f, new Color(0.47f, 0.86f, 0.9f), 0.2f, 0f, 0.35f, 0f);
             washGlass.raycastTarget = true;
+            // The celebration rain falls here, over the wash and behind the card.
+            RectTransform rain = Node("Rain", cardRoot);
+            Stretch(rain);
 
             RectTransform card = Node("Card", cardRoot);
             Place(card, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(768f, 0f));
             Glass(card, 58f, Color.white, 0.44f, 0.32f);
             Column(card, 26f, TextAnchor.UpperCenter, new RectOffset(58, 58, 53, 53), true);
             Fit(card, false, true);
+            Jelly(card);
 
             Image badge = Icon(card, "drop", 0f, Aqua);
             badge.preserveAspect = true;
@@ -331,10 +369,17 @@ namespace BounJam.EditorTools
             Button replay = PillButton(buttons, "Replay", "restart", false, 1f);
             Button next = PillButton(buttons, "Next level", "arrow", true, 1.4f);
 
+            // As the card lands the badge splashes and droplets rain down; GlassCompleteCard starts it.
+            var celebration = cardRoot.gameObject.AddComponent<UILiquidSequence>();
+            celebration.dropIcons = new[] { badge.rectTransform };
+            celebration.earned = 1;
+            celebration.celebrationArea = rain;
+            celebration.playOnEnable = false;
+
             var component = cardRoot.gameObject.AddComponent<GlassCompleteCard>();
             Wire(component, ("kicker", kicker), ("title", title), ("timeValue", timeValue), ("cargoTile", cargoTile.gameObject),
                 ("cargoValue", cargoValue), ("replayButton", replay), ("nextButton", next),
-                ("nextLabel", next.transform.Find("Label").GetComponent<TMP_Text>()), ("card", card));
+                ("nextLabel", next.transform.Find("Label").GetComponent<TMP_Text>()), ("card", card), ("celebration", celebration));
             return component;
         }
 
@@ -366,6 +411,7 @@ namespace BounJam.EditorTools
                 Icon(rect, icon, 26f, Ink);
                 Label(rect, "Label", text, body, 25f, Ink);
             }
+            Liquid(button, 3, 1.2f, 120f);
             return button;
         }
 
@@ -463,6 +509,44 @@ namespace BounJam.EditorTools
             button.targetGraphic = target;
             button.colors = Tints();
             return button;
+        }
+
+        /// <summary>
+        /// Makes a button a drop of liquid glass: it swells towards the pointer, squashes, ripples and splashes when
+        /// pressed. A GlassGraphic is one quad, so wide buttons need more subdivisions and a broader bulge and ripple
+        /// for the bend to stay smooth.
+        /// </summary>
+        static void Liquid(Button button, int subdivisions = 2, float bulgeRadius = 0.6f, float rippleWavelength = 70f)
+        {
+            var jelly = button.gameObject.AddComponent<UILiquidJelly>();
+            jelly.subdivisions = subdivisions;
+            jelly.bulgeRadius = bulgeRadius;
+            jelly.rippleWavelength = rippleWavelength;
+            button.gameObject.AddComponent<UILiquidInteractable>().jelly = jelly;
+        }
+
+        /// <summary>A big glass panel whose outline slowly waves.</summary>
+        static void Jelly(RectTransform panel)
+        {
+            var jelly = panel.gameObject.AddComponent<UILiquidJelly>();
+            jelly.subdivisions = 3;
+            jelly.idleWave = 1.5f;
+        }
+
+        /// <summary>A child the parent's layout group leaves alone, for effects laid over a panel.</summary>
+        static RectTransform Overlay(RectTransform parent, string name)
+        {
+            RectTransform rect = Node(name, parent, typeof(LayoutElement));
+            rect.GetComponent<LayoutElement>().ignoreLayout = true;
+            return rect;
+        }
+
+        static UILiquidParticles Particles(RectTransform area, LiquidPreset preset)
+        {
+            var particles = area.gameObject.AddComponent<UILiquidParticles>();
+            particles.ApplyPreset(preset);
+            particles.raycastTarget = false;
+            return particles;
         }
 
         static ColorBlock Tints()
