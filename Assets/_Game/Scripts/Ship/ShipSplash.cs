@@ -9,9 +9,10 @@ namespace BounJam
     /// dropping in as the blob flattens to set off, or the blob landing under it) throws a crown of droplets out from all
     /// round the hull, more and faster the harder the hit; ploughing through it (the blob running into the ship, or
     /// stopping dead against a wall while the ship carries on) sprays water off the leading side. Both stir up the
-    /// jelly's surface like the blob's own splashes. The droplets go into the blob's droplet particles (see <see cref="BlobSplash"/>), so they look the same
-    /// and leave the same rings where they land. Works from what <see cref="ShipBuoyancy"/> found at its float points:
-    /// decided after the physics step and thrown in LateUpdate, from where the ship is drawn.
+    /// jelly's surface like the blob's own splashes, and a hit that comes right after another (the hull bouncing in the
+    /// jelly) is part of the same splash. The droplets go into the blob's droplet particles (see <see cref="BlobSplash"/>),
+    /// so they look the same and leave the same rings where they land. Works from what <see cref="ShipBuoyancy"/> found
+    /// at its float points: decided after the physics step and thrown in LateUpdate, from where the ship is drawn.
     /// </summary>
     [RequireComponent(typeof(ShipBuoyancy))]
     public class ShipSplash : MonoBehaviour
@@ -48,11 +49,15 @@ namespace BounJam
         [SerializeField] float impactSpread = 0.45f;
 
         [Header("Ploughing")]
-        [Tooltip("Moving through the jelly faster than this sprays water off the leading side, m/s. Setting off, running " +
-                 "and braking stay under about 1; the blob running into the ship reaches 10.")]
-        [SerializeField] float ploughMinSpeed = 1.2f;
-        [Tooltip("Droplets per metre the hull ploughs through the jelly faster than the minimum.")]
-        [SerializeField] float dropletsPerMetre = 40f;
+        [Tooltip("Lurching through the jelly faster than this sprays water off the leading side, m/s. The jelly drags " +
+                 "the ship back up to its own speed within a step or two, so only jolts get there: the blob running in " +
+                 "under the ship reaches 3.5-10, stopping dead against a wall up to about 3. Setting off, running, braking " +
+                 "and reversing stay under 2.")]
+        [SerializeField] float ploughMinSpeed = 2.2f;
+        [Tooltip("Spray droplets at the slowest lurch that sprays.")]
+        [SerializeField] int ploughDroplets = 4;
+        [Tooltip("Extra spray droplets per m/s of lurch above the minimum.")]
+        [SerializeField] float ploughPerSpeed = 3.5f;
         [Tooltip("Share of the speed through the jelly the spray is pushed ahead with.")]
         [Range(0f, 1f)]
         [SerializeField] float ploughPush = 0.6f;
@@ -78,16 +83,20 @@ namespace BounJam
         [Tooltip("Droplets start this far above the jelly's surface, m, so they aren't hidden inside it.")]
         [SerializeField] float surfaceOffset = 0.02f;
 
-        // Droplets owed by ploughing fade over about this long, s, so a gentle nudge that never adds up to a whole
-        // droplet stays dry.
-        const float ChargeMemory = 0.2f;
         // An impact this fast (a fall of about 0.8 m) counts as the hardest, m/s.
         const float HardImpact = 4f;
-        // The same for ploughing (stopping dead from top speed), m/s.
-        const float HardPlough = 3f;
-        // Once it has splashed, an impact has to ease off to this share of the minimum before the next one counts, so
-        // a hit that takes a few physics steps to stop splashes once.
+        // The same for ploughing (the blob running into the ship at full speed), m/s.
+        const float HardPlough = 6f;
+        // Once it has splashed, an impact or a lurch has to ease off to this share of its minimum before the next one
+        // counts, so a hit that takes a few physics steps to stop splashes once.
         const float RearmShare = 0.5f;
+        // A hit this soon after the last splash (the hull bouncing and sloshing in the jelly it just hit) belongs to the
+        // same splash, s.
+        const float SplashGap = 0.4f;
+        // Ploughing needs at least this share of the float points under the surface: a hull caught at the jelly's edge
+        // as the blob flows out from under it (setting off) is being left behind, not ploughing through. The spray
+        // still counts the fastest part of the lurch, from before the hull was that far in (the blob running in under it).
+        const float PloughShare = 0.5f;
         // How far round the hull from the leading side the spray comes off, either way, degrees.
         const float PloughArc = 70f;
         // Splashes waiting for LateUpdate; a slow frame runs several physics steps.
@@ -105,7 +114,10 @@ namespace BounJam
         int pendingCount;
 
         bool impactArmed;
-        float charge;
+        float lastSplashTime = float.NegativeInfinity;
+        bool ploughArmed;
+        // The fastest the hull has moved through the jelly since this lurch began, m/s.
+        float lurch;
         Kind lastKind;
         int lastCount;
         float lastSpeed;
@@ -131,8 +143,9 @@ namespace BounJam
 
         void OnEnable()
         {
-            // The ship starts in the jelly, which is still settling round it: no impact until that has calmed down.
+            // The ship starts in the jelly, which is still settling round it: no splash until that has calmed down.
             impactArmed = false;
+            ploughArmed = false;
             tracking = StartCoroutine(TrackAfterPhysics());
         }
 
@@ -194,13 +207,12 @@ namespace BounJam
             while (true)
             {
                 yield return afterPhysics;
-                Track(Time.fixedDeltaTime);
+                Track();
             }
         }
 
-        void Track(float dt)
+        void Track()
         {
-            charge *= Mathf.Exp(-dt / ChargeMemory);
             // Not placed yet, so not out of the jelly either.
             if (buoyancy.Blob == null || !buoyancy.Blob.IsReady) return;
 
@@ -217,8 +229,8 @@ namespace BounJam
                 Vector3 up = contact.Surface.Normal;
                 // Only as fast as the hull itself comes down: jelly rising under it (balling up again after a stop)
                 // lifts the ship rather than hitting it.
-                Vector3 hull = contact.Relative + contact.Surface.Velocity;
-                into = Mathf.Max(into, Mathf.Min(-Vector3.Dot(contact.Relative, up), -Vector3.Dot(hull, up)));
+                Vector3 hullVelocity = contact.Relative + contact.Surface.Velocity;
+                into = Mathf.Max(into, Mathf.Min(-Vector3.Dot(contact.Relative, up), -Vector3.Dot(hullVelocity, up)));
                 through += Vector3.ProjectOnPlane(contact.Relative, up);
                 normal += up;
                 carried += contact.Surface.Velocity;
@@ -229,7 +241,8 @@ namespace BounJam
             {
                 // Out of the jelly: the next time in is a fresh hit.
                 impactArmed = true;
-                charge = 0f;
+                ploughArmed = true;
+                lurch = 0f;
                 return;
             }
             normal.Normalize();
@@ -237,30 +250,39 @@ namespace BounJam
             through /= submerged;
             height /= submerged;
 
-            if (into > 0.3f || through.magnitude > 0.2f)
-                Debug.Log($"[ShipSplashDebug] t={Time.time:0.00} into={into:0.00} through={through.magnitude:0.00} submerged={submerged} armed={impactArmed} charge={charge:0.00}");
             if (into < impactMinSpeed * RearmShare) impactArmed = true;
             if (impactArmed && into >= impactMinSpeed)
             {
                 impactArmed = false;
-                int count = impactDroplets + Mathf.RoundToInt((into - impactMinSpeed) * impactPerSpeed);
-                Queue(Kind.Impact, count, normal, carried, into, Mathf.Clamp01(into / HardImpact), height);
+                if (Calm)
+                {
+                    int count = impactDroplets + Mathf.RoundToInt((into - impactMinSpeed) * impactPerSpeed);
+                    Queue(Kind.Impact, count, normal, carried, into, Mathf.Clamp01(into / HardImpact), height);
+                }
             }
 
             float speed = through.magnitude;
-            if (speed <= ploughMinSpeed) return;
-            charge += (speed - ploughMinSpeed) * dt * dropletsPerMetre;
-            int sprayed = Mathf.Min((int)charge, maxBurst);
-            if (sprayed <= 0) return;
-            // A hit too hard for one splash is capped, not saved up for the steps after.
-            charge = sprayed == maxBurst ? 0f : charge - sprayed;
-            Queue(Kind.Plough, sprayed, through / speed, carried, speed, Mathf.Clamp01(speed / HardPlough), height);
+            if (speed < ploughMinSpeed * RearmShare)
+            {
+                ploughArmed = true;
+                lurch = 0f;
+            }
+            if (!ploughArmed || speed < ploughMinSpeed) return;
+            lurch = Mathf.Max(lurch, speed);
+            if (submerged < contacts.Count * PloughShare) return;
+            ploughArmed = false;
+            if (!Calm) return;
+            int sprayed = ploughDroplets + Mathf.RoundToInt((lurch - ploughMinSpeed) * ploughPerSpeed);
+            Queue(Kind.Plough, sprayed, through / speed, carried, lurch, Mathf.Clamp01(lurch / HardPlough), height);
         }
+
+        bool Calm => Time.time - lastSplashTime >= SplashGap;
 
         void Queue(Kind kind, int count, Vector3 direction, Vector3 carried, float speed, float hardness, float height)
         {
             count = Mathf.Min(count, maxBurst);
             if (count <= 0 || pendingCount == pending.Length) return;
+            lastSplashTime = Time.time;
             pending[pendingCount++] = new Burst
             {
                 Kind = kind, Count = count, Direction = direction, Carried = carried, Speed = speed, Hardness = hardness,

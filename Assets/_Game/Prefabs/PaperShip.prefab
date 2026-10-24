@@ -148,6 +148,23 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c3553a428c54cde41ae81377b9ba85ec, type: 3}
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipSplash
+  impactMinSpeed: 1.5
+  impactDroplets: 4
+  impactPerSpeed: 2.5
+  impactRebound: 0.5
+  impactSpread: 0.45
+  ploughMinSpeed: 2.2
+  ploughDroplets: 4
+  ploughPerSpeed: 3.5
+  ploughPush: 0.6
+  ploughLift: 0.8
+  inheritVelocity: 0.8
+  jitter: 0.3
+  maxBurst: 16
+  dropletSize: {x: 0.05, y: 0.11}
+  dropletLifetime: 1.5
+  hullMargin: 0.03
+  surfaceOffset: 0.02
 --- !u!1 &6899353863910381285
 GameObject:
   m_ObjectHideFlags: 0
