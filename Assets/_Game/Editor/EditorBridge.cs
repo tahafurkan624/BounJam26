@@ -296,6 +296,10 @@ namespace BounJam.EditorTools
                 result += $" carried={cargo.Count} iron={cargo.Has<IronBall>()}";
             if (target.TryGetComponent(out BlobMagnetism magnetism))
                 result += $" pulledBy={(magnetism.Current != null ? magnetism.Current.name : "none")}";
+            if (target.TryGetComponent(out BlobGrip grip))
+                result += $" engulfing={(grip.Engulfed != null ? grip.Engulfed.name : "none")} holding={(grip.Held != null ? grip.Held.name : "none")}";
+            if (target.TryGetComponent(out ConveyorSpike spike))
+                result += $" engulfed={spike.IsEngulfed} held={spike.IsHeld}";
             if (target.TryGetComponent(out BlobSplit split))
                 result += string.Format(CultureInfo.InvariantCulture, " half={0} inPipe={1} pieces={2} mass={3:0.00} core={4:0.000}",
                                         split.IsHalf, split.InPipe, BlobSplit.All.Count, split.Body.mass, split.Motor.CoreRadius);

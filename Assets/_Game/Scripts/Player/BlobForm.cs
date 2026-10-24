@@ -78,6 +78,12 @@ namespace BounJam
         public Vector3[] HullPoints => hullPoints;
         /// <summary>Raised after every form change; true = now solid.</summary>
         public event Action<bool> FormChanged;
+        /// <summary>
+        /// Raised while freezing, once <see cref="SolidCollider"/> has the frozen shape and before the crystal is
+        /// checked for overlaps. Whatever a listener makes it ignore (Physics.IgnoreCollision) it may set around,
+        /// like a conveyor's spike it grabs (see <see cref="BlobGrip"/>).
+        /// </summary>
+        public event Action Hardening;
 
         void Awake()
         {
@@ -139,6 +145,7 @@ namespace BounJam
             solidCollider.sharedMesh = hullMesh;
             solidCollider.enabled = true;
             liquidCore.enabled = false;
+            Hardening?.Invoke();
             ResolveOverlaps();
 
             SetLayer(solidLayer);
@@ -213,7 +220,7 @@ namespace BounJam
                 {
                     Collider other = nearby[i];
                     Rigidbody otherBody = other.attachedRigidbody;
-                    if (otherBody == body) continue;
+                    if (otherBody == body || Physics.GetIgnoreCollision(solidCollider, other)) continue;
 
                     // Moving bodies render interpolated; use where the physics actually has them.
                     bool onBody = otherBody != null && other.transform == otherBody.transform;

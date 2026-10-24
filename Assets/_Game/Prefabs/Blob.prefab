@@ -22,6 +22,8 @@ GameObject:
   - component: {fileID: 3615704392870151330}
   - component: {fileID: 4793074450314261776}
   - component: {fileID: 5969995101131588584}
+  - component: {fileID: 5341590816992302427}
+  - component: {fileID: 942091480777860770}
   m_Layer: 7
   m_Name: Blob
   m_TagString: Untagged
@@ -363,6 +365,34 @@ MonoBehaviour:
   teleportDistance: 0.5
   surfaceSplash: {x: 0.35, y: 1}
   surfaceSettleTime: 0.8
+--- !u!114 &5341590816992302427
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ebd67f8cb4c55ffbb69a9a8ee9ad03b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobSplit
+  isHalf: 0
+  mergeGap: 0.15
+--- !u!114 &942091480777860770
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261409863008746564}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3654c28a215d890748d8288c822f80bb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobGrip
+  checkRadius: 1.5
+  maxFollowSpeed: 10
 --- !u!1 &336757933177050986
 GameObject:
   m_ObjectHideFlags: 0

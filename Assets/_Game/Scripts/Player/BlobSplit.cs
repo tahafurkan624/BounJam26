@@ -80,6 +80,7 @@ namespace BounJam
             steering.Add(form);
             if (water != null) steering.Add(water);
             if (TryGetComponent(out BlobMagnetism magnetism)) steering.Add(magnetism);
+            if (TryGetComponent(out BlobGrip grip)) steering.Add(grip);
             if (TryGetComponent(out GroundGuard guard)) steering.Add(guard);
             wholeName = name;
             serial = nextSerial++;

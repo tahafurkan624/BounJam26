@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &7156257011513290635
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4189444963910445105}
+  - component: {fileID: 2112936492669130013}
+  m_Layer: 0
+  m_Name: Conveyor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4189444963910445105
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7156257011513290635}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2112936492669130013
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7156257011513290635}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75a86886f0c804d4c8c4c290298318dc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BounJam.Conveyor
+  length: 6
+  speed: 1.2
+  spikeSpacing: 1.8
+  engulfedGlow: {r: 1.5, g: 5, b: 7, a: 1}
+  heldGlow: {r: 0.3, g: 0.9, b: 2.4, a: 1}
+  slatMesh: {fileID: -6713787946022088844, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  spikeMesh: {fileID: 2635652673190541813, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  spikeTipMesh: {fileID: -1281742693242177885, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  drumMesh: {fileID: -6826177189898628687, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  lidMiddleMesh: {fileID: -1788059887909560998, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  lidEndMesh: {fileID: 796518526132504381, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  hubMesh: {fileID: 1647886446900565028, guid: 126d01ef855acd2478829f8bf8741652, type: 3}
+  beltMaterial: {fileID: 2100000, guid: c0a8372c32d94498595f928e5348fe79, type: 2}
+  steelMaterial: {fileID: 2100000, guid: 9555c9befbfd56c0dacf4c4c23f0d726, type: 2}
+  spikeTipMaterial: {fileID: 2100000, guid: dd902642c2343a25aa849a4412550c9a, type: 2}
+  drumMaterial: {fileID: 2100000, guid: 9b781fa3b0d6554a29f78e5f9d027e50, type: 2}
+  lidMaterial: {fileID: 2100000, guid: 7e51575ec2b729109b85e3fdb845b0ed, type: 2}
+  hubMaterial: {fileID: 2100000, guid: 5e783e83cc1d859daa8197dd6d6237b3, type: 2}
