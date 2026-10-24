@@ -317,7 +317,9 @@ namespace BounJam
             shoreContact = false;
 
             Vector3 wish = WishDirection();
-            if (IsSwimming || climbingOut)
+            // Still wet but resting on something (a ramp out of the water, a shallow bottom): push along it as on land.
+            // Paddling only moves level with the water and can't climb a slope.
+            if (climbingOut || (IsSwimming && !IsGrounded))
             {
                 Swim(wish, pressingShore);
                 return;
