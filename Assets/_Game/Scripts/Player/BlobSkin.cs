@@ -5,11 +5,13 @@ namespace BounJam
 {
     /// <summary>
     /// Soft skin around the blob's core. Every skin point is pulled by a spring toward a rest shape (the modelled
-    /// balloon, or a sphere) that sits on the ground, flattens with speed and stretches out the longer it keeps flowing the
-    /// same way (keeping its volume), smoothed toward its
-    /// neighbours (surface tension) and pushed outward when volume is lost (pressure). Raycasts from the core keep the
-    /// points out of the world, so the liquid squishes against floors, walls and obstacles. Runs right after each
-    /// physics step and drives the skin mesh, whose sides and tail turn ragged while stretched.
+    /// balloon, or a sphere) that sits on the ground, swells up while standing still, flattens with speed and stretches
+    /// out the longer it keeps flowing the same way (keeping its volume), smoothed toward its
+    /// neighbours (surface tension) and pushed outward when volume is lost (pressure). Each point slides along whatever
+    /// it runs into, and a line of sight back to the core (directly, or through its neighbours) keeps it on the core's
+    /// side of walls, so the liquid takes the shape of floors, walls and obstacles, flows around posts and corners and
+    /// squeezes into narrow corridors. Runs right after each physics step and drives the skin mesh, whose sides and
+    /// tail turn ragged while stretched.
     /// </summary>
     [RequireComponent(typeof(BlobMotor))]
     public class BlobSkin : MonoBehaviour
@@ -22,12 +24,14 @@ namespace BounJam
         [SerializeField] Mesh restShape;
         [Tooltip("Radius of the round blob at rest when there's no rest shape, m.")]
         [SerializeField] float radius = 0.5f;
-        [Tooltip("Skin detail: 1 = 42 points, 2 = 162, 3 = 642.")]
-        [Range(1, 3)]
-        [SerializeField] int subdivisions = 2;
-        [Tooltip("Smoothing steps for the rendered surface; each one makes it 4x finer. 2 turns 162 points into 2562 vertices.")]
+        [Tooltip("Skin detail: 1 = 42 points, 2 = 162, 3 = 642, 4 = 2562. More points take finer imprints of what the " +
+                 "liquid presses against (and freeze into a finer crystal), but each one costs a few raycasts every " +
+                 "physics step.")]
+        [Range(1, 4)]
+        [SerializeField] int subdivisions = 3;
+        [Tooltip("Smoothing steps for the rendered surface; each one makes it 4x finer. 1 turns 642 points into 2562 vertices.")]
         [Range(0, 3)]
-        [SerializeField] int renderSmoothing = 2;
+        [SerializeField] int renderSmoothing = 1;
 
         [Header("Softness")]
         [Tooltip("Pull of each point toward its rest position. Higher = firmer jelly.")]
@@ -41,6 +45,17 @@ namespace BounJam
         [Tooltip("Share of gravity acting on the skin; makes it sag slightly.")]
         [Range(0f, 1f)]
         [SerializeField] float gravitySag = 0.3f;
+
+        [Header("Standing Size")]
+        [Tooltip("Size of the jelly standing still compared to flowing at full speed, in lengths. Setting off shrinks it " +
+                 "back to the moving size, stopping lets it swell up again.")]
+        [Range(1f, 2.5f)]
+        [SerializeField] float standingSize = 1.6f;
+        [Tooltip("Roughly how long swelling up to the standing size takes after stopping, s. Slow enough to lift a " +
+                 "ship riding on top gently.")]
+        [SerializeField] float swellTime = 0.5f;
+        [Tooltip("Roughly how long shrinking to the moving size takes when setting off, s.")]
+        [SerializeField] float shrinkTime = 0.2f;
 
         [Header("Speed Flattening")]
         [Tooltip("How flat it gets at full speed: 0 = stays round, 0.5 = half height (and wider, same volume).")]
@@ -97,6 +112,13 @@ namespace BounJam
         [Tooltip("Share of sliding speed a touching point loses per physics step; drags the bottom behind a little.")]
         [Range(0f, 1f)]
         [SerializeField] float contactFriction = 0.05f;
+        [Tooltip("Anything thinner than this between two neighbouring skin points doesn't part them, m: the liquid " +
+                 "wraps around sharp corners and edges. Keep it below the thinnest wall the liquid must not leak through.")]
+        [SerializeField] float wrapThickness = 0.1f;
+
+        // Below this share of its volume the jelly is squeezed for room and doesn't swell up any further. Swelling in the
+        // open never dips this low.
+        const float CrampedVolume = 0.85f;
 
         BlobMotor motor;
         Rigidbody body;
@@ -132,10 +154,19 @@ namespace BounJam
         float edgeScroll;
         // Lengths relative to the starting blob (cut in half, grown by droplets).
         float size = 1f;
+        // Lengths of the rest shape from standing still: standingSize at rest, 1 at speed. Starts at the moving size and
+        // swells up, so a ship placed on top at the start is lifted gently.
+        float standingScale = 1f;
         LoopSubdivision smoothing;
         bool initialised;
         Vector3[] frozenLocal;
         Mesh frozenMesh;
+        // Containment (see Contain): which points are tied to the core, the order they were reached in, and, for the
+        // points behind something, where the core's line of sight to them is cut off.
+        bool[] anchored;
+        int[] anchorQueue;
+        float[] blockedDistance;
+        Vector3[] blockedNormal;
 
         float flatten;
         float flattenVelocity;
@@ -155,7 +186,7 @@ namespace BounJam
         public Vector3 ShapeCenter { get; private set; }
         /// <summary>0 = round, positive = flattened by speed, negative = briefly taller than round.</summary>
         public float Flatten => flatten;
-        /// <summary>Current volume divided by rest volume.</summary>
+        /// <summary>Current volume divided by the rest volume at the current standing size.</summary>
         public float VolumeRatio { get; private set; } = 1f;
         /// <summary>Up of the shape: the ground normal while grounded, world up in the air.</summary>
         public Vector3 Up => frameUp;
@@ -254,7 +285,7 @@ namespace BounJam
             if (!initialised || IsFrozen) return false;
 
             // Stretched out, the ends lie farther out than the rest shape's.
-            float reach = extent * (3f + stretch);
+            float reach = extent * standingScale * (3f + stretch);
             float dx = point.x - ShapeCenter.x, dz = point.z - ShapeCenter.z;
             if (dx * dx + dz * dz > reach * reach) return false;
 
@@ -290,7 +321,7 @@ namespace BounJam
         public bool Contains(Vector3 point)
         {
             if (!initialised) return false;
-            float reach = extent * (3f + stretch);
+            float reach = extent * standingScale * (3f + stretch);
             if ((point - body.position).sqrMagnitude > reach * reach) return false;
             // The rest shape has a skin point straight above the core, shared by six triangles; a ray through it would
             // count six crossings. Nudged a fraction of a millimetre, the ray can't line up with points like that.
@@ -413,6 +444,10 @@ namespace BounJam
             previousOffsets = new Vector3[count];
             currentOffsets = new Vector3[count];
             coarseVertices = new Vector3[count];
+            anchored = new bool[count];
+            anchorQueue = new int[count];
+            blockedDistance = new float[count];
+            blockedNormal = new Vector3[count];
 
             restOffsets = RestOffsets(restShape, restDirections, radius, out restHalfHeight);
             extent = 0f;
@@ -440,6 +475,8 @@ namespace BounJam
 
             mesh = new Mesh { name = "Blob Skin" };
             mesh.MarkDynamic();
+            // The finest detail with the most smoothing has more vertices than 16-bit indices reach.
+            if (smoothing.VertexCount > ushort.MaxValue) mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.vertices = smoothVertices;
             mesh.triangles = smoothing.Triangles;
             mesh.RecalculateNormals();
@@ -493,11 +530,12 @@ namespace BounJam
                 centroid += coarseVertices[i];
             }
             centroid /= positions.Length;
-            VolumeRatio = IcoSphere.Volume(coarseVertices, triangles) / restVolume;
+            float targetVolume = restVolume * standingScale * standingScale * standingScale;
+            VolumeRatio = IcoSphere.Volume(coarseVertices, triangles) / targetVolume;
             float pressureAcceleration = pressure * (1f - VolumeRatio);
 
             Vector3 sag = Physics.gravity * gravitySag;
-            float escapeDistance = extent * (4f + stretch);
+            float escapeDistance = extent * standingScale * (4f + stretch);
             for (int i = 0; i < positions.Length; i++)
             {
                 Vector3 p = positions[i];
@@ -510,19 +548,20 @@ namespace BounJam
                                        + pressureAcceleration * outward
                                        + sag;
                 v += acceleration * dt;
-                p += v * dt;
+                Vector3 target = p + v * dt;
 
-                // Lost (teleport, extreme hit): snap back instead of stretching across the level.
-                if ((p - core).sqrMagnitude > escapeDistance * escapeDistance)
+                // Lost (teleport, extreme hit): snap back instead of stretching across the level. Containment below
+                // pulls it out of anything its rest place is in.
+                if ((target - core).sqrMagnitude > escapeDistance * escapeDistance)
                 {
-                    p = restPositions[i];
-                    v = coreVelocity;
+                    positions[i] = restPositions[i];
+                    velocities[i] = coreVelocity;
+                    continue;
                 }
 
-                positions[i] = p;
-                velocities[i] = v;
-                Collide(i, core);
+                Sweep(i, target, v);
             }
+            Contain(core);
 
             float ahead = 0f, behind = 0f;
             for (int i = 0; i < positions.Length; i++)
@@ -566,6 +605,13 @@ namespace BounJam
             flatten = Mathf.Clamp(flatten + flattenVelocity * dt, -0.3f, 0.8f);
             UpdateStretchCharge(coreVelocity, speed01, grounded, dt);
             stretch = eased * Mathf.Lerp(stretchAtFullSpeed, sustainedStretch, stretchCharge);
+
+            float standing = Mathf.Lerp(standingSize, 1f, eased);
+            // No room to swell into (a narrow corridor, a tight corner): hold the size, instead of building up pressure
+            // that wells the jelly up over the walls.
+            if (standing > standingScale && VolumeRatio < CrampedVolume) standing = standingScale;
+            float settleTime = Mathf.Max(0.01f, standing > standingScale ? swellTime : shrinkTime);
+            standingScale = Mathf.Lerp(standingScale, standing, 1f - Mathf.Exp(-dt / settleTime));
         }
 
         /// <summary>
@@ -602,16 +648,17 @@ namespace BounJam
             shapeAlong = along;
             shapeAcross = across;
             Quaternion frame = Quaternion.LookRotation(frameForward, frameUp);
+            float scale = standingScale;
 
             // On the ground the shape rests on the floor rather than around the (smaller) core.
-            Vector3 center = motor.IsGrounded ? core + frameUp * (restHalfHeight * height - motor.CoreRadius) : core;
+            Vector3 center = motor.IsGrounded ? core + frameUp * (restHalfHeight * height * scale - motor.CoreRadius) : core;
             ShapeCenter = center;
 
             bool drape = motor.IsGrounded && drapeStrength > 0f;
             for (int i = 0; i < restDirections.Length; i++)
             {
                 Vector3 d = restDirections[i];
-                Vector3 o = restOffsets[i];
+                Vector3 o = restOffsets[i] * scale;
                 Vector3 rest = center + frame * new Vector3(o.x * across, o.y * height, o.z * along);
                 if (drape && d.y < -0.05f) rest = Drape(rest, Mathf.Clamp01(-d.y * 1.4f));
                 restPositions[i] = rest;
@@ -627,23 +674,123 @@ namespace BounJam
             return gap > 0f ? rest + Vector3.down * (gap * drapeStrength * weight) : rest;
         }
 
-        void Collide(int i, Vector3 core)
+        /// <summary>
+        /// Moves a point from where it is to <paramref name="target"/>, stopping at whatever it runs into on the way and
+        /// sliding on along it, so the liquid spreads along walls and flows around posts instead of passing through.
+        /// </summary>
+        void Sweep(int i, Vector3 target, Vector3 velocity)
         {
-            Vector3 toPoint = positions[i] - core;
-            float distance = toPoint.magnitude;
-            if (distance < 1e-4f) return;
+            Vector3 from = positions[i];
+            Vector3 move = target - from;
+            float length = move.magnitude;
+            if (length > 1e-6f
+                && Physics.Raycast(from, move / length, out RaycastHit hit, length + pointRadius, collisionMask, QueryTriggerInteraction.Ignore))
+            {
+                // Kept off the surface along its normal, not back along the ray: a point grazing a wall would otherwise
+                // end up a little closer to it every step, until it starts inside and passes straight through.
+                Vector3 contact = hit.point + hit.normal * pointRadius;
+                Vector3 slide = Vector3.ProjectOnPlane(target - contact, hit.normal);
+                float slideLength = slide.magnitude;
+                target = contact + slide;
+                // Sliding into a corner stops at the other side of it.
+                if (slideLength > 1e-6f
+                    && Physics.Raycast(contact, slide / slideLength, out RaycastHit corner, slideLength + pointRadius, collisionMask,
+                                       QueryTriggerInteraction.Ignore))
+                    target = corner.point + corner.normal * pointRadius;
+                velocity = Touch(velocity, hit.normal);
+            }
+            positions[i] = target;
+            velocities[i] = velocity;
+        }
 
-            Vector3 direction = toPoint / distance;
-            if (!Physics.Raycast(core, direction, out RaycastHit hit, distance + pointRadius, collisionMask, QueryTriggerInteraction.Ignore))
-                return;
+        /// <summary>
+        /// Keeps the skin in one piece with the core. A point the core can see is fine. A point behind something stays
+        /// there only while a line of neighbours, each in view of the next, leads back to one the core can see: the
+        /// liquid has flowed around a post or over an edge. Any other point (cut off on the far side of a wall, or run
+        /// into by something moving) is pulled back to the near side of whatever is in the way.
+        /// </summary>
+        void Contain(Vector3 core)
+        {
+            int count = positions.Length;
+            int queued = 0;
+            bool anyBehind = false;
+            for (int i = 0; i < count; i++)
+            {
+                anchored[i] = true;
+                Vector3 toPoint = positions[i] - core;
+                float distance = toPoint.magnitude;
+                Vector3 direction = distance > 1e-4f ? toPoint / distance : Vector3.up;
+                if (distance > 1e-4f
+                    && Physics.Raycast(core, direction, out RaycastHit hit, distance + pointRadius, collisionMask, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.distance < distance - pointRadius * 0.5f)
+                    {
+                        anchored[i] = false;
+                        anyBehind = true;
+                        blockedDistance[i] = hit.distance;
+                        blockedNormal[i] = hit.normal;
+                        continue;
+                    }
+                    // In view, but closer to the surface beyond it than the gap kept from surfaces.
+                    if (hit.distance - pointRadius < distance)
+                    {
+                        positions[i] = core + direction * Mathf.Max(0f, hit.distance - pointRadius);
+                        velocities[i] = Touch(velocities[i], hit.normal);
+                    }
+                }
+                anchorQueue[queued++] = i;
+            }
+            if (!anyBehind) return;
 
-            positions[i] = core + direction * Mathf.Max(0f, hit.distance - pointRadius);
+            // Outward from the points in view, one neighbour at a time; every pair is looked at no more than once.
+            for (int head = 0; head < queued; head++)
+            {
+                int a = anchorQueue[head];
+                int[] around = neighbours[a];
+                for (int n = 0; n < around.Length; n++)
+                {
+                    int b = around[n];
+                    if (anchored[b] || !InView(positions[a], positions[b])) continue;
+                    anchored[b] = true;
+                    anchorQueue[queued++] = b;
+                }
+            }
 
-            Vector3 v = velocities[i];
-            float into = Vector3.Dot(v, hit.normal);
-            if (into < 0f) v -= into * hit.normal;
-            Vector3 sliding = v - Vector3.Dot(v, hit.normal) * hit.normal;
-            velocities[i] = v - sliding * contactFriction;
+            for (int i = 0; i < count; i++)
+            {
+                if (anchored[i]) continue;
+                Vector3 direction = (positions[i] - core).normalized;
+                positions[i] = core + direction * Mathf.Max(0f, blockedDistance[i] - pointRadius);
+                velocities[i] = Touch(velocities[i], blockedNormal[i]);
+            }
+        }
+
+        /// <summary>
+        /// Can two neighbouring skin points see each other? Something thinner than the wrap thickness in between
+        /// doesn't count, so two points hugging either side of a sharp corner still see each other across its tip.
+        /// </summary>
+        bool InView(Vector3 a, Vector3 b)
+        {
+            Vector3 ab = b - a;
+            float length = ab.magnitude;
+            if (length < 1e-5f) return true;
+            Vector3 direction = ab / length;
+            if (!Physics.Raycast(a, direction, out RaycastHit there, length, collisionMask, QueryTriggerInteraction.Ignore))
+                return true;
+            // Looked at from the other end, something thin ends a short way in. A point inside something finds nothing
+            // at all: rays don't see the collider they start in.
+            if (!Physics.Raycast(b, -direction, out RaycastHit back, length, collisionMask, QueryTriggerInteraction.Ignore))
+                return false;
+            return length - there.distance - back.distance < wrapThickness;
+        }
+
+        /// <summary>A point's velocity against a surface: nothing into it, and a little friction along it.</summary>
+        Vector3 Touch(Vector3 v, Vector3 normal)
+        {
+            float into = Vector3.Dot(v, normal);
+            if (into < 0f) v -= into * normal;
+            Vector3 sliding = v - Vector3.Dot(v, normal) * normal;
+            return v - sliding * contactFriction;
         }
 
         void LateUpdate()

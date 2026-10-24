@@ -59,7 +59,8 @@ namespace BounJam
         [SerializeField] float snapMaxSpeed = 9f;
 
         [Header("Steps")]
-        [Tooltip("Edges up to this height above the bottom of the core are flowed up, m.")]
+        [Tooltip("Edges up to this height above the bottom of the core are flowed up, m. Only edges with a top to " +
+                 "flow onto within this height count; a taller wall doesn't, even where it touches the core this low.")]
         [SerializeField] float maxStepHeight = 0.25f;
         [Tooltip("Upward speed while flowing up a step, m/s.")]
         [SerializeField] float stepClimbSpeed = 2.5f;
@@ -84,6 +85,8 @@ namespace BounJam
 
         // Below this gap the core counts as touching the ground rather than skimming over it.
         const float ContactGap = 0.02f;
+        // A step's top is looked for this far past where the core touches its edge, m.
+        const float StepTopInset = 0.05f;
         // Physics steps after a step climb during which hugging and snapping stay off, so they don't undo the lift.
         const int ClimbGraceSteps = 4;
         // Physics steps after a jump during which the ground is ignored: the probe still reaches it for a moment, and
@@ -165,8 +168,7 @@ namespace BounJam
 
         /// <summary>
         /// Scales the core and the heights it measures against it (a blob cut in half, or two halves flowed back
-        /// together). A wall touches the core at its middle; with an unscaled step height, a half's smaller core would
-        /// count every wall as a step and flow up it.
+        /// together), so a smaller piece flows up only proportionally lower steps.
         /// </summary>
         public void Resize(float factor)
         {
@@ -448,13 +450,30 @@ namespace BounJam
             {
                 ContactPoint contact = collision.GetContact(i);
                 float height = contact.point.y - bottom;
-                // A steep surface touched low on the core is a step edge; touched higher up it is a wall.
-                if (contact.normal.y < 0.7f && height > ContactGap && height < maxStepHeight)
+                // A steep surface touched low on the core, with a top to flow onto, is a step edge; anything else is a wall.
+                if (contact.normal.y < 0.7f && height > ContactGap && height < maxStepHeight && HasStepTop(contact, bottom))
                 {
                     stepContact = true;
                     stepNormal = Vector3.ProjectOnPlane(contact.normal, Vector3.up).normalized;
                 }
             }
+        }
+
+        /// <summary>
+        /// Is there ground to flow onto just past this contact, no higher than the step height above the bottom of the
+        /// core? Looked for straight down from that height: on a wall taller than a step the look starts inside the wall
+        /// and finds nothing. The core is small enough to touch a wall below the step height. Past a wall thinner than
+        /// the look's inset it finds the floor behind, which is below the contact rather than on top of it.
+        /// </summary>
+        bool HasStepTop(ContactPoint contact, float bottom)
+        {
+            Vector3 into = -Vector3.ProjectOnPlane(contact.normal, Vector3.up).normalized;
+            Vector3 origin = contact.point + into * StepTopInset;
+            origin.y = bottom + maxStepHeight + ContactGap;
+            return Physics.Raycast(origin, Vector3.down, out RaycastHit top, maxStepHeight + ContactGap, groundMask,
+                                   QueryTriggerInteraction.Ignore)
+                   && top.point.y >= contact.point.y - ContactGap
+                   && Vector3.Angle(top.normal, Vector3.up) <= maxGroundAngle;
         }
 
         void ProbeGround()

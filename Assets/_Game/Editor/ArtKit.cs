@@ -73,7 +73,9 @@ namespace BounJam.EditorTools
             skinSettings.FindProperty("restShape").objectReferenceValue = body;
             skinSettings.ApplyModifiedPropertiesWithoutUndo();
             var skinFilter = (MeshFilter)skinSettings.FindProperty("skinFilter").objectReferenceValue;
-            Mesh preview = LevelKit.BuildRestPreviewMesh(body);
+            Mesh preview = LevelKit.BuildRestPreviewMesh(body, skinSettings.FindProperty("subdivisions").intValue,
+                                                         skinSettings.FindProperty("renderSmoothing").intValue,
+                                                         skinSettings.FindProperty("standingSize").floatValue);
             skinFilter.sharedMesh = preview;
 
             Mesh eyeMesh = Part(BlobEyePath, "SM_BlobEye").sharedMesh;

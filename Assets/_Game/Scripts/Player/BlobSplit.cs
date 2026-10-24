@@ -16,7 +16,7 @@ namespace BounJam
         [Tooltip("Set on the halves a piercer pipe made; they can't go through one again.")]
         [SerializeField] bool isHalf;
         [Tooltip("Two liquid halves flow together once the gap between their cores is smaller than this, m.")]
-        [SerializeField] float mergeGap = 0.15f;
+        [SerializeField] float mergeGap = 0.3f;
         [Tooltip("How long the merged blob takes to swell back to its whole size, s. Swelling at once would toss the ship.")]
         [SerializeField] float swellTime = 0.5f;
 

@@ -23,10 +23,11 @@ namespace BounJam.EditorTools
         const string VolumeProfilePath = "Assets/Settings/SampleSceneProfile.asset";
         const string GridShaderName = "BounJam/Greybox Grid";
 
-        public const float CoreRadius = 0.3f;
+        // Small enough to fit a one-tile (0.5 m) corridor with room to spare.
+        public const float CoreRadius = 0.2f;
         const float BlobRadius = 0.5f;
-        // Dropped from just above the resting blob's flat top so it settles onto the jelly.
-        public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 0.5f, 0f);
+        // Dropped from just above the top of the jelly standing still, so it settles onto it as it swells up.
+        public static readonly Vector3 ShipOnBlobOffset = new Vector3(0f, 1.05f, 0f);
         static readonly Vector3 CameraOffset = new Vector3(0f, 8f, -6.5f);
         const float CameraFieldOfView = 40f;
         public const string CameraGroupName = "CM Blob Group";
@@ -643,16 +644,19 @@ namespace BounJam.EditorTools
             settings.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        /// <summary>The skin at rest on the floor, for the editor; <paramref name="restShape"/> as on <see cref="BlobSkin"/>.</summary>
-        internal static Mesh BuildRestPreviewMesh(Mesh restShape)
+        /// <summary>
+        /// The skin standing still on the floor, for the editor; <paramref name="restShape"/>, the detail, smoothing and
+        /// standing size as on <see cref="BlobSkin"/>.
+        /// </summary>
+        internal static Mesh BuildRestPreviewMesh(Mesh restShape, int subdivisions, int smoothingLevels, float standingSize)
         {
-            // Same topology, rest shape and smoothing as the runtime skin, so the editor preview matches play mode.
-            IcoSphere.Build(2, out Vector3[] directions, out int[] triangles);
+            // Same topology, rest shape, smoothing and size as the runtime skin, so the editor preview matches play mode.
+            IcoSphere.Build(subdivisions, out Vector3[] directions, out int[] triangles);
             Vector3[] coarse = BlobSkin.RestOffsets(restShape, directions, BlobRadius, out float halfHeight);
-            var restCenter = new Vector3(0f, halfHeight - CoreRadius, 0f);
-            for (int i = 0; i < coarse.Length; i++) coarse[i] += restCenter;
+            var restCenter = new Vector3(0f, halfHeight * standingSize - CoreRadius, 0f);
+            for (int i = 0; i < coarse.Length; i++) coarse[i] = coarse[i] * standingSize + restCenter;
 
-            LoopSubdivision smoothing = LoopSubdivision.Build(coarse.Length, triangles, 2);
+            LoopSubdivision smoothing = LoopSubdivision.Build(coarse.Length, triangles, smoothingLevels);
             var vertices = new Vector3[smoothing.VertexCount];
             smoothing.Apply(coarse, vertices);
 
