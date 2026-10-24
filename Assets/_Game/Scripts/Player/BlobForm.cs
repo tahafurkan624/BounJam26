@@ -274,7 +274,7 @@ namespace BounJam
         {
             solidLook = solid;
             if (skinRenderer == null) return;
-            skinMaterial.SetFloat(SolidProperty, solid);
+            skinMaterial.SetFloat(SolidProperty, Mathf.Clamp(solid, 0 , 0.75f));
             skinRenderer.transform.localScale = Vector3.one * scale;
         }
     }
