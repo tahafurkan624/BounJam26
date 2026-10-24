@@ -12,7 +12,7 @@ namespace BounJam
     /// </summary>
     public class PressureButton : MonoBehaviour
     {
-        [Tooltip("The visible plate; it sinks while pressed.")]
+        [Tooltip("The visible plate; it springs down while pressed and back up when released.")]
         [SerializeField] Transform cap;
         [SerializeField] Renderer capRenderer;
         [SerializeField] Material idleMaterial;
@@ -33,9 +33,25 @@ namespace BounJam
         [Tooltip("How far the plate sinks when pressed, m.")]
         [SerializeField] float pressDepth = 0.03f;
 
+        [Header("Animation")]
+        [Tooltip("How fast the plate springs to its pressed or resting height, Hz.")]
+        [SerializeField] float springFrequency = 7f;
+        [Tooltip("Below 1 the plate overshoots and wobbles before settling: it sinks past its pressed depth when " +
+                 "pressed and pops above its rest height when released. 1 settles without overshoot.")]
+        [SerializeField, Range(0.1f, 1f)] float springDamping = 0.35f;
+        [Tooltip("How much the plate squashes flat when pressed and stretches tall when released.")]
+        [SerializeField] float squashStrength = 0.35f;
+
+        // Spring steps no longer than this, so the stiff spring stays stable at low frame rates.
+        const float MaxSpringStep = 1f / 240f;
+
         readonly Collider[] overlaps = new Collider[16];
         readonly HashSet<Rigidbody> counted = new HashSet<Rigidbody>();
         Vector3 capRestPosition;
+        Vector3 capRestScale;
+        // Spring states: the plate's height below rest (m) and its squash (0 is its modelled shape).
+        float capOffset, capOffsetVelocity;
+        float squash, squashVelocity;
 
         public bool IsPressed { get; private set; }
         /// <summary>Mass found on the button in the last physics step, kg.</summary>
@@ -45,8 +61,39 @@ namespace BounJam
 
         void Awake()
         {
-            if (cap != null) capRestPosition = cap.localPosition;
+            if (cap != null)
+            {
+                capRestPosition = cap.localPosition;
+                capRestScale = cap.localScale;
+            }
             ApplyLook();
+        }
+
+        void Update()
+        {
+            if (cap == null) return;
+
+            float target = IsPressed ? -pressDepth : 0f;
+            float omega = 2f * Mathf.PI * springFrequency;
+            for (float left = Mathf.Min(Time.deltaTime, 0.1f); left > 0f; left -= MaxSpringStep)
+            {
+                float dt = Mathf.Min(left, MaxSpringStep);
+                Spring(ref capOffset, ref capOffsetVelocity, target, omega, dt);
+                Spring(ref squash, ref squashVelocity, 0f, omega, dt);
+            }
+
+            // Squash keeps the volume: flatter is wider, taller is thinner.
+            float height = Mathf.Max(0.3f, 1f + squash);
+            float width = 1f / Mathf.Sqrt(height);
+            cap.localPosition = capRestPosition + Vector3.up * capOffset;
+            cap.localScale = Vector3.Scale(capRestScale, new Vector3(width, height, width));
+        }
+
+        /// <summary>Steps a damped spring pulling <paramref name="value"/> toward <paramref name="target"/>.</summary>
+        void Spring(ref float value, ref float velocity, float target, float omega, float dt)
+        {
+            velocity += (-(value - target) * omega * omega - 2f * springDamping * omega * velocity) * dt;
+            value += velocity * dt;
         }
 
         void FixedUpdate()
@@ -56,6 +103,8 @@ namespace BounJam
             if (pressed == IsPressed) return;
 
             IsPressed = pressed;
+            // Kick the squash: flatten on press, stretch on release; the spring brings it back.
+            squashVelocity += (pressed ? -1f : 1f) * squashStrength * 2f * Mathf.PI * springFrequency;
             ApplyLook();
             PressedChanged?.Invoke(pressed);
         }
@@ -78,7 +127,6 @@ namespace BounJam
 
         void ApplyLook()
         {
-            if (cap != null) cap.localPosition = capRestPosition + Vector3.down * (IsPressed ? pressDepth : 0f);
             if (capRenderer != null) capRenderer.sharedMaterial = IsPressed ? pressedMaterial : idleMaterial;
             if (lightRenderer != null) lightRenderer.sharedMaterial = IsPressed ? lightOnMaterial : lightOffMaterial;
         }
