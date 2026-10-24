@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BounJam
@@ -8,7 +9,8 @@ namespace BounJam
     /// Switches the blob between liquid and solid. Freezing locks the skin's current shape, gives the body a convex
     /// collider of exactly that shape, makes it heavy, lets it rotate and moves it to the PlayerSolid layer (so it
     /// is stopped by grates, carries the ship as a solid and, later, presses buttons and pushes crates). Melting
-    /// reverses all of it, and the liquid flows back to rest from wherever the solid ended up.
+    /// reverses all of it, and the liquid flows back to rest from wherever the solid ended up. It can't freeze while the
+    /// liquid is partway through a grate (anything only the liquid passes): the crystal would stand inside it.
     /// </summary>
     [RequireComponent(typeof(BlobMotor), typeof(BlobSkin))]
     public class BlobForm : MonoBehaviour
@@ -61,6 +63,8 @@ namespace BounJam
         RigidbodyConstraints liquidConstraints;
         int liquidLayer;
         int solidLayer;
+        // Grates and the like: the liquid flows through them, the crystal doesn't.
+        int passableMask;
         Mesh hullMesh;
         int[] hullTriangles;
         Vector3[] hullPoints;
@@ -70,6 +74,7 @@ namespace BounJam
         float lastSwitchTime = float.NegativeInfinity;
         Coroutine lookTransition;
         readonly Collider[] nearby = new Collider[32];
+        readonly RaycastHit[] passageHits = new RaycastHit[8];
 
         public bool IsSolid { get; private set; }
         /// <summary>The collider that has the frozen shape (only enabled while solid).</summary>
@@ -98,6 +103,7 @@ namespace BounJam
             body.maxDepenetrationVelocity = maxDepenetrationSpeed;
             liquidLayer = LayerMask.NameToLayer("PlayerLiquid");
             solidLayer = LayerMask.NameToLayer("PlayerSolid");
+            passableMask = LayerMask.GetMask("LiquidPassable");
 
             IcoSphere.Build(1, out _, out hullTriangles);
             hullPoints = new Vector3[HullPointCount];
@@ -126,12 +132,13 @@ namespace BounJam
         {
             if (Time.time - lastSwitchTime < cooldown || !skin.IsReady) return;
             if (IsSolid) Melt();
-            else Freeze();
+            // The pieces of a cut blob freeze together: none of them while another is partway through a grate.
+            else if (!OtherPieceInPassage()) Freeze();
         }
 
         public void Freeze()
         {
-            if (IsSolid || !skin.IsReady) return;
+            if (IsSolid || !skin.IsReady || IsInPassage()) return;
 
             Vector3[] frozen = skin.Freeze();
             Array.Copy(frozen, hullPoints, HullPointCount);
@@ -199,6 +206,46 @@ namespace BounJam
             liquidMass *= factor;
             solidMass *= factor;
             body.mass = IsSolid ? solidMass : liquidMass;
+        }
+
+        /// <summary>
+        /// True while the liquid is partway through something only it can pass, like a grate: a crystal of this shape
+        /// would stand inside it. Looks along the lines from the core to the points the crystal would be built from,
+        /// and around the core itself, which a ray starting inside a collider can't see. Conveyor spikes share the
+        /// layer but are there to be frozen around (see <see cref="BlobGrip"/>), so they don't count.
+        /// </summary>
+        bool IsInPassage()
+        {
+            if (IsSolid || !skin.IsReady || passableMask == 0) return false;
+
+            Vector3 core = body.position;
+            int count = Physics.OverlapSphereNonAlloc(core, motor.CoreRadius, nearby, passableMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+                if (IsPassage(nearby[i])) return true;
+
+            Vector3[] points = skin.Points;
+            for (int i = 0; i < HullPointCount; i++)
+            {
+                Vector3 toPoint = points[i] - core;
+                int hits = Physics.RaycastNonAlloc(core, toPoint, passageHits, toPoint.magnitude, passableMask,
+                                                   QueryTriggerInteraction.Ignore);
+                for (int h = 0; h < hits; h++)
+                    if (IsPassage(passageHits[h].collider)) return true;
+            }
+            return false;
+        }
+
+        static bool IsPassage(Collider other) => other.GetComponentInParent<ConveyorSpike>() == null;
+
+        bool OtherPieceInPassage()
+        {
+            IReadOnlyList<BlobSplit> pieces = BlobSplit.All;
+            for (int i = 0; i < pieces.Count; i++)
+            {
+                BlobForm other = pieces[i].Form;
+                if (other != this && other.isActiveAndEnabled && other.IsInPassage()) return true;
+            }
+            return false;
         }
 
         /// <summary>

@@ -45,6 +45,7 @@ namespace BounJam
         public bool InPipe { get; private set; }
         public Rigidbody Body => body;
         public BlobMotor Motor => motor;
+        public BlobForm Form => form;
         public BlobSkin Skin => skin;
         /// <summary>Can a piercer pipe take this piece in now? Only the whole blob, as liquid, done swelling.</summary>
         public bool CanBeCut => !isHalf && Free && !form.IsSolid && !size.IsSwelling;
