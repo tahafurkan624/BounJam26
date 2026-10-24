@@ -213,6 +213,11 @@ namespace BounJam
         public bool IsFrozen { get; private set; }
         /// <summary>False until the first physics step has placed the skin points.</summary>
         public bool IsReady => initialised;
+        /// <summary>
+        /// The frozen look: the skin's shape when it last froze, in flat facets, in the blob's local space (null before
+        /// the first freeze).
+        /// </summary>
+        public Mesh FrozenMesh => frozenMesh;
 
         /// <summary>
         /// Scales the rest shape: lengths by <paramref name="factor"/>, the volume by its cube (a blob cut in half, or two
@@ -256,6 +261,15 @@ namespace BounJam
 
             IsFrozen = true;
             return frozenLocal;
+        }
+
+        /// <summary>
+        /// Shows <paramref name="look"/> (in the blob's local space) in place of <see cref="FrozenMesh"/> until it melts,
+        /// like the crystal with a post it froze around carved out of it. Only the look changes.
+        /// </summary>
+        public void ShowFrozenLook(Mesh look)
+        {
+            if (IsFrozen && skinFilter != null) skinFilter.sharedMesh = look;
         }
 
         /// <summary>

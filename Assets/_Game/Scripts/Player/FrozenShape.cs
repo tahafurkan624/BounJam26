@@ -9,15 +9,17 @@ namespace BounJam
     /// into a closed mesh (the first 162 skin points are the level-2 icosphere, just as the first 42 are level 1).
     /// Colliders on a moving body have to be convex, and one convex collider around the whole shape fills in every dent
     /// the jelly took around a post or over an edge. So where that would cut into the level, <see cref="BlobForm"/> cuts
-    /// the crystal into boxes: <see cref="Clip"/> gives the corners of the part of the shape inside a box, and their
-    /// convex hull is that part, with only the dents inside the box filled in.
+    /// the crystal into convex regions, each bounded by planes: <see cref="Clip"/> gives the corners of the part of the
+    /// shape inside a region, and their convex hull is that part, with only the dents inside the region filled in.
     /// </summary>
     public class FrozenShape
     {
         // Finer than level 2 gives each piece more points than a convex collider takes, and is slower to clip.
         const int MaxSubdivisions = 2;
-        // Points this close outside a box still count as on it, m.
+        // Points this close outside a region still count as on it, m.
         const float Epsilon = 1e-5f;
+        // A region's corners closer than this are one corner, m.
+        const float SameCorner = 1e-4f;
 
         readonly int[] triangles;
         // Every edge of the mesh once, as pairs of point indices.
@@ -26,6 +28,9 @@ namespace BounJam
         // Bounds of each triangle, to skip the ones nowhere near quickly.
         readonly Vector3[] triangleMin;
         readonly Vector3[] triangleMax;
+        // The corners of the region being clipped to, and which of its sides each lies on (one bit per side).
+        readonly List<Vector3> corners = new List<Vector3>();
+        readonly List<ulong> cornerSides = new List<ulong>();
 
         /// <summary>How many of the skin's points the shape is made of (its first ones).</summary>
         public int PointCount => points.Length;
@@ -98,51 +103,45 @@ namespace BounJam
         }
 
         /// <summary>
-        /// The corners of the part of the shape inside <paramref name="box"/>: the shape's points inside it, where its
-        /// edges cross the box's faces, the box's corners inside the shape and where the box's edges cross its surface.
-        /// The convex hull of these is that part of the shape, with only its own dents filled in.
+        /// The corners of the part of the shape inside <paramref name="region"/> (a convex region: the space behind all
+        /// of its planes, which face out of it): the shape's points inside it, where its edges cross the region's sides,
+        /// the region's corners inside the shape and where the region's edges cross its surface. The convex hull of
+        /// these is that part of the shape, with only its own dents filled in.
         /// </summary>
-        public void Clip(Bounds box, List<Vector3> result)
+        public void Clip(IReadOnlyList<Plane> region, List<Vector3> result)
         {
             result.Clear();
-            Vector3 min = box.min, max = box.max;
 
             foreach (Vector3 p in points)
-                if (Inside(p, min, max)) result.Add(p);
+                if (Inside(p, region)) result.Add(p);
 
             for (int e = 0; e < edges.Length; e += 2)
             {
                 Vector3 a = points[edges[e]], b = points[edges[e + 1]];
-                for (int axis = 0; axis < 3; axis++)
+                for (int s = 0; s < region.Count; s++)
                 {
-                    AddCrossing(a, b, axis, min[axis], min, max, result);
-                    AddCrossing(a, b, axis, max[axis], min, max, result);
+                    float da = region[s].GetDistanceToPoint(a), db = region[s].GetDistanceToPoint(b);
+                    if ((da < 0f) == (db < 0f)) continue;
+                    Vector3 p = Vector3.Lerp(a, b, da / (da - db));
+                    if (Inside(p, region)) result.Add(p);
                 }
             }
 
-            for (int corner = 0; corner < 8; corner++)
+            FindCorners(region);
+            for (int c = 0; c < corners.Count; c++)
             {
-                var p = new Vector3((corner & 1) == 0 ? min.x : max.x, (corner & 2) == 0 ? min.y : max.y,
-                                    (corner & 4) == 0 ? min.z : max.z);
-                if (Contains(p)) result.Add(p);
-            }
-
-            // The box's twelve edges: four along each axis, at each pair of sides across the other two.
-            for (int axis = 0; axis < 3; axis++)
-            {
-                int u = (axis + 1) % 3, v = (axis + 2) % 3;
-                for (int side = 0; side < 4; side++)
+                if (Contains(corners[c])) result.Add(corners[c]);
+                // The region's edges: two corners on two of the same sides.
+                for (int d = c + 1; d < corners.Count; d++)
                 {
-                    Vector3 from = min;
-                    from[u] = (side & 1) == 0 ? min[u] : max[u];
-                    from[v] = (side & 2) == 0 ? min[v] : max[v];
-                    Vector3 to = from;
-                    to[axis] = max[axis];
+                    if (CountBits(cornerSides[c] & cornerSides[d]) < 2) continue;
+                    Vector3 from = corners[c], to = corners[d];
+                    Vector3 low = Vector3.Min(from, to), high = Vector3.Max(from, to);
                     for (int t = 0, f = 0; f < triangles.Length; t++, f += 3)
                     {
-                        Vector3 low = triangleMin[t], high = triangleMax[t];
-                        if (from[u] < low[u] || from[u] > high[u] || from[v] < low[v] || from[v] > high[v]
-                            || max[axis] < low[axis] || min[axis] > high[axis])
+                        Vector3 tLow = triangleMin[t], tHigh = triangleMax[t];
+                        if (high.x < tLow.x || low.x > tHigh.x || high.y < tLow.y || low.y > tHigh.y
+                            || high.z < tLow.z || low.z > tHigh.z)
                             continue;
                         if (Crosses(from, to, points[triangles[f]], points[triangles[f + 1]], points[triangles[f + 2]],
                                     out Vector3 crossing))
@@ -152,39 +151,74 @@ namespace BounJam
             }
         }
 
-        /// <summary>
-        /// Where to cut a piece (<paramref name="part"/>, the bounds of the shape inside it) that cuts into something
-        /// (<paramref name="obstacle"/>, its bounds), both in the shape's space. First choice is along a side of the
-        /// obstacle's bounds: everything beyond it is clear of the obstacle, so the side that clears the most. Else
-        /// through the obstacle's middle, which parts the jelly on either side of a post, or through the piece's
-        /// middle: across the obstacle's thinnest side first and never along its length, where both halves would still
-        /// wrap around it. Neither half may be thinner than <paramref name="minSize"/>; false when there's no such cut.
-        /// </summary>
-        public static bool ChooseCut(Bounds part, Bounds obstacle, float minSize, out int axis, out float at)
+        /// <summary>Is the point behind every one of the region's planes (or within a hair of it)?</summary>
+        public static bool Inside(Vector3 point, IReadOnlyList<Plane> region)
         {
-            axis = -1;
-            at = 0f;
-            float cleared = 0f;
-            for (int a = 0; a < 3; a++)
-            {
-                float low = part.min[a] + minSize, high = part.max[a] - minSize;
-                float face = obstacle.min[a];
-                if (face >= low && face <= high && face - part.min[a] > cleared)
-                {
-                    axis = a;
-                    at = face;
-                    cleared = face - part.min[a];
-                }
-                face = obstacle.max[a];
-                if (face >= low && face <= high && part.max[a] - face > cleared)
-                {
-                    axis = a;
-                    at = face;
-                    cleared = part.max[a] - face;
-                }
-            }
-            if (axis >= 0) return true;
+            for (int s = 0; s < region.Count; s++)
+                if (region[s].GetDistanceToPoint(point) > Epsilon) return false;
+            return true;
+        }
 
+        /// <summary>Adds the six sides of <paramref name="box"/> to a region.</summary>
+        public static void AddBox(Bounds box, List<Plane> region)
+        {
+            for (int axis = 0; axis < 3; axis++)
+            {
+                Vector3 normal = Vector3.zero;
+                normal[axis] = 1f;
+                region.Add(new Plane(normal, box.max));
+                region.Add(new Plane(-normal, box.min));
+            }
+        }
+
+        /// <summary>
+        /// Where to cut a piece (<paramref name="part"/>, its points) that cuts into an obstacle: along one of the
+        /// obstacle's <paramref name="sides"/> (planes that touch it and face out of it, so everything beyond one is clear
+        /// of it), the side that parts off the most. Both halves have to be at least <paramref name="minSize"/> thick;
+        /// false when no side parts the piece like that.
+        /// </summary>
+        public static bool ChooseCut(List<Vector3> part, IReadOnlyList<Plane> sides, float minSize, out Plane cut)
+        {
+            cut = default;
+            float best = 0f;
+            bool found = false;
+            foreach (Plane side in sides)
+            {
+                float beyond = float.NegativeInfinity, within = float.NegativeInfinity;
+                foreach (Vector3 p in part)
+                {
+                    float distance = side.GetDistanceToPoint(p);
+                    beyond = Mathf.Max(beyond, distance);
+                    within = Mathf.Max(within, -distance);
+                }
+                if (beyond < minSize || within < minSize || beyond <= best) continue;
+                best = beyond;
+                cut = side;
+                found = true;
+            }
+            return found;
+        }
+
+        /// <summary>How far the piece (its points) reaches out past the farthest of the obstacle's sides.</summary>
+        public static float Overhang(List<Vector3> part, IReadOnlyList<Plane> sides)
+        {
+            float overhang = float.NegativeInfinity;
+            foreach (Plane side in sides)
+            foreach (Vector3 p in part)
+                overhang = Mathf.Max(overhang, side.GetDistanceToPoint(p));
+            return overhang;
+        }
+
+        /// <summary>
+        /// A cut for when none along the obstacle's sides will do: through the obstacle's middle, which parts the jelly
+        /// on either side of a post, or through the piece's middle (<paramref name="part"/> and
+        /// <paramref name="obstacle"/> are their bounds): across the obstacle's thinnest side first and never along its
+        /// length, where both halves would still wrap around it. Neither half may be thinner than
+        /// <paramref name="minSize"/>; false when there's no such cut.
+        /// </summary>
+        public static bool MiddleCut(Bounds part, Bounds obstacle, float minSize, out Plane cut)
+        {
+            cut = default;
             // Thinnest side of the obstacle first; between sides about as thin, where the piece is longest.
             Vector3 size = obstacle.size;
             var order = new[] { 0, 1, 2 };
@@ -196,27 +230,55 @@ namespace BounJam
                 float low = part.min[a] + minSize, high = part.max[a] - minSize;
                 if (size[a] > thinnest * 2f + minSize) break;
                 if (low > high) continue;
-                axis = a;
                 float middle = obstacle.center[a];
-                at = middle >= low && middle <= high ? middle : part.center[a];
+                Vector3 normal = Vector3.zero;
+                normal[a] = 1f;
+                cut = new Plane(normal, -(middle >= low && middle <= high ? middle : part.center[a]));
                 return true;
             }
             return false;
         }
 
-        static bool Inside(Vector3 p, Vector3 min, Vector3 max)
-            => p.x >= min.x - Epsilon && p.x <= max.x + Epsilon
-               && p.y >= min.y - Epsilon && p.y <= max.y + Epsilon
-               && p.z >= min.z - Epsilon && p.z <= max.z + Epsilon;
-
-        /// <summary>Adds where the segment from a to b crosses the plane at <paramref name="face"/> along the axis, if inside the box.</summary>
-        static void AddCrossing(Vector3 a, Vector3 b, int axis, float face, Vector3 min, Vector3 max, List<Vector3> result)
+        /// <summary>
+        /// The region's corners: where three of its planes meet, inside all the others. Where more than three meet (a
+        /// cut through a box's corner), they're one corner on all of them.
+        /// </summary>
+        void FindCorners(IReadOnlyList<Plane> region)
         {
-            float da = a[axis] - face, db = b[axis] - face;
-            if ((da < 0f) == (db < 0f)) return;
-            Vector3 p = Vector3.Lerp(a, b, da / (da - db));
-            p[axis] = face;
-            if (Inside(p, min, max)) result.Add(p);
+            corners.Clear();
+            cornerSides.Clear();
+            int count = Mathf.Min(region.Count, 64);
+            for (int i = 0; i < count; i++)
+            for (int j = i + 1; j < count; j++)
+            for (int k = j + 1; k < count; k++)
+            {
+                Plane a = region[i], b = region[j], c = region[k];
+                Vector3 bc = Vector3.Cross(b.normal, c.normal);
+                float determinant = Vector3.Dot(a.normal, bc);
+                if (Mathf.Abs(determinant) < 1e-6f) continue;
+                Vector3 corner = (-a.distance * bc - b.distance * Vector3.Cross(c.normal, a.normal)
+                                  - c.distance * Vector3.Cross(a.normal, b.normal)) / determinant;
+                bool inside = true;
+                for (int s = 0; s < count && inside; s++)
+                    inside = region[s].GetDistanceToPoint(corner) <= SameCorner;
+                if (!inside) continue;
+
+                ulong sides = (1UL << i) | (1UL << j) | (1UL << k);
+                int same = corners.FindIndex(p => (p - corner).sqrMagnitude < SameCorner * SameCorner);
+                if (same >= 0) cornerSides[same] |= sides;
+                else
+                {
+                    corners.Add(corner);
+                    cornerSides.Add(sides);
+                }
+            }
+        }
+
+        static int CountBits(ulong bits)
+        {
+            int count = 0;
+            for (; bits != 0; bits &= bits - 1) count++;
+            return count;
         }
 
         /// <summary>Where the segment from <paramref name="from"/> to <paramref name="to"/> crosses the triangle, if it does.</summary>
