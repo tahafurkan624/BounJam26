@@ -60,7 +60,8 @@ namespace BounJam
         [Range(0f, 1f)]
         [SerializeField] float dropShare = 0.5f;
         [Tooltip("Carve what the crystal was cut around (a post the jelly closed over, an edge it draped over) out of " +
-                 "its look, so the post stands in a hole through the ice instead of inside it. A few ms when freezing.")]
+                 "it, so the post stands in a hole through the ice instead of inside it, and refit its colliders to " +
+                 "what's left. Done in the background, shortly after freezing.")]
         [SerializeField] bool carveLook = true;
         [Tooltip("How much bigger all round than the obstacle the hole carved for it is, m. The skin stops a few cm short " +
                  "of what it presses against; carving exactly the obstacle leaves that gap as a paper-thin shell around " +
@@ -223,7 +224,7 @@ namespace BounJam
             liquidCore.enabled = false;
             Hardening?.Invoke();
             ResolveOverlaps();
-            if (carveLook) CarveLook();
+            if (carveLook) Carve();
 
             SetLayer(solidLayer);
             body.mass = solidMass;
@@ -488,6 +489,22 @@ namespace BounJam
         {
             if (!CanBuild(points, out Bounds extent)) return;
 
+            Mesh mesh = HullMesh(points);
+            MeshCollider meshCollider = spareColliders.Count > 0 ? spareColliders.Pop() : AddCrystalCollider();
+            meshCollider.sharedMesh = mesh;
+            meshCollider.enabled = true;
+            var piece = new Piece
+            {
+                Collider = meshCollider, Mesh = mesh, Region = region, Points = new List<Vector3>(points), Extent = extent,
+            };
+            piece.Depth = MeasureDepth(piece, out piece.Obstacle);
+            pieces.Add(piece);
+            if (piece.Depth > fitTolerance && !cutAround.Contains(piece.Obstacle)) cutAround.Add(piece.Obstacle);
+        }
+
+        /// <summary>A mesh to build a convex collider around <paramref name="points"/> from.</summary>
+        Mesh HullMesh(List<Vector3> points)
+        {
             // A convex collider is built from the points alone; the triangles only have to be valid.
             int indexCount = (points.Count - 2) * 3;
             for (int k = fanTriangles.Count / 3; fanTriangles.Count < indexCount; k++)
@@ -502,26 +519,16 @@ namespace BounJam
             var mesh = new Mesh { name = "Blob Crystal" };
             mesh.SetVertices(points);
             mesh.SetTriangles(fanTriangles, 0, indexCount, 0);
-
-            MeshCollider meshCollider = spareColliders.Count > 0 ? spareColliders.Pop() : AddCrystalCollider();
-            meshCollider.sharedMesh = mesh;
-            meshCollider.enabled = true;
-            var piece = new Piece
-            {
-                Collider = meshCollider, Mesh = mesh, Region = region, Points = new List<Vector3>(points), Extent = extent,
-            };
-            piece.Depth = MeasureDepth(piece, out piece.Obstacle);
-            pieces.Add(piece);
-            if (piece.Depth > fitTolerance && !cutAround.Contains(piece.Obstacle)) cutAround.Add(piece.Obstacle);
+            return mesh;
         }
 
         /// <summary>
-        /// Carves what the crystal cut into out of its look. The skin is one closed surface, so where the jelly closed
-        /// over a post the frozen look runs right through the post; with the post taken out, it stands in a hole through
-        /// the ice. Each obstacle is cut out as the mesh it's drawn with, or as its box collider when it has no mesh.
-        /// Only the look: the colliders are the convex pieces <see cref="BuildCrystal"/> made.
+        /// Carves what the crystal cut into out of it. The skin is one closed surface, so where the jelly closed over a
+        /// post the frozen look runs right through the post; with the post taken out, it stands in a hole through the
+        /// ice. Each obstacle is cut out as the mesh it's drawn with, or as its box collider when it has no mesh. Once
+        /// carved, the look is shown and the colliders <see cref="BuildCrystal"/> made are refitted to it (<see cref="Refit"/>).
         /// </summary>
-        void CarveLook()
+        void Carve()
         {
             if (cutAround.Count == 0 || skin.FrozenMesh == null) return;
             // Into the blob's space, where the skin froze. It has no rotation yet, but ResolveOverlaps may have moved it.
@@ -534,34 +541,84 @@ namespace BounJam
             }
             if (cutters.Count == 0) return;
 
-            MeshCsg crystal = MeshCsg.FromMesh(skin.FrozenMesh, Matrix4x4.identity);
-            Func<MeshCsg> carve = () =>
-            {
-                MeshCsg look = crystal;
-                foreach (MeshCsg cutter in cutters) look = look.Subtract(cutter);
-                // A cut can leave scraps of the skin floating beside the crystal: bits, and thin sheets.
-                return look.WithoutLooseBits(LooseBitShare, LooseBitVolume);
-            };
+            MeshCsg look = MeshCsg.FromMesh(skin.FrozenMesh, Matrix4x4.identity);
+            // The colliders are refitted from the coarser shape they were cut from.
+            MeshCsg fit = MeshCsg.FromTriangles(shape.CopyPoints(), shape.Triangles, Matrix4x4.identity);
+            Func<(MeshCsg, MeshCsg)> carve = () => (CarveOut(look, cutters), CarveOut(fit, cutters));
             // Carving a skin this fine takes longer than a frame. Off the main thread it doesn't hold the game up: the
-            // crystal hardens with the plain look and the carved one replaces it when it's ready. WebGL has no threads.
-            Task<MeshCsg> carving = Application.platform == RuntimePlatform.WebGLPlayer
+            // crystal hardens with the plain look and colliders, and the carved ones replace them when they're ready.
+            // WebGL has no threads.
+            Task<(MeshCsg, MeshCsg)> carving = Application.platform == RuntimePlatform.WebGLPlayer
                 ? Task.FromResult(carve())
                 : Task.Run(carve);
-            StartCoroutine(ShowCarvedLook(carving, ++carveCount));
+            StartCoroutine(ApplyCarve(carving, ++carveCount));
         }
 
-        IEnumerator ShowCarvedLook(Task<MeshCsg> carving, int carve)
+        static MeshCsg CarveOut(MeshCsg solid, List<MeshCsg> cutters)
+        {
+            foreach (MeshCsg cutter in cutters) solid = solid.Subtract(cutter);
+            // A cut can leave scraps of the skin floating beside the crystal: bits, and thin sheets.
+            return solid.WithoutLooseBits(LooseBitShare, LooseBitVolume);
+        }
+
+        IEnumerator ApplyCarve(Task<(MeshCsg Look, MeshCsg Fit)> carving, int carve)
         {
             while (!carving.IsCompleted) yield return null;
             if (carving.IsFaulted)
             {
-                Debug.LogWarning($"[BounJam] Carving the crystal's look failed; it keeps the plain one. {carving.Exception}");
+                Debug.LogWarning($"[BounJam] Carving the crystal failed; it keeps the plain look. {carving.Exception}");
                 yield break;
             }
-            // Melted, or frozen again, while it was carving: this look belongs to a crystal that's gone.
+            // Melted, or frozen again, while it was carving: this belongs to a crystal that's gone.
             if (carve != carveCount || !IsSolid) yield break;
             if (carvedLook == null) carvedLook = new Mesh { name = "Blob Crystal Look" };
-            skin.ShowFrozenLook(carving.Result.ToMesh(carvedLook));
+            skin.ShowFrozenLook(carving.Result.Look.ToMesh(carvedLook));
+            Refit(carving.Result.Fit);
+        }
+
+        /// <summary>
+        /// Fits the crystal's colliders to it once what it froze around is carved out: each piece keeps the region it
+        /// was cut from and is rebuilt from what's left of the shape inside it, without the scraps the carve took away
+        /// or the gap the skin kept around the obstacle. A piece with nothing left in it goes. The regions were chosen
+        /// as it froze, so it doesn't matter where the crystal has rolled since.
+        /// </summary>
+        void Refit(MeshCsg carved)
+        {
+            carved.GetTriangles(out Vector3[] vertices, out int[] triangles);
+            if (triangles.Length == 0) return;
+            var fit = new FrozenShape(vertices, triangles);
+
+            var refilled = new List<Vector3>[pieces.Count];
+            bool any = false;
+            for (int i = 0; i < pieces.Count; i++)
+            {
+                var points = new List<Vector3>();
+                fit.Clip(pieces[i].Region, points);
+                if (!CanBuild(points, out _)) continue;
+                refilled[i] = points;
+                any = true;
+            }
+            // With nothing left anywhere, the crystal would have no shape to stand on.
+            if (!any) return;
+
+            for (int i = pieces.Count - 1; i >= 0; i--)
+            {
+                Piece piece = pieces[i];
+                if (refilled[i] == null)
+                {
+                    pieces.RemoveAt(i);
+                    Release(piece);
+                    continue;
+                }
+                Mesh old = piece.Mesh;
+                piece.Mesh = HullMesh(refilled[i]);
+                piece.Collider.sharedMesh = piece.Mesh;
+                Destroy(old);
+                piece.Points = refilled[i];
+                CanBuild(piece.Points, out piece.Extent);
+            }
+            solidColliders.Clear();
+            foreach (Piece piece in pieces) solidColliders.Add(piece.Collider);
         }
 
         /// <summary>

@@ -10,7 +10,8 @@ namespace BounJam
     /// Colliders on a moving body have to be convex, and one convex collider around the whole shape fills in every dent
     /// the jelly took around a post or over an edge. So where that would cut into the level, <see cref="BlobForm"/> cuts
     /// the crystal into convex regions, each bounded by planes: <see cref="Clip"/> gives the corners of the part of the
-    /// shape inside a region, and their convex hull is that part, with only the dents inside the region filled in.
+    /// shape inside a region, and their convex hull is that part, with only the dents inside the region filled in. Any
+    /// closed mesh can stand in for the skin, like the crystal once what it froze around is carved out of it.
     /// </summary>
     public class FrozenShape
     {
@@ -61,12 +62,47 @@ namespace BounJam
             edges = found.ToArray();
         }
 
+        /// <summary>
+        /// For a closed mesh of any make, in the space its points are in. Its triangles needn't share points: every
+        /// edge of each one counts.
+        /// </summary>
+        public FrozenShape(Vector3[] meshPoints, int[] meshTriangles)
+        {
+            points = meshPoints;
+            triangles = meshTriangles;
+            triangleMin = new Vector3[triangles.Length / 3];
+            triangleMax = new Vector3[triangles.Length / 3];
+            var found = new HashSet<long>();
+            var list = new List<int>(triangles.Length * 2);
+            for (int f = 0; f < triangles.Length; f += 3)
+            for (int k = 0; k < 3; k++)
+            {
+                int a = triangles[f + k], b = triangles[f + (k + 1) % 3];
+                if (!found.Add((long)Mathf.Min(a, b) << 32 | (uint)Mathf.Max(a, b))) continue;
+                list.Add(a);
+                list.Add(b);
+            }
+            edges = list.ToArray();
+            Measure();
+        }
+
         static int IcoPointCount(int subdivisions) => 10 * (1 << (2 * subdivisions)) + 2;
+
+        /// <summary>The shape's triangles, as indices into its points.</summary>
+        public int[] Triangles => triangles;
+
+        /// <summary>A copy of the shape's points, safe to read while it takes new ones.</summary>
+        public Vector3[] CopyPoints() => (Vector3[])points.Clone();
 
         /// <summary>Takes the shape from the skin's points (only the first <see cref="PointCount"/> are used).</summary>
         public void SetPoints(Vector3[] skinPoints)
         {
             Array.Copy(skinPoints, points, points.Length);
+            Measure();
+        }
+
+        void Measure()
+        {
             var bounds = new Bounds(points[0], Vector3.zero);
             foreach (Vector3 p in points) bounds.Encapsulate(p);
             Bounds = bounds;

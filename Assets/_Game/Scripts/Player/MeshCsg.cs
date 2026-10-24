@@ -33,10 +33,11 @@ namespace BounJam
         /// The solid a closed mesh bounds, with every point moved by <paramref name="toSpace"/>. Triangles too small to
         /// have a facing are left out.
         /// </summary>
-        public static MeshCsg FromMesh(Mesh mesh, Matrix4x4 toSpace)
+        public static MeshCsg FromMesh(Mesh mesh, Matrix4x4 toSpace) => FromTriangles(mesh.vertices, mesh.triangles, toSpace);
+
+        /// <summary>The solid a closed mesh (its points and triangles) bounds, with every point moved by <paramref name="toSpace"/>.</summary>
+        public static MeshCsg FromTriangles(Vector3[] vertices, int[] triangles, Matrix4x4 toSpace)
         {
-            Vector3[] vertices = mesh.vertices;
-            int[] triangles = mesh.triangles;
             var result = new List<Polygon>(triangles.Length / 3);
             for (int t = 0; t < triangles.Length; t += 3)
             {
@@ -203,6 +204,26 @@ namespace BounJam
             a = Root(parent, a);
             b = Root(parent, b);
             if (a != b) parent[a] = b;
+        }
+
+        /// <summary>The solid's surface as triangles, each polygon with points of its own.</summary>
+        public void GetTriangles(out Vector3[] vertices, out int[] triangles)
+        {
+            var points = new List<Vector3>();
+            var indices = new List<int>();
+            foreach (Polygon polygon in polygons)
+            {
+                int start = points.Count;
+                foreach (Vec point in polygon.Vertices) points.Add(point.ToVector3());
+                for (int k = 1; k + 1 < polygon.Vertices.Count; k++)
+                {
+                    indices.Add(start);
+                    indices.Add(start + k);
+                    indices.Add(start + k + 1);
+                }
+            }
+            vertices = points.ToArray();
+            triangles = indices.ToArray();
         }
 
         /// <summary>
