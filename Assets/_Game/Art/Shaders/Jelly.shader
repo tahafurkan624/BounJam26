@@ -1,54 +1,115 @@
-// Thick translucent jelly for the liquid blob. Cheap single pass, no raymarching:
-// - refraction: the scene behind (URP opaque texture) is bent by the surface normal and a slow internal wobble,
-//   then tinted, darker where the view crosses more jelly (facing the camera) and lighter at the thin edges
-// - a lit "body" colour blended over it so the shape still reads as a solid volume from above
-// - fake subsurface glow when light shines through from behind, fresnel rim + reflection, sharp wet highlight
+// Clear water for the liquid blob, frosted ice when it hardens. One pass, no raymarching:
+// - refraction: the body is treated as an ellipsoid fitted to the skin's renderer bounds (the CPU skin recalculates
+//   them every frame). Each pixel follows its refracted ray to where it leaves the water and shows the scene behind
+//   that point (URP opaque texture), so the floor is bent like through a real drop, with a little colour fringing
+// - Beer-Lambert absorption over the distance the view travels through the water: that ellipsoid, cut short by the
+//   depth texture where the floor or the ship's hull is closer. Thin edges stay clear, the thick middle turns cyan,
+//   and light scattered inside fills in a little of what was absorbed
+// - slow ripples from 3D noise in the skin's own space tilt the normal: they show in the sun glints, the sky
+//   reflection (Schlick fresnel), the refracted floor and a faint caustic web. A few millimetres of vertex swell
+// - foam where the water meets the floor or the ship's hull, and drip rings while _Splash is up (set from code)
 // Renders in the transparent queue (after the opaque texture is captured) but writes depth and outputs an opaque
-// colour, so the ship can sit half inside it and still sort correctly.
+// colour, so the ship can sit half inside it and still sort correctly. Its own shadow caster (same material
+// constants as the forward pass, so it stays SRP Batcher compatible) drops a share of the shadow-map texels: the
+// soft-shadow filter turns that into a partial shadow, because light gets through water.
 Shader "BounJam/Jelly"
 {
     Properties
     {
-        [Header(Colour)]
-        _ShallowColor ("Shallow Tint (thin edges)", Color) = (0.45, 1.0, 0.85, 1)
-        _DeepColor ("Deep Tint (thick middle)", Color) = (0.03, 0.55, 0.5, 1)
-        _BodyColor ("Body Colour (lit)", Color) = (0.10, 0.80, 0.66, 1)
-        _Opacity ("Opacity (thin edges)", Range(0, 1)) = 0.3
-        _CoreOpacity ("Opacity (thick middle)", Range(0, 1)) = 0.6
+        [Header(Water)]
+        _WaterTint ("Tint Through 1 m Of Water", Color) = (0.44, 0.81, 0.85, 1)
+        _Density ("Density (absorption multiplier)", Range(0, 3)) = 1.15
+        _ScatterColor ("Scattered Light (murk)", Color) = (0.18, 0.53, 0.59, 1)
+        _SurfaceOpacity ("Body Even When Thin", Range(0, 0.5)) = 0.18
+        _ShadowStrength ("Shadow Strength On The Water", Range(0, 1)) = 0.35
 
         [Header(Refraction)]
-        _Refraction ("Refraction Strength", Range(0, 0.2)) = 0.06
-        _Blur ("Scatter Blur", Range(0, 0.05)) = 0.015
-        _Wobble ("Inner Wobble", Range(0, 0.02)) = 0.004
-        _WobbleSpeed ("Wobble Speed", Range(0, 5)) = 1.5
+        _IOR ("Index Of Refraction", Range(1, 1.6)) = 1.33
+        _Refraction ("Refraction (1 = physical)", Range(0, 1.5)) = 0.6
+        _RippleRefraction ("Ripple Bending (x ripple slope)", Range(0, 6)) = 1.5
+        _Dispersion ("Colour Fringing", Range(0, 0.3)) = 0.06
 
-        [Header(Lighting)]
-        _Wrap ("Wrap Lighting", Range(0, 1)) = 0.5
-        _ShadowStrength ("Shadow Strength", Range(0, 1)) = 0.35
-        _Shininess ("Highlight Sharpness", Range(8, 512)) = 160
-        _Specular ("Highlight Strength", Range(0, 4)) = 1.2
-        _Reflection ("Reflection Strength", Range(0, 2)) = 0.6
+        [Header(Ripples)]
+        _RippleSize ("Ripple Size (m)", Range(0.05, 0.6)) = 0.2
+        _RippleSlope ("Ripple Slope", Range(0, 0.4)) = 0.12
+        _RippleSpeed ("Ripple Drift (m per s)", Range(0, 0.5)) = 0.06
+        _RippleHeight ("Ripple Swell (m, vertex)", Range(0, 0.012)) = 0.004
 
-        [Header(Rim)]
-        _RimColor ("Rim Colour", Color) = (0.75, 1.0, 0.95, 1)
-        _RimPower ("Rim Tightness", Range(0.5, 8)) = 2.5
-        _RimStrength ("Rim Strength", Range(0, 2)) = 0.7
+        [Header(Surface)]
+        _Reflectance ("Reflectance Facing The Camera (water 0.02)", Range(0, 0.2)) = 0.02
+        _ReflectionTint ("Sky Reflection Tint", Color) = (1, 1, 1, 1)
+        _RimColor ("Rim Colour", Color) = (0.85, 0.97, 1, 1)
+        _RimStrength ("Rim Strength", Range(0, 2)) = 0.65
+        [PowerSlider(3)] _GlintSharpness ("Sun Glint Sharpness", Range(50, 3000)) = 400
+        _GlintStrength ("Sun Glint Strength", Range(0, 8)) = 2.5
+        _Sheen ("Soft Highlight", Range(0, 1)) = 0.15
+
+        [Header(Foam And Light)]
+        _FoamColor ("Foam Colour", Color) = (0.93, 0.98, 1, 1)
+        _FoamWidth ("Contact Foam Width (m)", Range(0, 0.15)) = 0.035
+        _FoamStrength ("Contact Foam Strength", Range(0, 1)) = 0.55
+        _Caustics ("Caustic Shimmer", Range(0, 1)) = 0.25
+        _ShadowOpacity ("Cast Shadow Opacity", Range(0, 1)) = 0.35
+
+        [Header(Splash)]
+        _Splash ("Splash (0 calm, 1 sloshing, set from code)", Range(0, 1)) = 0
+        _DripStrength ("Drip Ring Strength", Range(0, 1)) = 0.6
+        _DripSpacing ("Drip Ring Spacing (m)", Range(0.08, 0.5)) = 0.22
 
         [Header(Solid Form)]
-        _Solid ("Solid (0 jelly, 1 hardened)", Range(0, 1)) = 0
-        _SolidColor ("Hardened Body Colour", Color) = (0.55, 0.85, 0.88, 1)
-        _SolidOpacity ("Hardened Opacity", Range(0, 1)) = 0.8
-
-        [Header(Subsurface)]
-        _SSSColor ("Glow Colour", Color) = (0.5, 1.0, 0.75, 1)
-        _SSSStrength ("Glow Strength", Range(0, 3)) = 0.8
-        _SSSDistortion ("Glow Spread", Range(0, 1)) = 0.4
-        _SSSPower ("Glow Tightness", Range(1, 16)) = 3
+        _Solid ("Solid (0 water, 1 ice, set from code)", Range(0, 1)) = 0
+        _IceTint ("Ice Tint Through 1 m", Color) = (0.62, 0.86, 0.92, 1)
+        _IceColor ("Frosted Ice Colour", Color) = (0.60, 0.78, 0.86, 1)
+        _IceFrost ("Frosted Interior", Range(0, 1)) = 0.55
+        _IceRefraction ("Ice Refraction (share of the water's)", Range(0, 1)) = 0.45
+        _IceShadowOpacity ("Ice Cast Shadow Opacity", Range(0, 1)) = 0.9
     }
 
     SubShader
     {
         Tags { "RenderType" = "Transparent" "Queue" = "Transparent" "RenderPipeline" = "UniversalPipeline" }
+
+        // Shared by both passes: one material layout, which is what the SRP Batcher needs.
+        HLSLINCLUDE
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+        CBUFFER_START(UnityPerMaterial)
+            half4 _WaterTint;
+            half4 _ScatterColor;
+            half4 _ReflectionTint;
+            half4 _RimColor;
+            half4 _FoamColor;
+            half4 _IceTint;
+            half4 _IceColor;
+            half _Density;
+            half _SurfaceOpacity;
+            half _ShadowStrength;
+            float _IOR;
+            float _Refraction;
+            float _RippleRefraction;
+            float _Dispersion;
+            float _RippleSize;
+            float _RippleSlope;
+            float _RippleSpeed;
+            float _RippleHeight;
+            half _Reflectance;
+            half _RimStrength;
+            float _GlintSharpness;
+            half _GlintStrength;
+            half _Sheen;
+            float _FoamWidth;
+            half _FoamStrength;
+            half _Caustics;
+            half _ShadowOpacity;
+            float _Splash;
+            half _DripStrength;
+            float _DripSpacing;
+            float _Solid;
+            half _IceFrost;
+            half _IceRefraction;
+            half _IceShadowOpacity;
+        CBUFFER_END
+        ENDHLSL
 
         Pass
         {
@@ -59,42 +120,16 @@ Shader "BounJam/Jelly"
             Blend Off
 
             HLSLPROGRAM
+            #pragma target 3.5
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
             #pragma multi_compile_fog
 
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareOpaqueTexture.hlsl"
-
-            CBUFFER_START(UnityPerMaterial)
-                half4 _ShallowColor;
-                half4 _DeepColor;
-                half4 _BodyColor;
-                half _Opacity;
-                half _CoreOpacity;
-                float _Refraction;
-                float _Blur;
-                float _Wobble;
-                float _WobbleSpeed;
-                half _Wrap;
-                half _ShadowStrength;
-                half _Shininess;
-                half _Specular;
-                half _Reflection;
-                half4 _RimColor;
-                half _RimPower;
-                half _RimStrength;
-                half _Solid;
-                half4 _SolidColor;
-                half _SolidOpacity;
-                half4 _SSSColor;
-                half _SSSStrength;
-                half _SSSDistortion;
-                half _SSSPower;
-            CBUFFER_END
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
             struct Attributes
             {
@@ -107,78 +142,362 @@ Shader "BounJam/Jelly"
                 float4 positionCS : SV_POSITION;
                 float3 positionWS : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
-                float fogFactor : TEXCOORD2;
+                // Undisplaced skin-space position: where the ripples are looked up.
+                float3 positionOS : TEXCOORD2;
+                float fogFactor : TEXCOORD3;
             };
+
+            static const float3 kCorners[8] =
+            {
+                float3(0, 0, 0), float3(1, 0, 0), float3(0, 1, 0), float3(1, 1, 0),
+                float3(0, 0, 1), float3(1, 0, 1), float3(0, 1, 1), float3(1, 1, 1)
+            };
+
+            // Three pseudo-random values in [0, 1) per lattice point. Sine-free, so it's the same on every GPU.
+            float3 RippleHash(float3 p)
+            {
+                p = frac(p * float3(0.1031, 0.1030, 0.0973));
+                p += dot(p, p.yzx + 33.33);
+                return frac((p.xxy + p.yzz) * p.zyx);
+            }
+
+            // Gradient noise with its exact derivative, so ripples can tilt the normal without a second lookup.
+            // xyz = gradient, w = value (roughly -1..1).
+            float4 RippleNoise(float3 p)
+            {
+                float3 cell = floor(p);
+                float3 f = p - cell;
+                float3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+                float3 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+                float4 result = 0;
+                [unroll]
+                for (int i = 0; i < 8; i++)
+                {
+                    float3 corner = kCorners[i];
+                    float3 gradient = RippleHash(cell + corner) * 2.0 - 1.0;
+                    float value = dot(gradient, f - corner);
+                    float3 w = lerp(1.0 - u, u, corner);
+                    float3 dw = lerp(-du, du, corner);
+                    float weight = w.x * w.y * w.z;
+                    result.xyz += weight * gradient + value * float3(dw.x * w.y * w.z, w.x * dw.y * w.z, w.x * w.y * dw.z);
+                    result.w += weight * value;
+                }
+                return result;
+            }
+
+            // Slow ripples in the skin's own space: xyz = slope, w = height. Object space moves with the blob, so the
+            // ripples ride along instead of streaming over it at 5 m/s (that strobes at the default camera distance),
+            // and when the skin squashes or jiggles it sweeps through the field: it shimmers more exactly when the
+            // water sloshes. The coarse layer drains down the sides like a film of water, the fine one wanders across.
+            // thread = a faint caustic web where the coarse height crosses zero.
+            float4 Ripples(float3 positionOS, float footprint, float chop, out float thread)
+            {
+                float frequency = 1.0 / _RippleSize;
+                float drift = _Time.y * _RippleSpeed * frequency;
+                float4 coarse = RippleNoise(positionOS * frequency + float3(0.0, drift, 0.0));
+                float4 fine = RippleNoise(positionOS * (frequency * 2.17) + float3(-0.7, 0.35, 0.9) * (drift * 1.6) + 11.3);
+
+                // Ripples smaller than a few pixels only fizz and crawl (far away, along the grazing edge): fade them out.
+                float cellsPerPixel = footprint * frequency;
+                float coarseFade = saturate((0.45 - cellsPerPixel) * 5.0);
+                float fineFade = saturate((0.45 - cellsPerPixel * 2.17) * 5.0);
+
+                float threadWidth = 0.12 + fwidth(coarse.w) * 1.5;
+                thread = saturate(1.0 - abs(coarse.w) / threadWidth);
+                thread *= thread * (0.12 / threadWidth) * coarseFade;
+
+                return coarse * coarseFade + fine * (fineFade * chop);
+            }
+
+            // Rings from drops falling back onto the surface after a sharp move. Every cell of a 3D grid drips once per
+            // cycle, at its own moment and a fresh spot each time; the harder the splash, the more cells take part.
+            // A ring spreads to under half a cell, so the 2x2x2 nearest cells always hold every ring that reaches here.
+            // xyz = slope, w = crest height (for a little white aeration).
+            float4 DripRings(float3 positionOS, float splash, float footprint)
+            {
+                float3 p = positionOS / _DripSpacing;
+                float3 baseCell = floor(p - 0.5);
+                float4 result = 0;
+                [unroll]
+                for (int i = 0; i < 8; i++)
+                {
+                    float3 cell = baseCell + kCorners[i];
+                    float3 timing = RippleHash(cell + 41.7);
+                    float cycle = _Time.y * (1.2 + 0.6 * timing.x) + timing.y;
+                    float cycleIndex = floor(cycle);
+                    float age = cycle - cycleIndex;
+                    // Wrapped so the hash inputs stay small however long the game runs.
+                    float variant = cycleIndex - 512.0 * floor(cycleIndex / 512.0);
+                    float pick = frac(timing.z + variant * 0.618034);
+                    float alive = saturate((splash - pick) * 6.0);
+                    float3 drop = cell + 0.25 + 0.5 * RippleHash(cell + variant * 7.31);
+
+                    float3 offset = p - drop;
+                    float r = length(offset) + 1e-4;
+                    // A short wave packet (crest, trough, crest) that grows and dies out.
+                    float x = (r - age * 0.45) * 8.0;
+                    float envelope = exp(-x * x) * alive * saturate(age * 12.0) * (1.0 - age) * (1.0 - age);
+                    float phase = x * 2.4;
+                    float slope = (2.4 * cos(phase) - 2.0 * x * sin(phase)) * 8.0 * envelope;
+                    result.xyz += slope * offset / r;
+                    result.w = max(result.w, sin(phase) * envelope);
+                }
+                // Same pixel-size fade as the ripples.
+                return result * saturate((0.2 - footprint / _DripSpacing) * 10.0);
+            }
+
+            // Where a ray starting on (or near) the ellipsoid leaves it, as a distance along the ray.
+            float EllipsoidExit(float3 origin, float3 direction, float3 center, float3 radii)
+            {
+                float3 o = (origin - center) / radii;
+                float3 d = direction / radii;
+                float a = max(dot(d, d), 1e-6);
+                float b = dot(o, d);
+                float c = dot(o, o) - 1.0;
+                return max((sqrt(max(b * b - a * c, 0.0)) - b) / a, 0.0);
+            }
+
+            // Same convention as GetNormalizedScreenSpaceUV, so offsets between the two line up.
+            float2 WorldToScreenUV(float3 positionWS)
+            {
+                float4 positionCS = TransformWorldToHClip(positionWS);
+                float2 ndc = positionCS.xy / max(positionCS.w, 1e-5);
+                return float2(ndc.x, ndc.y * _ProjectionParams.x) * 0.5 + 0.5;
+            }
+
+            // Eye depth of the opaque scene at a screen position (the scene view may be orthographic).
+            float SceneEyeDepth(float2 uv)
+            {
+                float raw = SampleSceneDepth(uv);
+                return unity_OrthoParams.w > 0.5 ? LinearDepthToEyeDepth(raw) : LinearEyeDepth(raw, _ZBufferParams);
+            }
+
+            // The sky cubemap URP binds for every camera. Sampled directly: with Forward+ and probe blending the
+            // per-object unity_SpecCube0 isn't set up, and the levels have no reflection probes anyway.
+            half3 SkyReflection(half3 direction, half perceptualRoughness)
+            {
+                half mip = PerceptualRoughnessToMipmapLevel(perceptualRoughness);
+                half4 encoded = SAMPLE_TEXTURECUBE_LOD(_GlossyEnvironmentCubeMap, sampler_GlossyEnvironmentCubeMap, direction, mip);
+                return DecodeHDREnvironment(encoded, _GlossyEnvironmentCubeMap_HDR);
+            }
 
             Varyings Vert(Attributes input)
             {
-                VertexPositionInputs position = GetVertexPositionInputs(input.positionOS.xyz);
+                float3 positionOS = input.positionOS.xyz;
+                // A few millimetres of swell from the coarse ripple layer, outward only so the surface never dips
+                // under its own shadow caster, and gone early in the harden. It pushes away from the skin's origin
+                // (the core, always inside the body) instead of along the vertex normal: the faceted ice mesh swaps in
+                // while _Solid is still 0, and its split vertices share a position but not a normal, so only a push
+                // that depends on the position alone keeps the crystal from cracking open along its facet edges.
+                float frequency = 1.0 / _RippleSize;
+                float swell = RippleNoise(positionOS * frequency + float3(0.0, _Time.y * _RippleSpeed * frequency, 0.0)).w;
+                float swellHeight = _RippleHeight * (1.0 + 1.5 * _Splash) * saturate(1.0 - _Solid * 4.0);
+                float3 outward = positionOS * rsqrt(max(dot(positionOS, positionOS), 1e-6));
+                float3 displacedOS = positionOS + outward * (swellHeight * saturate(swell + 0.5));
+
+                VertexPositionInputs position = GetVertexPositionInputs(displacedOS);
                 Varyings output;
                 output.positionCS = position.positionCS;
                 output.positionWS = position.positionWS;
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionOS = positionOS;
                 output.fogFactor = ComputeFogFactor(position.positionCS.z);
                 return output;
             }
 
             half4 Frag(Varyings input) : SV_Target
             {
-                float3 normalWS = normalize(input.normalWS);
-                half3 viewDir = GetWorldSpaceNormalizeViewDir(input.positionWS);
-                // Looking straight in crosses the most jelly; grazing the edge crosses the least.
-                half thickness = saturate(dot(normalWS, viewDir));
+                float solid = _Solid;
+                float liquid = 1.0 - solid;
+                float splash = _Splash * liquid;
 
-                // What's behind, bent by the surface and a slow wobble inside the jelly.
+                float3 positionWS = input.positionWS;
+                float3 geometricNormal = normalize(input.normalWS);
+                float3 viewDir = GetWorldSpaceNormalizeViewDir(positionWS);
                 float2 screenUV = GetNormalizedScreenSpaceUV(input.positionCS);
-                float3 normalVS = TransformWorldToViewNormal(normalWS);
-                float t = _Time.y * _WobbleSpeed;
-                float3 p = input.positionWS * 6.0;
-                float2 wobble = float2(sin(p.x + t) + sin(p.z * 1.3 - t * 0.8),
-                                       sin(p.y * 1.1 + t * 1.2) + sin(p.x * 0.7 - t)) * _Wobble;
-                // Hardened: much less bending and no inner wobble.
-                float refraction = _Refraction * (1.0 - 0.7 * _Solid);
-                wobble *= 1.0 - _Solid;
-                float2 refractedUV = screenUV - normalVS.xy * refraction * (1.0 - thickness * 0.5) + wobble;
-                // Thick jelly scatters: average a small ring of samples so edges seen through it (like the
-                // blob's own shadow on the floor) blur instead of cutting a hard line across it.
-                const float2 ring[6] = { float2(1, 0), float2(0.5, 0.866), float2(-0.5, 0.866),
-                                         float2(-1, 0), float2(-0.5, -0.866), float2(0.5, -0.866) };
-                float2 blur = _Blur * float2(1.0, _ScaledScreenParams.x / _ScaledScreenParams.y);
-                half3 behind = 0;
-                for (int i = 0; i < 6; i++) behind += SampleSceneColor(refractedUV + ring[i] * blur);
-                behind /= 6.0;
-                half3 transmitted = behind * lerp(_ShallowColor.rgb, _DeepColor.rgb, thickness);
 
-                Light mainLight = GetMainLight(TransformWorldToShadowCoord(input.positionWS), input.positionWS, half4(1, 1, 1, 1));
-                // Light gets through jelly, so shadows on it (including its own) are only partial.
-                half shadow = lerp(1.0h, mainLight.shadowAttenuation, _ShadowStrength) * mainLight.distanceAttenuation;
-                half wrapped = saturate((dot(normalWS, mainLight.direction) + _Wrap) / (1.0 + _Wrap));
-                half3 bodyColor = lerp(_BodyColor.rgb, _SolidColor.rgb, _Solid);
-                half3 body = bodyColor * (SampleSH(normalWS) + mainLight.color * wrapped * shadow);
+                // Ripples (and drip rings while splashing) tilt the normal by the surface gradient of their height.
+                // Ice has none.
+                float footprint = length(fwidth(input.positionOS));
+                float thread;
+                float4 ripples = Ripples(input.positionOS, footprint, 0.55 + 0.6 * splash, thread);
+                float3 slopeOS = ripples.xyz * (_RippleSlope * (1.0 + 0.6 * splash));
+                float dripCrest = 0.0;
+                UNITY_BRANCH
+                if (splash > 0.001)
+                {
+                    float4 rings = DripRings(input.positionOS, splash, footprint);
+                    slopeOS += rings.xyz * (_DripStrength * 0.02);
+                    dripCrest = rings.w * _DripStrength;
+                }
+                float3 slopeWS = TransformObjectToWorldDir(slopeOS, false) * liquid;
+                float3 tangentSlope = slopeWS - geometricNormal * dot(geometricNormal, slopeWS);
+                float3 normalWS = normalize(geometricNormal - tangentSlope);
 
-                half opacity = lerp(lerp(_Opacity, _CoreOpacity, thickness * thickness), _SolidOpacity, _Solid);
-                half3 color = lerp(transmitted, body, opacity);
+                // The body as an ellipsoid fitted to the renderer bounds. Without bounds, the sphere that fits the
+                // surface here.
+                float3 boundsMin = unity_RendererBounds_Min.xyz;
+                float3 boundsMax = unity_RendererBounds_Max.xyz;
+                float hasBounds = all(boundsMax > boundsMin) ? 1.0 : 0.0;
+                float3 bodyCenter = lerp(positionWS - geometricNormal * 0.45, (boundsMin + boundsMax) * 0.5, hasBounds);
+                float3 bodyRadii = lerp(float3(0.45, 0.45, 0.45), max((boundsMax - boundsMin) * 0.5, 0.05), hasBounds);
 
-                // Light shining through from behind, strongest at the thinner parts.
-                half3 throughDir = normalize(mainLight.direction + normalWS * _SSSDistortion);
-                half translucency = pow(saturate(dot(viewDir, -throughDir)), _SSSPower) * _SSSStrength;
-                color += _SSSColor.rgb * mainLight.color * translucency * (1.0 - thickness * 0.5);
+                // How much water the view crosses: from this surface to where the ray leaves the body, cut short by
+                // whatever opaque is closer (the floor under it, the ship's hull inside it). The depth texture only
+                // holds opaques, so over the void it reads the far plane; the ellipsoid keeps that finite.
+                float3 rayDir = -viewDir;
+                float bodyChord = EllipsoidExit(positionWS, rayDir, bodyCenter, bodyRadii);
+                float surfaceEye = -TransformWorldToView(positionWS).z;
+                float rayPerEye = unity_OrthoParams.w > 0.5 ? 1.0 : distance(positionWS, GetCameraPositionWS()) / max(surfaceEye, 1e-4);
+                float behindDistance = max(SceneEyeDepth(screenUV) - surfaceEye, 0.0) * rayPerEye;
+                float waterDepth = min(bodyChord, behindDistance);
 
-                half fresnel = pow(1.0 - thickness, _RimPower);
-                half3 reflection = GlossyEnvironmentReflection(reflect(-viewDir, normalWS), input.positionWS, 0.05h, 1.0h);
-                color += reflection * fresnel * _Reflection + _RimColor.rgb * fresnel * _RimStrength * (1.0 + 0.5 * _Solid);
+                // Refraction: follow the refracted ray to where it leaves the water and look at the scene there. That
+                // point is on the body, so the sample always lands inside the blob's own outline. Ripples bend it a
+                // little more than they tilt the shading, so they read in the floor at the default camera distance.
+                float3 refractNormal = normalize(geometricNormal - tangentSlope * _RippleRefraction);
+                float3 refracted = refract(rayDir, refractNormal, 1.0 / lerp(_IOR, 1.31, solid));
+                float3 exitWS = positionWS + refracted * EllipsoidExit(positionWS, refracted, bodyCenter, bodyRadii);
+                float2 bend = (WorldToScreenUV(exitWS) - WorldToScreenUV(positionWS)) * (_Refraction * lerp(1.0, _IceRefraction, solid));
+                // Anything nearer than this surface where the bent sample lands (a wall, a crate, the ship above the
+                // water) mustn't show up inside it: look straight through there instead.
+                bend *= saturate((SceneEyeDepth(screenUV + bend) - surfaceEye + 0.02) * 25.0);
+                // Red bends a little less than blue; the crystal splits colour a little more.
+                float dispersion = _Dispersion * (1.0 + solid);
+                half3 behind;
+                behind.r = SampleSceneColor(screenUV + bend * (1.0 - dispersion)).r;
+                behind.g = SampleSceneColor(screenUV + bend).g;
+                behind.b = SampleSceneColor(screenUV + bend * (1.0 + dispersion)).b;
 
+                Light mainLight = GetMainLight(TransformWorldToShadowCoord(positionWS), positionWS, half4(1, 1, 1, 1));
+                half sunShadow = mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                // Light gets through water, so shadows on it (including its own) are only partial.
+                half bodyShadow = lerp(1.0h, sunShadow, _ShadowStrength);
+                half sunOnWater = saturate(dot(geometricNormal, mainLight.direction));
+                half3 ambient = SampleSH(normalWS);
+                // Light scatters inside the water from every side: half-Lambert.
+                half3 bodyLight = ambient + mainLight.color * (saturate(dot(geometricNormal, mainLight.direction) * 0.5 + 0.5) * bodyShadow);
+
+                // Beer-Lambert: the tint is what's left after 1 m, so the colour falls off as tint^distance. Light
+                // scattered toward the camera fills in part of what was absorbed (murk). The caustic threads brighten
+                // what's seen through, as if focused there by the ripples.
+                half3 transmittance = pow(max(lerp(_WaterTint.rgb, _IceTint.rgb, solid), 1e-3h), waterDepth * _Density);
+                half3 caustic = mainLight.color * (thread * _Caustics * liquid * sunShadow * sunOnWater);
+                half3 color = behind * (1.0h + caustic) * transmittance + _ScatterColor.rgb * bodyLight * (1.0h - transmittance);
+                // Thin water (the puddle it squashes into at speed) would be nearly clear: keep a little body so it
+                // still reads as water, not glass, from the follow camera.
+                color = lerp(color, _ScatterColor.rgb * bodyLight, _SurfaceOpacity * liquid);
+
+                // Hardened: a frosted, milky interior that thickens toward the middle, so the crystal reads as solid.
+                half frost = _IceFrost * solid * (1.0 - exp(-2.5 * waterDepth));
+                color = lerp(color, _IceColor.rgb * bodyLight, frost);
+
+                // Sky reflection, Schlick fresnel on the rippled normal: almost nothing facing the camera, all of it
+                // at the grazing edge.
+                half NdotV = saturate(dot(normalWS, viewDir));
+                half grazing = 1.0h - NdotV;
+                half grazing2 = grazing * grazing;
+                half fresnel = _Reflectance + (1.0h - _Reflectance) * grazing2 * grazing2 * grazing;
+                // Below the horizon the default skybox is a dark ground, but what's really under the blob is the pale
+                // floor or the pale void: mirror downward reflections into the sky so the lower rim stays bright.
+                float3 reflectDir = reflect(-viewDir, normalWS);
+                reflectDir.y = abs(reflectDir.y);
+                half3 sky = SkyReflection(reflectDir, lerp(0.03h, 0.08h, solid)) * _ReflectionTint.rgb;
+                color = lerp(color, sky, fresnel);
+
+                // Foam where the water meets the floor or the ship's hull (an opaque surface just behind this one),
+                // broken up by the ripples; drip-ring crests froth a little too.
+                float foamWidth = _FoamWidth * (1.0 + 1.5 * splash);
+                half contact = saturate(1.0 - behindDistance / max(foamWidth, 1e-4));
+                half foam = contact * contact * saturate(0.6 + ripples.w * 1.2) * _FoamStrength + saturate(dripCrest * 2.0 - 0.6) * 0.5;
+                foam = saturate(foam * liquid);
+                half3 foamLit = _FoamColor.rgb * (ambient + mainLight.color * (sunOnWater * 0.5 + 0.5) * bodyShadow);
+                color = lerp(color, foamLit, foam);
+
+                // A bright rim on the smooth outline, so the edge reads at the default camera distance too (the
+                // physical fresnel alone is a pixel wide there). Crisper on ice.
+                half rim = 1.0h - saturate(dot(geometricNormal, viewDir));
+                color += _RimColor.rgb * (rim * rim * rim * _RimStrength * (1.0 + 0.5 * solid));
+
+                // Sun glints on the rippled normal. Specular anti-aliasing: the glint widens (and dims a little) by how
+                // much the normal changes across the pixel, so small ripples and far-away facets don't fizz.
                 // Hardened facets catch a tighter, brighter glint.
-                half3 halfDir = normalize(mainLight.direction + viewDir);
-                half shininess = _Shininess * (1.0 + 2.0 * _Solid);
-                half highlight = pow(saturate(dot(normalWS, halfDir)), shininess) * _Specular * (1.0 + 0.5 * _Solid) * shadow;
-                color += mainLight.color * highlight;
+                float3 halfDir = SafeNormalize(mainLight.direction + viewDir);
+                float NdotH = saturate(dot(normalWS, halfDir));
+                float3 normalDx = ddx(normalWS);
+                float3 normalDy = ddy(normalWS);
+                float variance = 0.5 * (dot(normalDx, normalDx) + dot(normalDy, normalDy));
+                float sharpness = _GlintSharpness * (1.0 + 2.0 * solid);
+                float filtered = sharpness / (1.0 + sharpness * variance);
+                half glint = pow(NdotH, filtered) * sqrt(filtered / sharpness) * _GlintStrength * (1.0 + 0.5 * solid)
+                           + pow(NdotH, filtered * 0.08) * _Sheen;
+                glint *= sunShadow * saturate(sunOnWater * 4.0) * (1.0h - foam);
+                color += mainLight.color * glint;
 
                 return half4(MixFog(color, input.fogFactor), 1);
             }
             ENDHLSL
         }
 
-        UsePass "Universal Render Pipeline/Lit/SHADOWCASTER"
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode" = "ShadowCaster" }
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Back
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            // Set by URP for the light whose shadow map is being drawn (as in the Lit shadow caster).
+            float3 _LightDirection;
+            float3 _LightPosition;
+
+            struct ShadowAttributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            };
+
+            struct ShadowVaryings
+            {
+                float4 positionCS : SV_POSITION;
+            };
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {
+                float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normalWS = TransformObjectToWorldNormal(input.normalOS);
+            #if _CASTING_PUNCTUAL_LIGHT_SHADOW
+                float3 lightDirectionWS = normalize(_LightPosition - positionWS);
+            #else
+                float3 lightDirectionWS = _LightDirection;
+            #endif
+                ShadowVaryings output;
+                output.positionCS = ApplyShadowClamping(TransformWorldToHClip(ApplyShadowBias(positionWS, normalWS, lightDirectionWS)));
+                return output;
+            }
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_Target
+            {
+                // Water lets most of the light through: skip a share of the shadow-map texels in a 4x4 ordered pattern
+                // (fixed in shadow-map space), and the soft-shadow filter averages that into a partial shadow. Ordered
+                // rather than random, so even the small 3x3 filter smooths it instead of leaving grain. Frosted ice
+                // blocks more.
+                half opacity = lerp(_ShadowOpacity, _IceShadowOpacity, _Solid);
+                uint2 texel = uint2(input.positionCS.xy) & 3u;
+                static const float bayer[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };
+                clip(opacity - (bayer[texel.y * 4u + texel.x] + 0.5) / 16.0);
+                return 0;
+            }
+            ENDHLSL
+        }
     }
 }
