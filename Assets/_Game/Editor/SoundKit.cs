@@ -26,7 +26,6 @@ namespace BounJam.EditorTools
 
             var sound = blob.AddComponent<BlobMovementSound>();
             var settings = new SerializedObject(sound);
-            settings.FindProperty("input").objectReferenceValue = blob.GetComponent<PlayerInputReader>();
             SerializedProperty reference = settings.FindProperty("movementEvent");
             reference.FindPropertyRelative("Path").stringValue = movementEvent.Path;
             SerializedProperty guid = reference.FindPropertyRelative("Guid");

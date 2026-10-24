@@ -13,6 +13,7 @@ namespace BounJam.EditorTools
     /// The level editor (BounJam/Level Editor). Build: pick a piece and click in the Scene view to put it down, or drag
     /// to draw platforms, walls, ramps, pools, water and hot plates; [ and ] turn it, Esc stops. Placed pieces snap to
     /// the grid, go in groups under the scene's Level root and can be undone; shaped pieces resize with their handles.
+    /// Remove takes pieces out again: click them, or drag across several.
     /// Selecting buttons with gates, lifts or magnets links them, and the Scene view shows every link. Level: the open
     /// level's title, next scene and references. Play Order: the levels in Build Settings, and linking each one to the
     /// next.
@@ -27,6 +28,9 @@ namespace BounJam.EditorTools
         static readonly Color GateLinkColor = new Color(1f, 0.85f, 0.25f);
         static readonly Color MagnetOnLinkColor = new Color(0.35f, 0.65f, 1f);
         static readonly Color MagnetOffLinkColor = new Color(0.9f, 0.5f, 0.25f);
+        static readonly Color RemoveColor = new Color(1f, 0.35f, 0.3f);
+        const string RemoveInstructions = "Click a piece in the Scene view to take it out, or drag across several. " +
+                                          "The blob, ship and dock only move. Esc stops.";
 
         Tab tab;
         Vector2 scroll;
@@ -35,6 +39,11 @@ namespace BounJam.EditorTools
         Placeable armed;
         bool hasHover, dragging;
         Vector3 hover, dragStart, dragEnd;
+
+        // Removing in the Scene view: the piece under the mouse, and the undo group one stroke's removals go in.
+        bool removing;
+        GameObject removeHover;
+        int removeStroke = -1;
 
         // When the Scene view was last clicked, so only selections made there get widened to whole pieces.
         static double lastSceneClick;
@@ -117,14 +126,17 @@ namespace BounJam.EditorTools
 
             Header("Pieces");
             foreach (string category in Placeable.Categories) PieceButtons(category);
+            RemoveButtons();
             if (armed != null && armed.Name == "Tile")
             {
                 int look = System.Array.IndexOf(Placeable.TileLooks, LevelEditorSettings.TileLook);
                 LevelEditorSettings.TileLook = Placeable.TileLooks[EditorGUILayout.Popup("Tile Look", Mathf.Max(0, look), Placeable.TileLooks)];
             }
-            EditorGUILayout.HelpBox(armed == null
-                ? "Pick a piece, then click in the Scene view to put it down."
-                : $"{armed.Name}: {armed.Tooltip}\n{Instructions(armed)}", armed == null ? MessageType.None : MessageType.Info);
+            if (removing) EditorGUILayout.HelpBox($"Remove: {RemoveInstructions}", MessageType.Info);
+            else
+                EditorGUILayout.HelpBox(armed == null
+                    ? "Pick a piece, then click in the Scene view to put it down."
+                    : $"{armed.Name}: {armed.Tooltip}\n{Instructions(armed)}", armed == null ? MessageType.None : MessageType.Info);
 
             Header("Selection");
             SelectionPanel();
@@ -163,6 +175,31 @@ namespace BounJam.EditorTools
                         }
                     }
                 }
+            }
+        }
+
+        void RemoveButtons()
+        {
+            EditorGUILayout.LabelField("Remove", EditorStyles.miniBoldLabel);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (GUILayout.Toggle(removing, new GUIContent("Remove", "Click pieces in the Scene view to take them out of the level."),
+                                     "Button", GUILayout.Height(24f)) != removing)
+                {
+                    if (removing) Disarm();
+                    else StartRemoving();
+                }
+                GameObject[] selected = Selection.gameObjects.Select(Removable).Where(go => go != null).Distinct().ToArray();
+                using (new EditorGUI.DisabledScope(selected.Length == 0))
+                    if (GUILayout.Button(new GUIContent("Remove Selected", "Takes the selected pieces out of the level, and their buttons off what they were linked to."),
+                                         GUILayout.Height(24f)))
+                    {
+                        Undo.IncrementCurrentGroup();
+                        Undo.SetCurrentGroupName("Remove Pieces");
+                        int group = Undo.GetCurrentGroup();
+                        foreach (GameObject piece in selected) Remove(piece);
+                        Undo.CollapseUndoOperations(group);
+                    }
             }
         }
 
@@ -491,18 +528,36 @@ namespace BounJam.EditorTools
 
         void Arm(Placeable piece)
         {
+            StopRemoving();
             armed = piece;
             dragging = false;
             SceneView.RepaintAll();
         }
 
-        void Disarm()
+        void StartRemoving()
         {
-            if (armed == null) return;
             armed = null;
             dragging = hasHover = false;
+            removing = true;
+            SceneView.RepaintAll();
+        }
+
+        /// <summary>Puts the piece or the remove tool down.</summary>
+        void Disarm()
+        {
+            if (armed == null && !removing) return;
+            armed = null;
+            dragging = hasHover = false;
+            StopRemoving();
             SceneView.RepaintAll();
             Repaint();
+        }
+
+        void StopRemoving()
+        {
+            EndRemoveStroke();
+            removing = false;
+            removeHover = null;
         }
 
         void OnSceneGUI(SceneView view)
@@ -510,7 +565,9 @@ namespace BounJam.EditorTools
             Event e = Event.current;
             if (e.type == EventType.MouseDown && e.button == 0 && !e.alt) lastSceneClick = EditorApplication.timeSinceStartup;
             if (LevelEditorSettings.ShowLinks && e.type == EventType.Repaint) DrawLinks();
-            if (armed != null && !EditorApplication.isPlaying) Placing(view, e);
+            if (EditorApplication.isPlaying) return;
+            if (armed != null) Placing(view, e);
+            else if (removing) Removing(view, e);
         }
 
         void Placing(SceneView view, Event e)
@@ -800,6 +857,143 @@ namespace BounJam.EditorTools
                     Handles.DrawWireDisc(from, Vector3.up, 0.6f);
                 }
             }
+        }
+
+        // ---------------------------------------------------------------- Removing
+
+        void Removing(SceneView view, Event e)
+        {
+            int id = GUIUtility.GetControlID(FocusType.Passive);
+
+            if (e.type == EventType.KeyDown)
+            {
+                if (e.keyCode == KeyCode.Escape)
+                {
+                    if (removeStroke >= 0)
+                    {
+                        GUIUtility.hotControl = 0;
+                        EndRemoveStroke();
+                    }
+                    else Disarm();
+                    e.Use();
+                }
+                return;
+            }
+
+            switch (e.GetTypeForControl(id))
+            {
+                case EventType.Layout:
+                    HandleUtility.AddDefaultControl(id);
+                    break;
+                case EventType.MouseMove:
+                    removeHover = Removable(HandleUtility.PickGameObject(e.mousePosition, false));
+                    view.Repaint();
+                    break;
+                case EventType.MouseDown:
+                    if (e.button != 0 || e.alt || HandleUtility.nearestControl != id) break;
+                    GUIUtility.hotControl = id;
+                    // One undo puts back everything a stroke took out.
+                    Undo.IncrementCurrentGroup();
+                    Undo.SetCurrentGroupName("Remove Pieces");
+                    removeStroke = Undo.GetCurrentGroup();
+                    RemoveUnder(e.mousePosition);
+                    e.Use();
+                    break;
+                case EventType.MouseDrag:
+                    if (GUIUtility.hotControl != id) break;
+                    RemoveUnder(e.mousePosition);
+                    e.Use();
+                    break;
+                case EventType.MouseUp:
+                    if (GUIUtility.hotControl != id) break;
+                    GUIUtility.hotControl = 0;
+                    EndRemoveStroke();
+                    e.Use();
+                    break;
+                case EventType.Repaint:
+                    DrawRemoving(view);
+                    break;
+            }
+        }
+
+        void RemoveUnder(Vector2 mouse)
+        {
+            GameObject piece = Removable(HandleUtility.PickGameObject(mouse, false));
+            if (piece != null) Remove(piece);
+            removeHover = null;
+        }
+
+        void EndRemoveStroke()
+        {
+            if (removeStroke < 0) return;
+            Undo.CollapseUndoOperations(removeStroke);
+            removeStroke = -1;
+        }
+
+        /// <summary>
+        /// The whole placed piece a picked object belongs to, if the remove tool may take it out: one under the scene's
+        /// Level root, and not the blob, ship or dock, which only move.
+        /// </summary>
+        static GameObject Removable(GameObject picked)
+        {
+            if (picked == null || EditorUtility.IsPersistent(picked)) return null;
+            GameObject piece = PieceRoot(picked);
+            piece = PrefabUtility.GetOutermostPrefabInstanceRoot(piece) ?? piece;
+            Transform level = piece.transform.root;
+            if (level.name != LevelSetup.LevelRootName || piece.transform == level) return null;
+            if (Has<ShipDock>(piece) || Has<BlobMotor>(piece) || Has<ShipBuoyancy>(piece) || Has<LevelManager>(piece)) return null;
+            return piece;
+        }
+
+        static bool Has<T>(GameObject go) where T : Component
+            => go.GetComponentInParent<T>(true) != null || go.GetComponentInChildren<T>(true) != null;
+
+        /// <summary>Takes a piece out of the level, and its buttons off every gate, lift and magnet they were linked to.</summary>
+        static void Remove(GameObject piece)
+        {
+            // Gone already, under another piece removed with it.
+            if (piece == null) return;
+            PressureButton[] buttons = piece.GetComponentsInChildren<PressureButton>(true);
+            if (buttons.Length > 0)
+            {
+                foreach (ButtonMover mover in FindObjectsByType<ButtonMover>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    Unlink(mover, buttons, "buttons");
+                foreach (Magnet magnet in FindObjectsByType<Magnet>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    Unlink(magnet, buttons, "onButtons", "offButtons");
+            }
+            Undo.DestroyObjectImmediate(piece);
+        }
+
+        void DrawRemoving(SceneView view)
+        {
+            if (removeHover != null)
+            {
+                Bounds bounds = WorldBounds(removeHover);
+                using (new Handles.DrawingScope(RemoveColor))
+                {
+                    Handles.DrawWireCube(bounds.center, bounds.size);
+                    Handles.Label(bounds.center + Vector3.up * (bounds.extents.y + 0.4f), $"Remove {removeHover.name}", EditorStyles.whiteBoldLabel);
+                }
+            }
+
+            Handles.BeginGUI();
+            float height = view.camera.pixelRect.height / EditorGUIUtility.pixelsPerPoint;
+            GUI.Label(new Rect(10f, height - 52f, 460f, 42f), $"Removing. {RemoveInstructions}", EditorStyles.helpBox);
+            Handles.EndGUI();
+        }
+
+        /// <summary>The box round everything a piece shows.</summary>
+        static Bounds WorldBounds(GameObject piece)
+        {
+            Bounds? bounds = null;
+            foreach (Renderer renderer in piece.GetComponentsInChildren<Renderer>())
+            {
+                if (!renderer.enabled) continue;
+                Bounds grown = bounds ?? renderer.bounds;
+                grown.Encapsulate(renderer.bounds);
+                bounds = grown;
+            }
+            return bounds ?? new Bounds(piece.transform.position, Vector3.one * 0.5f);
         }
 
         // ---------------------------------------------------------------- Whole pieces

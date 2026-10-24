@@ -435,7 +435,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fc8f244d48f84082bcb2a61620c71f8c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.BlobMovementSound
-  input: {fileID: 4975069014646752162}
   movementEvent:
     Guid:
       Data1: 1495668838
@@ -444,7 +443,9 @@ MonoBehaviour:
       Data4: 443143628
     Path: event:/Water_Movement
   stateParameter: State
-  deadZone: 0.1
+  startSpeed: 0.5
+  stopSpeed: 0.2
+  stopDelay: 0.1
 --- !u!1 &336757933177050986
 GameObject:
   m_ObjectHideFlags: 0
