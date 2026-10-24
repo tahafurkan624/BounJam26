@@ -26,15 +26,15 @@ Material:
     m_Ints: []
     m_Floats:
     - _Caustics: 0.25
-    - _Density: 1.15
-    - _Dispersion: 0.06
+    - _Density: 0.98
+    - _Dispersion: 0.13
     - _DripSpacing: 0.22
     - _DripStrength: 0.6
     - _FoamStrength: 0.55
-    - _FoamWidth: 0.035
-    - _GlintSharpness: 400
-    - _GlintStrength: 2.5
-    - _IOR: 1.33
+    - _FoamWidth: 0.0995
+    - _GlintSharpness: 467
+    - _GlintStrength: 3.49
+    - _IOR: 1.258
     - _IceBanding: 0.7
     - _IceBubbleSize: 0.12
     - _IceBubbles: 0.3
@@ -49,20 +49,20 @@ Material:
     - _IceRimStrength: 0.9
     - _IceShadowOpacity: 0.9
     - _IceTopWash: 0.06
-    - _Reflectance: 0.02
+    - _Reflectance: 0
     - _Refraction: 0.6
-    - _RimStrength: 0.65
-    - _RippleHeight: 0.004
-    - _RippleRefraction: 1.5
-    - _RippleSize: 0.2
-    - _RippleSlope: 0.12
-    - _RippleSpeed: 0.06
+    - _RimStrength: 1.42
+    - _RippleHeight: 0.00437
+    - _RippleRefraction: 3.17
+    - _RippleSize: 0.326
+    - _RippleSlope: 0.128
+    - _RippleSpeed: 0.101
     - _ShadowOpacity: 0.35
-    - _ShadowStrength: 0.35
-    - _Sheen: 0.15
+    - _ShadowStrength: 0.381
+    - _Sheen: 0.28
     - _Solid: 0
     - _Splash: 0
-    - _SurfaceOpacity: 0.18
+    - _SurfaceOpacity: 0.208
     m_Colors:
     - _FoamColor: {r: 0.93, g: 0.97999996, b: 1, a: 1}
     - _IceCrackColor: {r: 0.92, g: 0.97999996, b: 1, a: 1}
@@ -72,7 +72,7 @@ Material:
     - _IceRimColor: {r: 0.9, g: 0.98999995, b: 1, a: 1}
     - _IceShadeColor: {r: 0.41999996, g: 0.45, b: 0.8, a: 1}
     - _ReflectionTint: {r: 1, g: 1, b: 1, a: 1}
-    - _RimColor: {r: 0.85, g: 0.96999997, b: 1, a: 1}
+    - _RimColor: {r: 0.16785331, g: 0.80268306, b: 0.8679245, a: 1}
     - _ScatterColor: {r: 0.17999998, g: 0.53, b: 0.59, a: 1}
     - _WaterTint: {r: 0.43999997, g: 0.81, b: 0.85, a: 1}
   m_BuildTextureStacks: []
