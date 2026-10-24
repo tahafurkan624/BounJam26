@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -36,6 +37,18 @@ namespace BounJam
         InputAction restart;
 
         public State Current { get; private set; } = State.Playing;
+        public string LevelTitle => levelTitle;
+        public bool IsFinalLevel => isFinalLevel;
+        public bool HasNextLevel => !string.IsNullOrEmpty(nextScene);
+        /// <summary>
+        /// While set, a completed level waits for <see cref="LoadNext"/> instead of moving on by itself (the glass UI's
+        /// level-complete card sets it and offers the buttons).
+        /// </summary>
+        public bool HoldOnComplete { get; set; }
+        /// <summary>Raised when the level title is shown at the start.</summary>
+        public event Action<string> TitleShown;
+        /// <summary>Raised when the level ends, Complete or Failed, with the message the HUD shows.</summary>
+        public event Action<State, string> Ended;
 
         void OnEnable()
         {
@@ -54,6 +67,7 @@ namespace BounJam
         void Start()
         {
             if (hud != null) hud.ShowTitle(levelTitle);
+            TitleShown?.Invoke(levelTitle);
         }
 
         void Update()
@@ -79,17 +93,26 @@ namespace BounJam
             if (Current != State.Playing) return;
             Current = State.Failed;
             if (hud != null) hud.ShowMessage(reason);
+            Ended?.Invoke(State.Failed, reason);
             StartCoroutine(LoadAfter(SceneManager.GetActiveScene().name, failDelay));
         }
 
         public void Restart() => SceneManager.LoadScene(SceneManager.GetActiveScene().name);
 
+        /// <summary>Loads the next level now (the level-complete card's button).</summary>
+        public void LoadNext()
+        {
+            if (HasNextLevel) SceneManager.LoadScene(nextScene);
+        }
+
         void OnDelivered()
         {
             if (Current != State.Playing || string.IsNullOrEmpty(nextScene)) return;
             Current = State.Complete;
-            if (hud != null) hud.ShowMessage(isFinalLevel ? "All ships delivered!\nThanks for playing" : "Delivered!");
-            StartCoroutine(LoadAfter(nextScene, isFinalLevel ? completeDelay * 2f : completeDelay));
+            string message = isFinalLevel ? "All ships delivered!\nThanks for playing" : "Delivered!";
+            if (hud != null) hud.ShowMessage(message);
+            Ended?.Invoke(State.Complete, message);
+            if (!HoldOnComplete) StartCoroutine(LoadAfter(nextScene, isFinalLevel ? completeDelay * 2f : completeDelay));
         }
 
         void OnRestartPressed(InputAction.CallbackContext _) => Restart();
