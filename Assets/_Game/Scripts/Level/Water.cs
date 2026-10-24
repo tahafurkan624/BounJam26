@@ -8,12 +8,21 @@ namespace BounJam
     /// vertical axis is fine), with its surface at the top face. It has no collider, so nothing bumps into it;
     /// whatever cares about water asks <see cref="TryGetDepth"/>. The liquid blob dissolves in it, the frozen blob
     /// floats and swims (both in <see cref="BlobWater"/>), and the paper ship gets soaked, which loses the level.
+    /// Every box is also shared with the water shader, which drops the faces where two boxes touch so bodies of water
+    /// laid side by side draw as one (in edit mode too, hence ExecuteAlways).
     /// </summary>
+    [ExecuteAlways]
     public class Water : MonoBehaviour
     {
         [Tooltip("The ship is lost once its centre of mass is under the surface: the paper soaks through.")]
         [SerializeField] bool soaksShip = true;
         [SerializeField] string shipMessage = "The ship got soaked!";
+
+        // Matches MAX_WATER_BOXES in Water.shader.
+        const int MaxShaderBoxes = 64;
+        static readonly int BoxesId = Shader.PropertyToID("_WaterBoxes");
+        static readonly int BoxCountId = Shader.PropertyToID("_WaterBoxCount");
+        static readonly Matrix4x4[] shaderBoxes = new Matrix4x4[MaxShaderBoxes];
 
         static readonly List<Water> active = new List<Water>();
 
@@ -49,13 +58,36 @@ namespace BounJam
             ship = FindAnyObjectByType<ShipBuoyancy>();
         }
 
-        void OnEnable() => active.Add(this);
+        void OnEnable()
+        {
+            active.Add(this);
+            ShareBoxes();
+        }
 
-        void OnDisable() => active.Remove(this);
+        void OnDisable()
+        {
+            active.Remove(this);
+            ShareBoxes();
+        }
+
+        void LateUpdate()
+        {
+            if (!transform.hasChanged) return;
+            transform.hasChanged = false;
+            ShareBoxes();
+        }
+
+        static void ShareBoxes()
+        {
+            int count = Mathf.Min(active.Count, MaxShaderBoxes);
+            for (int i = 0; i < count; i++) shaderBoxes[i] = active[i].transform.worldToLocalMatrix;
+            Shader.SetGlobalMatrixArray(BoxesId, shaderBoxes);
+            Shader.SetGlobalFloat(BoxCountId, count);
+        }
 
         void FixedUpdate()
         {
-            if (!soaksShip || ship == null || level == null) return;
+            if (!Application.isPlaying || !soaksShip || ship == null || level == null) return;
             Vector3 local = transform.InverseTransformPoint(ship.Body.worldCenterOfMass);
             if (Mathf.Abs(local.x) <= 0.5f && Mathf.Abs(local.z) <= 0.5f && local.y >= -0.5f && local.y < 0.5f)
                 level.Fail(shipMessage);

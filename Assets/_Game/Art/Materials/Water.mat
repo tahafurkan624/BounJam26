@@ -25,19 +25,33 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _DeepOpacity: 0.85
+    - _CausticDepth: 1
+    - _CausticSize: 0.8
+    - _Caustics: 0.5
+    - _Clarity: 0.6
+    - _ColorDepth: 1
+    - _CrestLight: 0.35
+    - _FoamAmount: 0.9
     - _FoamWidth: 0.15
-    - _Murkiness: 1.2
-    - _Reflection: 0.6
-    - _RippleSize: 0.8
-    - _RippleSpeed: 0.8
-    - _RippleStrength: 0.2
-    - _ShallowOpacity: 0.35
-    - _Shininess: 300
-    - _Specular: 1.5
+    - _Reflection: 1
+    - _Refraction: 0.03
+    - _ShadowStrength: 0.6
+    - _Shininess: 500
+    - _SideOpacity: 0.9
+    - _Sparkle: 1.5
+    - _Specular: 1.2
+    - _SurfaceNet: 0.2
+    - _WaveDirection: 35
+    - _WaveSize: 1.1
+    - _WaveSpeed: 1
+    - _WaveStrength: 0.9
     m_Colors:
-    - _DeepColor: {r: 0.04, g: 0.25999996, b: 0.52, a: 1}
-    - _FoamColor: {r: 0.92, g: 0.96999997, b: 1, a: 1}
-    - _ShallowColor: {r: 0.29999998, g: 0.78, b: 0.92, a: 1}
+    - _CausticColor: {r: 0.85, g: 0.97, b: 1, a: 1}
+    - _ClearTint: {r: 0.62, g: 0.84, b: 1, a: 1}
+    - _CrestColor: {r: 0.55, g: 0.88, b: 1, a: 1}
+    - _DeepColor: {r: 0.12, g: 0.44, b: 0.88, a: 1}
+    - _FoamColor: {r: 0.92, g: 0.98, b: 1, a: 1}
+    - _SeabedColor: {r: 0.04, g: 0.16, b: 0.42, a: 1}
+    - _ShallowColor: {r: 0.36, g: 0.76, b: 1, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
