@@ -71,6 +71,17 @@ namespace BounJam
         [Tooltip("Upward speed while climbing out of the water, m/s.")]
         [SerializeField] float shoreClimbSpeed = 1.5f;
 
+        [Header("Bridging")]
+        [Tooltip("The liquid flows across a gap its jelly is long enough to span: the core is held up while ground lies " +
+                 "under the jelly behind it and the far side is within the jelly's length ahead, or under its front.")]
+        [SerializeField] bool bridgeGaps = true;
+        [Tooltip("Each end has to lie this far over ground to hold on, m.")]
+        [SerializeField] float bridgeGrip = 0.15f;
+        [Tooltip("Ground this far below the bottom of the core still holds the jelly up (a far side a little lower), m.")]
+        [SerializeField] float bridgeDrop = 0.3f;
+        [Tooltip("Spacing of the looks down for ground along the jelly, m.")]
+        [SerializeField] float bridgeSampleSpacing = 0.2f;
+
         // Below this gap the core counts as touching the ground rather than skimming over it.
         const float ContactGap = 0.02f;
         // Physics steps after a step climb during which hugging and snapping stay off, so they don't undo the lift.
@@ -82,9 +93,15 @@ namespace BounJam
         const int MaxClimbSteps = 75;
         // Climbing out lifts the crystal's underside this far above the edge before moving it over, m.
         const float ShoreClearance = 0.05f;
+        // A bridging core glides with its bottom this far above the line between the two sides, so it slides onto the
+        // far side instead of catching its edge, m.
+        const float BridgeClearance = 0.03f;
 
         Rigidbody body;
         SphereCollider core;
+        BlobSkin skin;
+        // Height the bottom of a bridging core is held at.
+        float bridgeHeight;
         int stepsSinceGrounded;
         int stepsSinceClimb = ClimbGraceSteps;
         int stepsSinceJump = JumpGraceSteps;
@@ -110,6 +127,11 @@ namespace BounJam
 
         public Rigidbody Body => body;
         public bool IsGrounded { get; private set; }
+        /// <summary>
+        /// True while the stretched liquid spans a gap: nothing is under the core, but the jelly holds on to both sides
+        /// (or to the far side with its front). Counts as grounded.
+        /// </summary>
+        public bool IsBridging { get; private set; }
         /// <summary>True while the solid floats in water and swims instead of pushing itself along the ground.</summary>
         public bool IsSwimming { get; private set; }
         public Vector3 GroundNormal { get; private set; } = Vector3.up;
@@ -170,6 +192,7 @@ namespace BounJam
         {
             body = GetComponent<Rigidbody>();
             core = GetComponent<SphereCollider>();
+            skin = GetComponent<BlobSkin>();
             if (input == null) input = GetComponent<PlayerInputReader>();
             if (cameraTransform == null && Camera.main != null) cameraTransform = Camera.main.transform;
             pushableLayer = LayerMask.NameToLayer("Pushable");
@@ -187,6 +210,7 @@ namespace BounJam
 
         void FixedUpdate()
         {
+            IsBridging = false;
             if (IsDriven)
             {
                 // No coyote-time jump once let go in mid-air either: that waits for the next landing.
@@ -209,7 +233,11 @@ namespace BounJam
             ProbeGround();
             stepsSinceJump++;
             if (stepsSinceJump < JumpGraceSteps) ClearGround();
-            else if (IsGrounded) hasJumped = false;
+            else
+            {
+                if (!IsGrounded && bridgeGaps) ProbeBridge();
+                if (IsGrounded) hasJumped = false;
+            }
             stepsSinceGrounded = IsGrounded ? 0 : stepsSinceGrounded + 1;
             stepsSinceClimb++;
 
@@ -237,7 +265,8 @@ namespace BounJam
             Vector3 steered = Vector3.MoveTowards(planar, wish * settings.maxSpeed, rate * Time.fixedDeltaTime);
             body.AddForce(steered - planar, ForceMode.VelocityChange);
 
-            if (IsGrounded) body.AddForce(-GroundNormal * groundStick, ForceMode.Acceleration);
+            if (IsBridging) HoldBridge();
+            else if (IsGrounded) body.AddForce(-GroundNormal * groundStick, ForceMode.Acceleration);
 
             // Pressing into a low edge: flow up it instead of relying on a bounce off the corner.
             if (stepContact && wish.sqrMagnitude > 0.01f && Vector3.Dot(wish.normalized, -stepNormal) > 0.3f)
@@ -432,6 +461,72 @@ namespace BounJam
                          && Vector3.Angle(hit.normal, Vector3.up) <= maxGroundAngle;
             GroundNormal = IsGrounded ? hit.normal : Vector3.up;
             groundGap = IsGrounded ? hit.distance - (radius - castRadius) : float.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// Nothing under the core: does the stretched jelly span a gap here? Looks down along it for the nearest ground
+        /// behind the core and the nearest ahead. It holds when the far side is under its front, or when its tail still
+        /// lies over the near side and the far side is within the jelly's whole length. Only ground about level with the
+        /// bottom of the core counts: a step up at most, or a little lower.
+        /// </summary>
+        void ProbeBridge()
+        {
+            if (skin == null || !skin.IsReady || skin.IsFrozen) return;
+            Vector3 forward = Vector3.ProjectOnPlane(skin.Forward, Vector3.up);
+            if (forward.sqrMagnitude < 1e-4f) return;
+            forward.Normalize();
+
+            Vector3 center = transform.TransformPoint(core.center);
+            float bottom = center.y - CoreRadius;
+            // Ground just under the core is a landing, not a gap.
+            if (Physics.Raycast(center, Vector3.down, CoreRadius + bridgeDrop, groundMask, QueryTriggerInteraction.Ignore)) return;
+            bool behind = FindGround(center, -forward, skin.ReachBehind - bridgeGrip, bottom, out float behindDistance, out float behindHeight);
+            float reach = skin.ReachAhead - bridgeGrip;
+            if (behind) reach = Mathf.Max(reach, skin.ReachAhead + skin.ReachBehind - 2f * bridgeGrip - behindDistance);
+            if (!FindGround(center, forward, reach, bottom, out float aheadDistance, out float aheadHeight)) return;
+
+            // On the line between the two sides, so a far side a little higher or lower is reached smoothly.
+            bridgeHeight = behind
+                ? Mathf.Lerp(behindHeight, aheadHeight, behindDistance / (behindDistance + aheadDistance))
+                : aheadHeight;
+            IsBridging = true;
+            IsGrounded = true;
+            GroundNormal = Vector3.up;
+            groundGap = 0f;
+        }
+
+        /// <summary>
+        /// The nearest ground about level with <paramref name="bottom"/> along a flat direction from the core, looked for
+        /// every sample spacing up to <paramref name="range"/> away.
+        /// </summary>
+        bool FindGround(Vector3 center, Vector3 direction, float range, float bottom, out float distance, out float height)
+        {
+            float spacing = Mathf.Max(0.05f, bridgeSampleSpacing);
+            float minNormalY = Mathf.Cos(maxGroundAngle * Mathf.Deg2Rad);
+            for (distance = spacing; distance <= range; distance += spacing)
+            {
+                Vector3 origin = center + direction * distance;
+                origin.y = bottom + maxStepHeight;
+                if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, maxStepHeight + bridgeDrop, groundMask,
+                                    QueryTriggerInteraction.Ignore)
+                    && hit.normal.y >= minNormalY)
+                {
+                    height = hit.point.y;
+                    return true;
+                }
+            }
+            height = 0f;
+            return false;
+        }
+
+        /// <summary>Glides the bridging core along the line between the two sides instead of letting it fall.</summary>
+        void HoldBridge()
+        {
+            float bottom = transform.TransformPoint(core.center).y - CoreRadius;
+            Vector3 velocity = body.linearVelocity;
+            velocity.y = Mathf.Clamp((bridgeHeight + BridgeClearance - bottom) * 10f, -stepClimbSpeed, stepClimbSpeed);
+            body.linearVelocity = velocity;
+            body.AddForce(-Physics.gravity, ForceMode.Acceleration);
         }
 
         /// <summary>Skimming just above the ground: turn any velocity away from it along the surface, keeping speed.</summary>

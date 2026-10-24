@@ -5,7 +5,8 @@ namespace BounJam
 {
     /// <summary>
     /// Soft skin around the blob's core. Every skin point is pulled by a spring toward a rest shape (the modelled
-    /// balloon, or a sphere) that sits on the ground and flattens with speed (keeping its volume), smoothed toward its
+    /// balloon, or a sphere) that sits on the ground, flattens with speed and stretches out the longer it keeps flowing the
+    /// same way (keeping its volume), smoothed toward its
     /// neighbours (surface tension) and pushed outward when volume is lost (pressure). Raycasts from the core keep the
     /// points out of the world, so the liquid squishes against floors, walls and obstacles. Runs right after each
     /// physics step and drives the skin mesh.
@@ -48,6 +49,16 @@ namespace BounJam
         [Tooltip("Extra stretch along the movement direction at full speed.")]
         [Range(0f, 0.5f)]
         [SerializeField] float stretchAtFullSpeed = 0.25f;
+        [Tooltip("Stretch after flowing the same way at speed for a while; it builds up from the speed stretch above. " +
+                 "Same volume, so the blob gets longer and thinner: a long run turns it into a streak.")]
+        [Range(0f, 1.5f)]
+        [SerializeField] float sustainedStretch = 1f;
+        [Tooltip("Seconds of flowing the same way at speed to build the sustained stretch up fully.")]
+        [SerializeField] float stretchBuildTime = 1.2f;
+        [Tooltip("Seconds to lose it all again after turning away or slowing down.")]
+        [SerializeField] float stretchReleaseTime = 0.35f;
+        [Tooltip("Heading more than this far from the way the stretch built up lets it go, degrees. Gentle curves keep it.")]
+        [SerializeField] float stretchTurnTolerance = 30f;
         [Tooltip("How quickly the shape follows speed changes.")]
         [SerializeField] float flattenStiffness = 120f;
         [Tooltip("Lower = more bounce between flat and tall when speeding up or stopping.")]
@@ -108,6 +119,9 @@ namespace BounJam
         float flatten;
         float flattenVelocity;
         float stretch;
+        // 0..1: how much of the sustained stretch has built up, and the way it built up along (flat).
+        float stretchCharge;
+        Vector3 stretchHeading;
         bool wasGrounded;
         Vector3 previousCoreVelocity;
         Vector3 frameUp = Vector3.up;
@@ -128,6 +142,10 @@ namespace BounJam
         public Vector3 Forward => frameForward;
         /// <summary>Middle of the rendered skin this frame, in the skin's local space.</summary>
         public Vector3 LocalCenter { get; private set; }
+        /// <summary>How far the jelly reaches ahead of the core along <see cref="Forward"/>, m (last physics step).</summary>
+        public float ReachAhead { get; private set; }
+        /// <summary>How far the jelly trails behind the core, against <see cref="Forward"/>, m (last physics step).</summary>
+        public float ReachBehind { get; private set; }
 
         /// <summary>The blob's top surface at one spot, from <see cref="TrySampleSurface"/>.</summary>
         public struct SurfaceSample
@@ -213,7 +231,8 @@ namespace BounJam
             sample = default;
             if (!initialised || IsFrozen) return false;
 
-            float reach = extent * 3f;
+            // Stretched out, the ends lie farther out than the rest shape's.
+            float reach = extent * (3f + stretch);
             float dx = point.x - ShapeCenter.x, dz = point.z - ShapeCenter.z;
             if (dx * dx + dz * dz > reach * reach) return false;
 
@@ -249,7 +268,7 @@ namespace BounJam
         public bool Contains(Vector3 point)
         {
             if (!initialised) return false;
-            float reach = extent * 3f;
+            float reach = extent * (3f + stretch);
             if ((point - body.position).sqrMagnitude > reach * reach) return false;
             // The rest shape has a skin point straight above the core, shared by six triangles; a ray through it would
             // count six crossings. Nudged a fraction of a millimetre, the ray can't line up with points like that.
@@ -445,7 +464,7 @@ namespace BounJam
             float pressureAcceleration = pressure * (1f - VolumeRatio);
 
             Vector3 sag = Physics.gravity * gravitySag;
-            float escapeDistance = extent * 4f;
+            float escapeDistance = extent * (4f + stretch);
             for (int i = 0; i < positions.Length; i++)
             {
                 Vector3 p = positions[i];
@@ -472,11 +491,17 @@ namespace BounJam
                 Collide(i, core);
             }
 
+            float ahead = 0f, behind = 0f;
             for (int i = 0; i < positions.Length; i++)
             {
                 previousOffsets[i] = currentOffsets[i];
                 currentOffsets[i] = positions[i] - core;
+                float along = Vector3.Dot(currentOffsets[i], frameForward);
+                ahead = Mathf.Max(ahead, along);
+                behind = Mathf.Max(behind, -along);
             }
+            ReachAhead = ahead;
+            ReachBehind = behind;
         }
 
         void UpdateShape(Vector3 coreVelocity, float dt)
@@ -506,7 +531,32 @@ namespace BounJam
             float target = flattenAtFullSpeed * eased + breath;
             flattenVelocity += (flattenStiffness * (target - flatten) - flattenDamping * flattenVelocity) * dt;
             flatten = Mathf.Clamp(flatten + flattenVelocity * dt, -0.3f, 0.8f);
-            stretch = stretchAtFullSpeed * eased;
+            UpdateStretchCharge(coreVelocity, speed01, grounded, dt);
+            stretch = eased * Mathf.Lerp(stretchAtFullSpeed, sustainedStretch, stretchCharge);
+        }
+
+        /// <summary>
+        /// The sustained stretch builds up while flowing the same way at speed on the ground and lets go after turning
+        /// away or slowing down. The way it builds up along follows gentle curves; in the air it holds.
+        /// </summary>
+        void UpdateStretchCharge(Vector3 coreVelocity, float speed01, bool grounded, float dt)
+        {
+            var flat = new Vector3(coreVelocity.x, 0f, coreVelocity.z);
+            if (speed01 < 0.5f || flat.sqrMagnitude < 0.01f)
+            {
+                stretchCharge = Mathf.MoveTowards(stretchCharge, 0f, dt / stretchReleaseTime);
+                return;
+            }
+
+            Vector3 heading = flat.normalized;
+            if (stretchCharge <= 0f) stretchHeading = heading;
+            if (Vector3.Angle(stretchHeading, heading) > stretchTurnTolerance)
+            {
+                stretchCharge = Mathf.MoveTowards(stretchCharge, 0f, dt / stretchReleaseTime);
+                return;
+            }
+            stretchHeading = Vector3.Slerp(stretchHeading, heading, 1f - Mathf.Exp(-3f * dt)).normalized;
+            if (grounded) stretchCharge = Mathf.MoveTowards(stretchCharge, 1f, dt / stretchBuildTime);
         }
 
         void ComputeRestPositions(Vector3 core)

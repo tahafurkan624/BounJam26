@@ -5,10 +5,10 @@ namespace BounJam
 {
     /// <summary>
     /// The blob as one of its pieces. A <see cref="PiercerPipe"/> cuts a whole blob into two halves: this object goes on
-    /// as one half and a copy of it becomes the other, each with half the volume and mass. Every half reads the same
-    /// input, so the halves move, jump and freeze together. Halves can't be cut again, but two liquid halves that touch
-    /// flow back into one whole blob. While a pipe carries a piece it's out of the player's hands: no control, no
-    /// collisions, no gravity, and hidden once inside.
+    /// as one half and a copy of it becomes the other, each with half the volume and mass (see <see cref="BlobSize"/>).
+    /// Every half reads the same input, so the halves move, jump and freeze together. Halves can't be cut again, but two
+    /// liquid halves that touch flow back into one whole blob. While a pipe carries a piece it's out of the player's
+    /// hands: no control, no collisions, no gravity, and hidden once inside.
     /// </summary>
     [RequireComponent(typeof(BlobMotor), typeof(BlobForm), typeof(BlobSkin))]
     public class BlobSplit : MonoBehaviour
@@ -20,8 +20,6 @@ namespace BounJam
         [Tooltip("How long the merged blob takes to swell back to its whole size, s. Swelling at once would toss the ship.")]
         [SerializeField] float swellTime = 0.5f;
 
-        // Half the volume: every length shrinks by the cube root of a half.
-        static readonly float HalfScale = Mathf.Pow(0.5f, 1f / 3f);
         static readonly List<BlobSplit> all = new List<BlobSplit>();
         static int nextSerial;
 
@@ -30,6 +28,7 @@ namespace BounJam
         BlobSkin skin;
         BlobCargo cargo;
         BlobWater water;
+        BlobSize size;
         Rigidbody body;
         SphereCollider core;
         ShipBuoyancy ship;
@@ -38,8 +37,6 @@ namespace BounJam
         string wholeName;
         int serial;
         bool absorbed;
-        // Seconds of swelling left after flowing together.
-        float swelling;
 
         /// <summary>Every piece of the blob in the loaded scenes: the whole blob, or both halves.</summary>
         public static IReadOnlyList<BlobSplit> All => all;
@@ -50,7 +47,7 @@ namespace BounJam
         public BlobMotor Motor => motor;
         public BlobSkin Skin => skin;
         /// <summary>Can a piercer pipe take this piece in now? Only the whole blob, as liquid, done swelling.</summary>
-        public bool CanBeCut => !isHalf && Free && !form.IsSolid && swelling <= 0f;
+        public bool CanBeCut => !isHalf && Free && !form.IsSolid && !size.IsSwelling;
         bool Free => !InPipe && !absorbed && skin.IsReady && !(water != null && water.IsDissolved);
         bool CanMerge => isHalf && Free && !form.IsSolid;
 
@@ -73,6 +70,8 @@ namespace BounJam
             skin = GetComponent<BlobSkin>();
             cargo = GetComponent<BlobCargo>();
             water = GetComponent<BlobWater>();
+            // Blobs saved before sizes existed get one here.
+            if (!TryGetComponent(out size)) size = gameObject.AddComponent<BlobSize>();
             body = GetComponent<Rigidbody>();
             core = GetComponent<SphereCollider>();
             ship = FindAnyObjectByType<ShipBuoyancy>();
@@ -126,20 +125,20 @@ namespace BounJam
             // Copied before shrinking, so both halves shrink from the same whole size.
             GameObject copy = Instantiate(gameObject, body.position, body.rotation);
             var half = copy.GetComponent<BlobSplit>();
+            half.size.MatchCopiedFrom(size);
             half.wholeName = wholeName;
             copy.name = wholeName + " Half";
             half.InPipe = true;
             half.SetHidden(true);
 
-            Resize(HalfScale, 0.5f);
-            half.Resize(HalfScale, 0.5f);
+            size.Resize(0.5f);
+            half.size.Resize(0.5f);
             isHalf = half.isHalf = true;
             return half;
         }
 
         void FixedUpdate()
         {
-            if (swelling > 0f) Swell();
             if (!CanMerge) return;
             for (int i = 0; i < all.Count; i++)
             {
@@ -163,8 +162,8 @@ namespace BounJam
 
         /// <summary>
         /// The other half flows into this one: it disappears with whatever it carried handed over, and this one is the
-        /// whole blob again where it is. It gets the whole mass at once, and swells to the whole size over
-        /// <see cref="swellTime"/>.
+        /// whole blob again where it is, with both halves' water (droplets either soaked up included). It gets the whole
+        /// mass at once, and swells to the whole size over <see cref="swellTime"/>.
         /// </summary>
         void Absorb(BlobSplit other)
         {
@@ -173,26 +172,9 @@ namespace BounJam
             if (cargo != null && other.cargo != null) cargo.TakeOver(other.cargo);
             Destroy(other.gameObject);
 
-            form.ScaleMass(2f);
             isHalf = false;
             name = wholeName;
-            swelling = swellTime;
-            if (swelling <= 0f) Resize(1f / HalfScale, 1f);
-        }
-
-        /// <summary>One physics step of swelling; the steps multiply up to exactly the whole size.</summary>
-        void Swell()
-        {
-            float dt = Mathf.Min(Time.fixedDeltaTime, swelling);
-            swelling -= dt;
-            Resize(Mathf.Pow(1f / HalfScale, dt / swellTime), 1f);
-        }
-
-        void Resize(float length, float mass)
-        {
-            skin.Resize(length);
-            motor.Resize(length);
-            form.ScaleMass(mass);
+            size.Grow((size.Volume + other.size.Volume) / size.Volume, swellTime);
         }
     }
 }
