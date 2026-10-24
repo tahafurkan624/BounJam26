@@ -1,4 +1,4 @@
-using FMODUnityEditor;
+using FMODUnity;
 using UnityEditor;
 using UnityEngine;
 using static BounJam.EditorTools.LevelKit;
