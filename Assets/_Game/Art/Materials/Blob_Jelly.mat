@@ -35,9 +35,20 @@ Material:
     - _GlintSharpness: 400
     - _GlintStrength: 2.5
     - _IOR: 1.33
-    - _IceFrost: 0.55
+    - _IceBanding: 0.7
+    - _IceBubbleSize: 0.12
+    - _IceBubbles: 0.3
+    - _IceClarity: 0.2
+    - _IceCrackSize: 0.3
+    - _IceCrackWidth: 0.012
+    - _IceCracks: 0.45
+    - _IceLayerDepth: 0.07
+    - _IcePaint: 0.12
     - _IceRefraction: 0.45
+    - _IceRimPower: 2.5
+    - _IceRimStrength: 0.9
     - _IceShadowOpacity: 0.9
+    - _IceTopWash: 0.06
     - _Reflectance: 0.02
     - _Refraction: 0.6
     - _RimStrength: 0.65
@@ -54,8 +65,12 @@ Material:
     - _SurfaceOpacity: 0.18
     m_Colors:
     - _FoamColor: {r: 0.93, g: 0.97999996, b: 1, a: 1}
-    - _IceColor: {r: 0.6, g: 0.78, b: 0.86, a: 1}
-    - _IceTint: {r: 0.62, g: 0.86, b: 0.92, a: 1}
+    - _IceCrackColor: {r: 0.92, g: 0.97999996, b: 1, a: 1}
+    - _IceDeepColor: {r: 0.02, g: 0.2, b: 0.48, a: 1}
+    - _IceEdgeColor: {r: 0.78, g: 0.95, b: 1, a: 1}
+    - _IceMidColor: {r: 0.12, g: 0.56, b: 0.84, a: 1}
+    - _IceRimColor: {r: 0.9, g: 0.98999995, b: 1, a: 1}
+    - _IceShadeColor: {r: 0.41999996, g: 0.45, b: 0.8, a: 1}
     - _ReflectionTint: {r: 1, g: 1, b: 1, a: 1}
     - _RimColor: {r: 0.85, g: 0.96999997, b: 1, a: 1}
     - _ScatterColor: {r: 0.17999998, g: 0.53, b: 0.59, a: 1}

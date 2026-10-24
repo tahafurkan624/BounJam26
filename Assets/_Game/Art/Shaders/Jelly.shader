@@ -1,4 +1,4 @@
-// Clear water for the liquid blob, frosted ice when it hardens. One pass, no raymarching:
+// Clear water for the liquid blob, painted glacier ice when it hardens. One pass, no raymarching:
 // - refraction: the body is treated as an ellipsoid fitted to the skin's renderer bounds (the CPU skin recalculates
 //   them every frame). Each pixel follows its refracted ray to where it leaves the water and shows the scene behind
 //   that point (URP opaque texture), so the floor is bent like through a real drop, with a little colour fringing
@@ -8,6 +8,9 @@
 // - slow ripples from 3D noise in the skin's own space tilt the normal: they show in the sun glints, the sky
 //   reflection (Schlick fresnel), the refracted floor and a faint caustic web. A few millimetres of vertex swell
 // - foam where the water meets the floor or the ship's hull, and drip rings while _Splash is up (set from code)
+// - hardened (_Solid, set from code): a stylized glacier instead. Deep blue where the view crosses the most ice, pale
+//   and glowing at the thin edges, facets lit in soft painted bands with blue-violet shade, and white cracks and
+//   trapped bubbles on two shells inside that turn with the crystal
 // Renders in the transparent queue (after the opaque texture is captured) but writes depth and outputs an opaque
 // colour, so the ship can sit half inside it and still sort correctly. Its own shadow caster (same material
 // constants as the forward pass, so it stays SRP Batcher compatible) drops a share of the shadow-map texels: the
@@ -58,11 +61,28 @@ Shader "BounJam/Jelly"
 
         [Header(Solid Form)]
         _Solid ("Solid (0 water, 1 ice, set from code)", Range(0, 1)) = 0
-        _IceTint ("Ice Tint Through 1 m", Color) = (0.62, 0.86, 0.92, 1)
-        _IceColor ("Frosted Ice Colour", Color) = (0.60, 0.78, 0.86, 1)
-        _IceFrost ("Frosted Interior", Range(0, 1)) = 0.55
+        _IceEdgeColor ("Ice Where Thin (edges)", Color) = (0.78, 0.95, 1, 1)
+        _IceMidColor ("Ice Midtone", Color) = (0.12, 0.56, 0.84, 1)
+        _IceDeepColor ("Ice Where Thick (core)", Color) = (0.02, 0.2, 0.48, 1)
+        _IcePaint ("Brushy Wobble In The Gradient", Range(0, 0.4)) = 0.12
+        _IceShadeColor ("Sunlight Left On Shaded Facets", Color) = (0.42, 0.45, 0.80, 1)
+        _IceBanding ("Painted Light Bands", Range(0, 1)) = 0.7
+        _IceTopWash ("White Wash On Sunlit Tops", Range(0, 1)) = 0.06
+        _IceRimColor ("Glowing Edge Colour", Color) = (0.90, 0.99, 1, 1)
+        _IceRimStrength ("Glowing Edge Strength", Range(0, 2)) = 0.9
+        _IceRimPower ("Glowing Edge Tightness", Range(1, 6)) = 2.5
+        _IceClarity ("See-Through At The Edges", Range(0, 1)) = 0.2
         _IceRefraction ("Ice Refraction (share of the water's)", Range(0, 1)) = 0.45
         _IceShadowOpacity ("Ice Cast Shadow Opacity", Range(0, 1)) = 0.9
+
+        [Header(Solid Form Inside)]
+        _IceCrackColor ("Crack Colour", Color) = (0.92, 0.98, 1, 1)
+        _IceCracks ("Share Of Cell Borders That Crack", Range(0, 1)) = 0.45
+        _IceCrackSize ("Crack Spacing (m)", Range(0.1, 1)) = 0.3
+        _IceCrackWidth ("Crack Width (m)", Range(0.002, 0.04)) = 0.012
+        _IceBubbles ("Bubbles (share of cells)", Range(0, 1)) = 0.3
+        _IceBubbleSize ("Bubble Spacing (m)", Range(0.04, 0.3)) = 0.12
+        _IceLayerDepth ("Depth Of The Near Layer (m)", Range(0.01, 0.3)) = 0.07
     }
 
     SubShader
@@ -79,8 +99,12 @@ Shader "BounJam/Jelly"
             half4 _ReflectionTint;
             half4 _RimColor;
             half4 _FoamColor;
-            half4 _IceTint;
-            half4 _IceColor;
+            half4 _IceEdgeColor;
+            half4 _IceMidColor;
+            half4 _IceDeepColor;
+            half4 _IceShadeColor;
+            half4 _IceRimColor;
+            half4 _IceCrackColor;
             half _Density;
             half _SurfaceOpacity;
             half _ShadowStrength;
@@ -105,9 +129,20 @@ Shader "BounJam/Jelly"
             half _DripStrength;
             float _DripSpacing;
             float _Solid;
-            half _IceFrost;
+            half _IcePaint;
+            half _IceBanding;
+            half _IceTopWash;
+            half _IceRimStrength;
+            half _IceRimPower;
+            half _IceClarity;
             half _IceRefraction;
             half _IceShadowOpacity;
+            half _IceCracks;
+            float _IceCrackSize;
+            float _IceCrackWidth;
+            half _IceBubbles;
+            float _IceBubbleSize;
+            float _IceLayerDepth;
         CBUFFER_END
         ENDHLSL
 
@@ -246,6 +281,56 @@ Shader "BounJam/Jelly"
                 return result * saturate((0.2 - footprint / _DripSpacing) * 10.0);
             }
 
+            // Fractures inside the ice: the borders of a jittered 3D cell grid, kept between only some pairs of
+            // neighbouring cells so they come as broken sheets rather than a full honeycomb, and warped a little by
+            // the gradient noise so they run jagged. p and pixel (one pixel's footprint) are in cells; returns 0..1.
+            half IceCracks(float3 p, float pixel)
+            {
+                p += RippleNoise(p * 1.9 + 3.7).xyz * 0.06;
+                float3 cell = floor(p);
+                float nearest = 8.0;
+                float second = 8.0;
+                float3 nearestCell = 0;
+                float3 secondCell = 0;
+                [unroll]
+                for (int i = 0; i < 27; i++)
+                {
+                    float3 c = cell + float3(i % 3, (i / 3) % 3, i / 9) - 1.0;
+                    float d = distance(p, c + 0.1 + 0.8 * RippleHash(c + 17.0));
+                    if (d < nearest) { second = nearest; secondCell = nearestCell; nearest = d; nearestCell = c; }
+                    else if (d < second) { second = d; secondCell = c; }
+                }
+                // second - nearest is about twice the distance to the border between the two nearest cells, so a
+                // crack of full width w ends where it reaches w (in cells).
+                float border = second - nearest;
+                float cracked = step(RippleHash(nearestCell + secondCell + 61.3).x, _IceCracks);
+                float width = _IceCrackWidth / _IceCrackSize;
+                // Thinner than a pixel: fade out instead of fizzing.
+                return cracked * (1.0 - smoothstep(width, width + 2.0 * pixel, border)) * saturate(width * 2.0 / pixel);
+            }
+
+            // Trapped air: in some cells of a finer grid, a small sphere. Where the sample shell cuts one it shows as a
+            // thin bright ring around a faint pale fill. A bubble stays inside its cell's middle, so the 2x2x2 nearest
+            // cells always hold every bubble that reaches here. p and pixel are in cells; returns 0..1.
+            half IceBubbles(float3 p, float pixel)
+            {
+                float3 baseCell = floor(p - 0.5);
+                half result = 0;
+                [unroll]
+                for (int i = 0; i < 8; i++)
+                {
+                    float3 c = baseCell + kCorners[i];
+                    float3 h = RippleHash(c + 91.7);
+                    float radius = 0.08 + 0.12 * h.x;
+                    float d = distance(p, c + 0.3 + 0.4 * RippleHash(c + 23.9));
+                    float ring = 1.0 - smoothstep(0.025, 0.025 + pixel, abs(d - radius));
+                    float fill = (1.0 - smoothstep(radius - pixel, radius, d)) * 0.3;
+                    result = max(result, step(h.z, _IceBubbles) * max(ring, fill));
+                }
+                // Bubbles only a couple of pixels across just sparkle: fade them out.
+                return result * saturate((0.12 - pixel) * 15.0);
+            }
+
             // Where a ray starting on (or near) the ellipsoid leaves it, as a distance along the ray.
             float EllipsoidExit(float3 origin, float3 direction, float3 center, float3 radii)
             {
@@ -357,7 +442,8 @@ Shader "BounJam/Jelly"
                 // little more than they tilt the shading, so they read in the floor at the default camera distance.
                 float3 refractNormal = normalize(geometricNormal - tangentSlope * _RippleRefraction);
                 float3 refracted = refract(rayDir, refractNormal, 1.0 / lerp(_IOR, 1.31, solid));
-                float3 exitWS = positionWS + refracted * EllipsoidExit(positionWS, refracted, bodyCenter, bodyRadii);
+                float exitDistance = EllipsoidExit(positionWS, refracted, bodyCenter, bodyRadii);
+                float3 exitWS = positionWS + refracted * exitDistance;
                 float2 bend = (WorldToScreenUV(exitWS) - WorldToScreenUV(positionWS)) * (_Refraction * lerp(1.0, _IceRefraction, solid));
                 // Anything nearer than this surface where the bent sample lands (a wall, a crate, the ship above the
                 // water) mustn't show up inside it: look straight through there instead.
@@ -381,16 +467,71 @@ Shader "BounJam/Jelly"
                 // Beer-Lambert: the tint is what's left after 1 m, so the colour falls off as tint^distance. Light
                 // scattered toward the camera fills in part of what was absorbed (murk). The caustic threads brighten
                 // what's seen through, as if focused there by the ripples.
-                half3 transmittance = pow(max(lerp(_WaterTint.rgb, _IceTint.rgb, solid), 1e-3h), waterDepth * _Density);
+                half3 transmittance = pow(max(_WaterTint.rgb, 1e-3h), waterDepth * _Density);
                 half3 caustic = mainLight.color * (thread * _Caustics * liquid * sunShadow * sunOnWater);
                 half3 color = behind * (1.0h + caustic) * transmittance + _ScatterColor.rgb * bodyLight * (1.0h - transmittance);
                 // Thin water (the puddle it squashes into at speed) would be nearly clear: keep a little body so it
                 // still reads as water, not glass, from the follow camera.
-                color = lerp(color, _ScatterColor.rgb * bodyLight, _SurfaceOpacity * liquid);
+                color = lerp(color, _ScatterColor.rgb * bodyLight, _SurfaceOpacity);
 
-                // Hardened: a frosted, milky interior that thickens toward the middle, so the crystal reads as solid.
-                half frost = _IceFrost * solid * (1.0 - exp(-2.5 * waterDepth));
-                color = lerp(color, _IceColor.rgb * bodyLight, frost);
+                // Hardened: glacier ice, painted rather than seen through. Deep blue where the view crosses the most
+                // ice, paling to a glowing edge where it crosses little, with white cracks and trapped bubbles inside.
+                UNITY_BRANCH
+                if (solid > 0.001)
+                {
+                    // How much ice the view crosses, against the most it could cross going this way (straight through
+                    // the middle): 0 at the silhouette, 1 in the middle, for a flat crystal as much as a round one. A
+                    // slow noise in the skin's own space wobbles it, so the gradient looks laid in with a brush rather
+                    // than computed, and the wobble turns with the crystal.
+                    float throughMiddle = 2.0 / max(length(rayDir / bodyRadii), 1e-4);
+                    half thickness = saturate(bodyChord / throughMiddle + RippleNoise(input.positionOS * 1.6 + 5.1).w * _IcePaint);
+                    // The ice colours are mixed in a perceptual space (the square root of linear, close enough to
+                    // sRGB), so blends spread the way a painter mixes them: mixed in linear, a little white swamps the
+                    // deep blue.
+                    half3 albedo = lerp(sqrt(_IceEdgeColor.rgb), sqrt(_IceMidColor.rgb), smoothstep(0.0h, 0.45h, thickness));
+                    albedo = lerp(albedo, sqrt(_IceDeepColor.rgb), smoothstep(0.35h, 1.0h, thickness));
+
+                    // Cracks and bubbles on two shells at fixed depths along the refracted ray. They're found in the
+                    // skin's own space, so they turn with the crystal and slide behind its surface as it does. The
+                    // deeper shell is dimmer and bluer, as if seen through more ice, and neither shows past where the
+                    // ray leaves the body.
+                    float3 rayOS = TransformWorldToObjectDir(refracted, false);
+                    [unroll]
+                    for (int layer = 0; layer < 2; layer++)
+                    {
+                        float depth = _IceLayerDepth * (1.0 + 1.6 * layer);
+                        float3 p = input.positionOS + rayOS * depth;
+                        half marks = max(IceCracks(p / _IceCrackSize, footprint / _IceCrackSize),
+                                         IceBubbles(p / _IceBubbleSize + 7.7 * layer, footprint / _IceBubbleSize));
+                        half inside = saturate((exitDistance - depth) / (0.3 * depth));
+                        half3 markColor = lerp(sqrt(_IceCrackColor.rgb), sqrt(_IceMidColor.rgb), 0.45h * layer);
+                        albedo = lerp(albedo, markColor, marks * inside * (1.0h - 0.4h * layer));
+                    }
+                    albedo *= albedo;
+
+                    // Facets lit in soft painted bands: sunlit, or in shade where some sun still comes through tinted
+                    // blue-violet (the shadows of a painting, not a photo). The light is taken relative to full sun
+                    // and sky, so the colours above are exactly what a sunlit facet shows (however bright the sun
+                    // is) and the light's colour still tints it. Sunlit facets that face up wash toward white, like
+                    // the top of a painted block catching the sun.
+                    half halfLambert = saturate(dot(geometricNormal, mainLight.direction) * 0.5 + 0.5);
+                    half lit = lerp(halfLambert, smoothstep(0.4h, 0.7h, halfLambert), _IceBanding) * lerp(1.0h, sunShadow, 0.65h);
+                    half3 fullLight = ambient + mainLight.color;
+                    half exposure = 1.0h / max(Luminance(fullLight), 0.05h);
+                    half3 white = fullLight * exposure;
+                    half3 ice = albedo * (ambient + mainLight.color * lerp(_IceShadeColor.rgb, 1.0h, lit)) * exposure;
+                    // The washes below are mixed perceptually too.
+                    ice = sqrt(max(ice, 0.0h));
+                    ice = lerp(ice, sqrt(white), saturate(geometricNormal.y) * lit * _IceTopWash);
+                    // Facets toward the silhouette glow pale: the thin lip of the block, lit through. Only where the
+                    // view crosses little ice, so the broad top of a flat crystal doesn't glow all over.
+                    half edge = pow(1.0h - saturate(dot(geometricNormal, viewDir)), _IceRimPower) * (1.0h - thickness);
+                    ice = lerp(ice, sqrt(_IceRimColor.rgb * white), saturate(edge * _IceRimStrength));
+                    ice *= ice;
+                    // A little of what's behind shows through where it's thin.
+                    ice = lerp(ice, behind * _IceEdgeColor.rgb, _IceClarity * (1.0h - thickness));
+                    color = lerp(color, ice, solid);
+                }
 
                 // Sky reflection, Schlick fresnel on the rippled normal: almost nothing facing the camera, all of it
                 // at the grazing edge.
@@ -415,9 +556,9 @@ Shader "BounJam/Jelly"
                 color = lerp(color, foamLit, foam);
 
                 // A bright rim on the smooth outline, so the edge reads at the default camera distance too (the
-                // physical fresnel alone is a pixel wide there). Crisper on ice.
+                // physical fresnel alone is a pixel wide there). The ice has its own glowing edge.
                 half rim = 1.0h - saturate(dot(geometricNormal, viewDir));
-                color += _RimColor.rgb * (rim * rim * rim * _RimStrength * (1.0 + 0.5 * solid));
+                color += _RimColor.rgb * (rim * rim * rim * _RimStrength * liquid);
 
                 // Sun glints on the rippled normal. Specular anti-aliasing: the glint widens (and dims a little) by how
                 // much the normal changes across the pixel, so small ripples and far-away facets don't fizz.
