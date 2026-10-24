@@ -33,8 +33,11 @@ namespace BounJam
         void Awake()
         {
             body = GetComponent<Rigidbody>();
-            colliders = GetComponentsInChildren<Collider>(true);
+            RefreshColliders();
         }
+
+        /// <summary>Looks for the body's colliders again, after some were added (the blob's crystal pieces).</summary>
+        public void RefreshColliders() => colliders = GetComponentsInChildren<Collider>(true);
 
         // Switched back on somewhere else (out of a pipe): the floor it remembers may not be the one under it now.
         void OnEnable() => lastGround = null;

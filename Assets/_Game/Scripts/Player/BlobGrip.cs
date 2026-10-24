@@ -99,13 +99,13 @@ namespace BounJam
         void OnHardening()
         {
             foreach (Collider other in ignored)
-                if (other != null) Physics.IgnoreCollision(form.SolidCollider, other, false);
+                if (other != null) form.IgnoreCollision(other, false);
             ignored.Clear();
             if (candidate == null) return;
             foreach (Collider other in candidate.Conveyor.Colliders)
             {
                 if (other == null) continue;
-                Physics.IgnoreCollision(form.SolidCollider, other);
+                form.IgnoreCollision(other, true);
                 ignored.Add(other);
             }
         }

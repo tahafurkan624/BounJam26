@@ -207,6 +207,8 @@ namespace BounJam
             public Vector3 Normal;
         }
 
+        /// <summary>What the liquid flows around: everything its points are kept out of.</summary>
+        public LayerMask CollisionMask => collisionMask;
         /// <summary>True while hardened into the solid form: the shape is fixed and moves rigidly with the body.</summary>
         public bool IsFrozen { get; private set; }
         /// <summary>False until the first physics step has placed the skin points.</summary>

@@ -159,8 +159,8 @@ namespace BounJam
         {
             if (!solid || !IsFloating) return;
 
-            Collider crystal = blobForm.SolidCollider;
             Vector3 lift = Vector3.zero;
+            foreach (Collider crystal in blobForm.SolidColliders)
             foreach (Collider own in colliders)
             {
                 if (Physics.ComputePenetration(own, own.transform.position, own.transform.rotation,

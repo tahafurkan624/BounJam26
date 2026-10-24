@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BounJam
@@ -125,7 +126,7 @@ namespace BounJam
         bool shoreContact;
         Vector3 shoreNormal;
         Vector3 shorePoint;
-        Collider solidShape;
+        IReadOnlyList<Collider> solidShapes;
         int pushableLayer;
 
         public Rigidbody Body => body;
@@ -153,12 +154,12 @@ namespace BounJam
 
         /// <summary>
         /// Switches between liquid movement (core sphere) and solid movement (whatever shape is frozen;
-        /// <paramref name="shape"/> is its collider).
+        /// <paramref name="shapes"/> are its colliders).
         /// </summary>
-        public void SetSolid(bool value, Collider shape = null)
+        public void SetSolid(bool value, IReadOnlyList<Collider> shapes = null)
         {
             isSolid = value;
-            solidShape = shape;
+            solidShapes = shapes;
             IsSwimming = false;
             climbingOut = false;
             solidGroundContact = false;
@@ -386,7 +387,7 @@ namespace BounJam
         void ClimbOut(Vector3 wish)
         {
             Vector3 center = body.worldCenterOfMass;
-            float bottom = solidShape != null ? solidShape.bounds.min.y : center.y - CoreRadius;
+            float bottom = SolidBottom(center.y - CoreRadius);
             bool overLedge = Physics.Raycast(center, Vector3.down, out RaycastHit below, center.y - bottom + 0.1f, groundMask,
                                              QueryTriggerInteraction.Ignore)
                              && below.normal.y > 0.7f && below.point.y > shoreTop - 0.05f;
@@ -403,6 +404,15 @@ namespace BounJam
             velocity.y = rising ? Mathf.Max(body.linearVelocity.y, shoreClimbSpeed) : Mathf.Max(body.linearVelocity.y, 0f);
             body.linearVelocity = velocity;
             body.angularVelocity = Vector3.zero;
+        }
+
+        /// <summary>Lowest point of the frozen shape's colliders, or <paramref name="fallback"/> without any.</summary>
+        float SolidBottom(float fallback)
+        {
+            if (solidShapes == null || solidShapes.Count == 0) return fallback;
+            float bottom = float.PositiveInfinity;
+            for (int i = 0; i < solidShapes.Count; i++) bottom = Mathf.Min(bottom, solidShapes[i].bounds.min.y);
+            return bottom;
         }
 
         void BrakeSolid()

@@ -6,11 +6,13 @@ using UnityEngine;
 namespace BounJam
 {
     /// <summary>
-    /// Switches the blob between liquid and solid. Freezing locks the skin's current shape, gives the body a convex
-    /// collider of exactly that shape, makes it heavy, lets it rotate and moves it to the PlayerSolid layer (so it
-    /// is stopped by grates, carries the ship as a solid and, later, presses buttons and pushes crates). Melting
-    /// reverses all of it, and the liquid flows back to rest from wherever the solid ended up. It can't freeze while the
-    /// liquid is partway through a grate (anything only the liquid passes): the crystal would stand inside it.
+    /// Switches the blob between liquid and solid. Freezing locks the skin's current shape, gives the body colliders of
+    /// that shape, makes it heavy, lets it rotate and moves it to the PlayerSolid layer (so it is stopped by grates,
+    /// carries the ship as a solid and, later, presses buttons and pushes crates). The colliders are one convex hull, or
+    /// where that would fill in the dents the jelly took around a post or over an edge and cut into the level, convex
+    /// pieces that keep them (see <see cref="BuildCrystal"/>). Melting reverses all of it, and the liquid flows back to
+    /// rest from wherever the solid ended up. It can't freeze while the liquid is partway through a grate (anything only
+    /// the liquid passes): the crystal would stand inside it.
     /// </summary>
     [RequireComponent(typeof(BlobMotor), typeof(BlobSkin))]
     public class BlobForm : MonoBehaviour
@@ -18,7 +20,8 @@ namespace BounJam
         [SerializeField] PlayerInputReader input;
         [Tooltip("The small sphere the liquid moves on.")]
         [SerializeField] SphereCollider liquidCore;
-        [Tooltip("Convex collider that takes the frozen shape. Disabled while liquid.")]
+        [Tooltip("Convex collider that takes the frozen shape; more like it are added when the crystal is cut into pieces. " +
+                 "Disabled while liquid.")]
         [SerializeField] MeshCollider solidCollider;
         [Tooltip("Skin renderer; a copy of its material gets _Solid blended between the jelly and the hardened look.")]
         [SerializeField] Renderer skinRenderer;
@@ -42,10 +45,20 @@ namespace BounJam
         [Tooltip("Brief size pop when hardening, as a fraction of the size.")]
         [SerializeField] float freezePop = 0.06f;
 
+        [Header("Crystal Shape")]
+        [Tooltip("The crystal is one convex hull unless that would cut deeper than this into the level, m. Where the " +
+                 "jelly was wrapped around a post or draped over an edge, the hull fills in the dent; then the crystal " +
+                 "is cut into convex pieces that keep it.")]
+        [SerializeField] float fitTolerance = 0.03f;
+        [Tooltip("Most pieces the crystal may be cut into.")]
+        [SerializeField] int maxPieces = 16;
+        [Tooltip("Thinnest piece a cut may leave, m.")]
+        [SerializeField] float minPieceSize = 0.06f;
+
         [Header("Overlaps")]
-        [Tooltip("What the new crystal is checked against when it appears. The hull is convex, so where the jelly " +
-                 "was wrapped around something it can cut into it; the blob steps out of heavy things and pushes " +
-                 "light ones (the ship) out of itself.")]
+        [Tooltip("What the new crystal is checked against when it appears. Where it still cuts into something (a ship " +
+                 "being scooped up, a dent too fine to cut around), the blob steps out of heavy things and pushes light " +
+                 "ones (the ship) out of itself.")]
         [SerializeField] LayerMask overlapMask = ~0;
         [Tooltip("Top speed the physics may use to push the blob out of an overlap, m/s. Low = eased out, never shot through a floor.")]
         [SerializeField] float maxDepenetrationSpeed = 3f;
@@ -53,6 +66,10 @@ namespace BounJam
         // The first 42 skin points are the level-1 icosphere: an even subset whose hull stays far below the
         // 255-polygon limit of convex mesh colliders.
         const int HullPointCount = 42;
+        // Thinner than this, a piece has no volume to build a convex collider from, m.
+        const float MinThickness = 0.005f;
+        // A point this close to an obstacle's surface counts as inside it, m.
+        const float InsideTolerance = 0.001f;
         static readonly int SolidProperty = Shader.PropertyToID("_Solid");
 
         BlobMotor motor;
@@ -65,9 +82,18 @@ namespace BounJam
         int solidLayer;
         // Grates and the like: the liquid flows through them, the crystal doesn't.
         int passableMask;
-        Mesh hullMesh;
-        int[] hullTriangles;
         Vector3[] hullPoints;
+        // What the liquid flows around: what the crystal mustn't cut into.
+        LayerMask fitMask;
+        FrozenShape shape;
+        readonly List<Piece> pieces = new List<Piece>();
+        readonly List<Collider> solidColliders = new List<Collider>();
+        // Every collider the crystal can be built from, solidCollider first, and those not in use.
+        readonly List<MeshCollider> crystalColliders = new List<MeshCollider>();
+        readonly Stack<MeshCollider> spareColliders = new Stack<MeshCollider>();
+        readonly List<Vector3> lowerPoints = new List<Vector3>();
+        readonly List<Vector3> upperPoints = new List<Vector3>();
+        readonly List<int> fanTriangles = new List<int>();
         // The skin's own copy of the jelly material, so _Solid can change for this blob only.
         Material skinMaterial;
         float solidLook;
@@ -77,18 +103,35 @@ namespace BounJam
         readonly RaycastHit[] passageHits = new RaycastHit[8];
 
         public bool IsSolid { get; private set; }
-        /// <summary>The collider that has the frozen shape (only enabled while solid).</summary>
-        public Collider SolidCollider => solidCollider;
-        /// <summary>The frozen shape's collider points, in the blob's local space (only meaningful while solid).</summary>
+        /// <summary>The colliders that have the frozen shape: one, or the pieces it was cut into (none while liquid).</summary>
+        public IReadOnlyList<Collider> SolidColliders => solidColliders;
+        /// <summary>
+        /// An even spread of points over the frozen shape (the first 42 skin points), in the blob's local space (only
+        /// meaningful while solid).
+        /// </summary>
         public Vector3[] HullPoints => hullPoints;
         /// <summary>Raised after every form change; true = now solid.</summary>
         public event Action<bool> FormChanged;
         /// <summary>
-        /// Raised while freezing, once <see cref="SolidCollider"/> has the frozen shape and before the crystal is
-        /// checked for overlaps. Whatever a listener makes it ignore (Physics.IgnoreCollision) it may set around,
+        /// Raised while freezing, once <see cref="SolidColliders"/> have the frozen shape and before the crystal is
+        /// checked for overlaps. Whatever a listener makes it ignore (<see cref="IgnoreCollision"/>) it may set around,
         /// like a conveyor's spike it grabs (see <see cref="BlobGrip"/>).
         /// </summary>
         public event Action Hardening;
+
+        /// <summary>One convex collider of the crystal.</summary>
+        class Piece
+        {
+            public MeshCollider Collider;
+            public Mesh Mesh;
+            // The box it was cut from, and the bounds of the shape inside it, in the blob's local space.
+            public Bounds Box;
+            public Bounds Extent;
+            // How far it cuts into the level, and what it cuts into deepest.
+            public float Depth;
+            public Collider Obstacle;
+            public bool Uncuttable;
+        }
 
         void Awake()
         {
@@ -104,11 +147,16 @@ namespace BounJam
             liquidLayer = LayerMask.NameToLayer("PlayerLiquid");
             solidLayer = LayerMask.NameToLayer("PlayerSolid");
             passableMask = LayerMask.GetMask("LiquidPassable");
+            fitMask = skin.CollisionMask;
 
-            IcoSphere.Build(1, out _, out hullTriangles);
             hullPoints = new Vector3[HullPointCount];
             if (skinRenderer != null) skinMaterial = skinRenderer.material;
-            solidCollider.enabled = false;
+            // A copy of a blob (a half from a piercer pipe) comes with the colliders the original had added.
+            GetComponents(crystalColliders);
+            crystalColliders.Remove(solidCollider);
+            crystalColliders.Insert(0, solidCollider);
+            foreach (MeshCollider crystalCollider in crystalColliders) crystalCollider.enabled = false;
+            ResetSpareColliders();
             ApplyLook(0f, 1f);
         }
 
@@ -124,7 +172,7 @@ namespace BounJam
 
         void OnDestroy()
         {
-            if (hullMesh != null) Destroy(hullMesh);
+            foreach (Piece piece in pieces) Destroy(piece.Mesh);
             if (skinMaterial != null) Destroy(skinMaterial);
         }
 
@@ -142,15 +190,7 @@ namespace BounJam
 
             Vector3[] frozen = skin.Freeze();
             Array.Copy(frozen, hullPoints, HullPointCount);
-            // A new mesh every freeze, so the collider is built exactly as on the first freeze. Refilling the mesh the
-            // collider had already been built from could leave the second crystal without a working shape, and it
-            // fell straight through the floor.
-            hullMesh = new Mesh { name = "Blob Solid Hull" };
-            hullMesh.vertices = hullPoints;
-            hullMesh.triangles = hullTriangles;
-            hullMesh.RecalculateBounds();
-            solidCollider.sharedMesh = hullMesh;
-            solidCollider.enabled = true;
+            BuildCrystal(frozen);
             liquidCore.enabled = false;
             Hardening?.Invoke();
             ResolveOverlaps();
@@ -163,7 +203,7 @@ namespace BounJam
             body.ResetInertiaTensor();
             body.linearVelocity *= momentumKept;
             body.angularVelocity = Vector3.zero;
-            motor.SetSolid(true, solidCollider);
+            motor.SetSolid(true, solidColliders);
 
             IsSolid = true;
             lastSwitchTime = Time.time;
@@ -182,10 +222,10 @@ namespace BounJam
             transform.rotation = Quaternion.identity;
 
             liquidCore.enabled = true;
-            solidCollider.enabled = false;
-            solidCollider.sharedMesh = null;
-            Destroy(hullMesh);
-            hullMesh = null;
+            foreach (Piece piece in pieces) Release(piece);
+            pieces.Clear();
+            solidColliders.Clear();
+            ResetSpareColliders();
             SetLayer(liquidLayer);
             body.mass = liquidMass;
             body.angularDamping = liquidAngularDamping;
@@ -198,6 +238,12 @@ namespace BounJam
             lastSwitchTime = Time.time;
             StartLookTransition(0f, meltTime, 0f);
             FormChanged?.Invoke(false);
+        }
+
+        /// <summary>Makes every collider of the crystal ignore collisions with <paramref name="other"/>, or stop ignoring them.</summary>
+        public void IgnoreCollision(Collider other, bool ignore)
+        {
+            foreach (Collider piece in solidColliders) Physics.IgnoreCollision(piece, other, ignore);
         }
 
         /// <summary>Multiplies the liquid and solid masses, for a blob that was cut in half or grew back whole.</summary>
@@ -249,47 +295,237 @@ namespace BounJam
         }
 
         /// <summary>
-        /// The crystal is the convex hull of the jelly, so where the jelly was wrapped around something (a crate's
-        /// corner, a ship being scooped up) it cuts into it. Left alone, the physics would shove the bodies apart
-        /// hard enough to send the blob through the floor. Instead: step out of anything heavy or fixed, and move
-        /// light bodies (the ship) out of the crystal. Two passes settle overlaps with several things at once.
+        /// Gives the crystal its colliders. Colliders on a moving body have to be convex, and the convex hull of the
+        /// frozen shape fills in every dent the jelly took: wrapped around a post or draped over an edge, the hull
+        /// stands in the post or the edge. So the hull is the whole crystal only as long as it doesn't cut into the
+        /// level. Otherwise the piece that cuts in deepest is cut in two where <see cref="FrozenShape.ChooseCut"/>
+        /// says, and again, until every piece fits or there are as many pieces as allowed. Each piece is the part of
+        /// the shape inside its box, with only the dents inside the box filled in. Whatever still cuts in,
+        /// <see cref="ResolveOverlaps"/> deals with.
+        /// </summary>
+        void BuildCrystal(Vector3[] frozen)
+        {
+            if (shape == null) shape = new FrozenShape(frozen.Length);
+            shape.SetPoints(frozen);
+            lowerPoints.Clear();
+            lowerPoints.AddRange(hullPoints);
+            AddPiece(lowerPoints, shape.Bounds);
+
+            // A cut that drops one half adds no piece, so the cuts are counted too.
+            for (int cuts = 0; pieces.Count < maxPieces && cuts < maxPieces * 2;)
+            {
+                Piece deepest = null;
+                foreach (Piece piece in pieces)
+                    if (!piece.Uncuttable && piece.Depth > fitTolerance && (deepest == null || piece.Depth > deepest.Depth))
+                        deepest = piece;
+                if (deepest == null) break;
+
+                // At the moment of freezing the blob has no rotation, so local bounds are world bounds moved.
+                Bounds obstacle = deepest.Obstacle.bounds;
+                obstacle.center -= body.position;
+                if (!FrozenShape.ChooseCut(deepest.Extent, obstacle, minPieceSize, out int axis, out float at))
+                {
+                    deepest.Uncuttable = true;
+                    continue;
+                }
+
+                Bounds lower = deepest.Box, upper = deepest.Box;
+                Vector3 lowerMax = lower.max, upperMin = upper.min;
+                lowerMax[axis] = at;
+                upperMin[axis] = at;
+                lower.SetMinMax(lower.min, lowerMax);
+                upper.SetMinMax(upperMin, upper.max);
+                shape.Clip(lower, lowerPoints);
+                shape.Clip(upper, upperPoints);
+                // A half inside the obstacle is only the skin's triangles cutting through it: no jelly to keep.
+                bool keepLower = !IsInside(lowerPoints, deepest.Obstacle), keepUpper = !IsInside(upperPoints, deepest.Obstacle);
+                if ((keepLower && !CanBuild(lowerPoints, out _)) || (keepUpper && !CanBuild(upperPoints, out _))
+                    || (!keepLower && !keepUpper))
+                {
+                    deepest.Uncuttable = true;
+                    continue;
+                }
+
+                cuts++;
+                pieces.Remove(deepest);
+                Release(deepest);
+                if (keepLower) AddPiece(lowerPoints, lower);
+                if (keepUpper) AddPiece(upperPoints, upper);
+            }
+
+            solidColliders.Clear();
+            foreach (Piece piece in pieces) solidColliders.Add(piece.Collider);
+        }
+
+        /// <summary>
+        /// Builds a convex collider around <paramref name="points"/> (the part of the shape in <paramref name="box"/>)
+        /// and measures how far it cuts into the level.
+        /// </summary>
+        void AddPiece(List<Vector3> points, Bounds box)
+        {
+            if (!CanBuild(points, out Bounds extent)) return;
+
+            // A convex collider is built from the points alone; the triangles only have to be valid.
+            int indexCount = (points.Count - 2) * 3;
+            for (int k = fanTriangles.Count / 3; fanTriangles.Count < indexCount; k++)
+            {
+                fanTriangles.Add(0);
+                fanTriangles.Add(k + 1);
+                fanTriangles.Add(k + 2);
+            }
+            // A new mesh every time, so each collider is built exactly as on the first freeze. Refilling a mesh a
+            // collider had already been built from could leave the crystal without a working shape, and it fell
+            // straight through the floor.
+            var mesh = new Mesh { name = "Blob Crystal" };
+            mesh.SetVertices(points);
+            mesh.SetTriangles(fanTriangles, 0, indexCount, 0);
+
+            MeshCollider meshCollider = spareColliders.Count > 0 ? spareColliders.Pop() : AddCrystalCollider();
+            meshCollider.sharedMesh = mesh;
+            meshCollider.enabled = true;
+            var piece = new Piece { Collider = meshCollider, Mesh = mesh, Box = box, Extent = extent };
+            piece.Depth = MeasureDepth(piece, out piece.Obstacle);
+            pieces.Add(piece);
+        }
+
+        static bool CanBuild(List<Vector3> points, out Bounds extent)
+        {
+            extent = default;
+            if (points.Count < 4) return false;
+            extent = new Bounds(points[0], Vector3.zero);
+            foreach (Vector3 point in points) extent.Encapsulate(point);
+            Vector3 size = extent.size;
+            return Mathf.Min(size.x, Mathf.Min(size.y, size.z)) >= MinThickness;
+        }
+
+        /// <summary>
+        /// Is this part of the shape (its corners, in the blob's local space) all inside the obstacle? Pressed around a
+        /// corner, the jelly hugs both sides of it and the frozen skin's triangles between them cut right through the
+        /// corner; once the cuts have parted that bit from the rest, there's no jelly in it to keep. Only convex
+        /// colliders can say what's inside them.
+        /// </summary>
+        bool IsInside(List<Vector3> points, Collider obstacle)
+        {
+            if (!(obstacle is BoxCollider || obstacle is SphereCollider || obstacle is CapsuleCollider
+                  || obstacle is MeshCollider { convex: true }))
+                return false;
+            GetPose(obstacle, out Vector3 position, out Quaternion rotation);
+            foreach (Vector3 point in points)
+            {
+                // At the moment of freezing the blob has no rotation. A point inside comes back as itself.
+                Vector3 world = body.position + point;
+                if ((Physics.ClosestPoint(world, obstacle, position, rotation) - world).sqrMagnitude > InsideTolerance * InsideTolerance)
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>How far the piece cuts into what the liquid flows around, and what it cuts into deepest.</summary>
+        float MeasureDepth(Piece piece, out Collider obstacle)
+        {
+            obstacle = null;
+            float deepest = 0f;
+            Vector3 position = body.position;
+            Quaternion rotation = body.rotation;
+            int count = Physics.OverlapBoxNonAlloc(position + rotation * piece.Extent.center, piece.Extent.extents + Vector3.one * 0.05f,
+                                                   nearby, rotation, fitMask, QueryTriggerInteraction.Ignore);
+            for (int i = 0; i < count; i++)
+            {
+                Collider other = nearby[i];
+                if (other.attachedRigidbody == body) continue;
+                GetPose(other, out Vector3 otherPosition, out Quaternion otherRotation);
+                if (Physics.ComputePenetration(piece.Collider, position, rotation, other, otherPosition, otherRotation,
+                                               out _, out float distance)
+                    && distance > deepest)
+                {
+                    deepest = distance;
+                    obstacle = other;
+                }
+            }
+            return deepest;
+        }
+
+        /// <summary>One more collider for the crystal, set up like the first.</summary>
+        MeshCollider AddCrystalCollider()
+        {
+            var added = gameObject.AddComponent<MeshCollider>();
+            added.enabled = false;
+            added.convex = true;
+            added.cookingOptions = solidCollider.cookingOptions;
+            added.sharedMaterial = solidCollider.sharedMaterial;
+            crystalColliders.Add(added);
+            // The ground guard keeps a list of the body's colliders.
+            if (TryGetComponent(out GroundGuard guard)) guard.RefreshColliders();
+            return added;
+        }
+
+        void Release(Piece piece)
+        {
+            piece.Collider.enabled = false;
+            piece.Collider.sharedMesh = null;
+            Destroy(piece.Mesh);
+            spareColliders.Push(piece.Collider);
+        }
+
+        /// <summary>All colliders spare, solidCollider on top: a crystal that isn't cut is built on it, as always.</summary>
+        void ResetSpareColliders()
+        {
+            spareColliders.Clear();
+            for (int i = crystalColliders.Count - 1; i >= 0; i--) spareColliders.Push(crystalColliders[i]);
+        }
+
+        /// <summary>
+        /// Where the new crystal still cuts into something (a ship being scooped up, a dent too fine to cut around),
+        /// the physics would shove the bodies apart hard enough to send the blob through the floor. Instead: step out
+        /// of anything heavy or fixed, and move light bodies (the ship) out of the crystal. Two passes settle overlaps
+        /// with several things at once.
         /// </summary>
         void ResolveOverlaps()
         {
-            Bounds hull = hullMesh.bounds;
+            Bounds extent = shape.Bounds;
             for (int pass = 0; pass < 2; pass++)
             {
-                Vector3 center = transform.TransformPoint(hull.center);
-                int count = Physics.OverlapBoxNonAlloc(center, hull.extents + Vector3.one * 0.05f, nearby, transform.rotation,
+                Vector3 center = transform.TransformPoint(extent.center);
+                int count = Physics.OverlapBoxNonAlloc(center, extent.extents + Vector3.one * 0.05f, nearby, transform.rotation,
                                                        overlapMask, QueryTriggerInteraction.Ignore);
                 Vector3 step = Vector3.zero;
                 for (int i = 0; i < count; i++)
                 {
                     Collider other = nearby[i];
                     Rigidbody otherBody = other.attachedRigidbody;
-                    if (otherBody == body || Physics.GetIgnoreCollision(solidCollider, other)) continue;
-
-                    // Moving bodies render interpolated; use where the physics actually has them.
-                    bool onBody = otherBody != null && other.transform == otherBody.transform;
-                    Vector3 otherPosition = onBody ? otherBody.position : other.transform.position;
-                    Quaternion otherRotation = onBody ? otherBody.rotation : other.transform.rotation;
-                    if (!Physics.ComputePenetration(solidCollider, body.position + step, body.rotation,
-                                                    other, otherPosition, otherRotation,
-                                                    out Vector3 direction, out float distance))
-                        continue;
-
-                    if (otherBody != null && !otherBody.isKinematic && otherBody.mass < body.mass * 0.5f)
+                    if (otherBody == body) continue;
+                    GetPose(other, out Vector3 otherPosition, out Quaternion otherRotation);
+                    foreach (Piece piece in pieces)
                     {
-                        // Light and loose: move it out of the crystal instead of moving the crystal.
-                        otherBody.position -= direction * distance;
-                        otherBody.transform.position -= direction * distance;
+                        if (Physics.GetIgnoreCollision(piece.Collider, other)
+                            || !Physics.ComputePenetration(piece.Collider, body.position + step, body.rotation,
+                                                           other, otherPosition, otherRotation,
+                                                           out Vector3 direction, out float distance))
+                            continue;
+
+                        if (otherBody != null && !otherBody.isKinematic && otherBody.mass < body.mass * 0.5f)
+                        {
+                            // Light and loose: move it out of the crystal instead of moving the crystal.
+                            otherBody.position -= direction * distance;
+                            otherBody.transform.position -= direction * distance;
+                            otherPosition -= direction * distance;
+                        }
+                        else step += direction * distance;
                     }
-                    else step += direction * distance;
                 }
                 if (step == Vector3.zero) break;
                 body.position += step;
                 transform.position += step;
             }
+        }
+
+        /// <summary>Where the physics has a collider: moving bodies render interpolated.</summary>
+        static void GetPose(Collider other, out Vector3 position, out Quaternion rotation)
+        {
+            Rigidbody otherBody = other.attachedRigidbody;
+            bool onBody = otherBody != null && other.transform == otherBody.transform;
+            position = onBody ? otherBody.position : other.transform.position;
+            rotation = onBody ? otherBody.rotation : other.transform.rotation;
         }
 
         void SetLayer(int layer)

@@ -264,8 +264,9 @@ namespace BounJam.EditorTools
             {
                 var block = new MaterialPropertyBlock();
                 target.GetComponentInChildren<Renderer>().GetPropertyBlock(block);
-                result += string.Format(CultureInfo.InvariantCulture, " solid={0} solidLook={1:0.00} rotation={2}",
-                                        form.IsSolid, block.GetFloat("_Solid"), Format(target.transform.eulerAngles));
+                result += string.Format(CultureInfo.InvariantCulture, " solid={0} solidLook={1:0.00} rotation={2} crystalPieces={3}",
+                                        form.IsSolid, block.GetFloat("_Solid"), Format(target.transform.eulerAngles),
+                                        form.SolidColliders.Count);
             }
             if (target.TryGetComponent(out BlobMotor motor))
                 result += $" grounded={motor.IsGrounded} bridging={motor.IsBridging} sleeping={motor.Body != null && motor.Body.IsSleeping()}";
