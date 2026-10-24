@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_FoamPond
+  m_Shader: {fileID: 4800000, guid: dfb8a6f8539f61945936a8c7add8fc68, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _ClearRadius: 1.2
+    - _Coverage: 0.4
+    - _DeepOpacity: 0.9
+    - _Drift: 0.05
+    - _EdgeFoam: 0.1
+    - _FoamOpacity: 0.7
+    - _LaceSize: 0.4
+    - _LaceWidth: 0.05
+    - _Murkiness: 1.8
+    - _PatchSize: 2.2
+    - _Reflection: 0.3
+    - _RingStrength: 0.55
+    - _RingWidth: 0.05
+    - _RippleSize: 0.35
+    - _RippleSpeed: 0.6
+    - _RippleStrength: 0.05
+    - _SeeThrough: 0.5
+    - _ShallowOpacity: 0.3
+    - _Shininess: 300
+    - _Specular: 0.8
+    m_Colors:
+    - _DeepColor: {r: 0.04, g: 0.35999998, b: 0.35999998, a: 1}
+    - _FoamColor: {r: 0.95, g: 0.98999995, b: 0.96999997, a: 1}
+    - _ShallowColor: {r: 0.35999998, g: 0.82, b: 0.62, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
