@@ -18,9 +18,6 @@ namespace BounJam
         [SerializeField] float spread = 17f;
         [Tooltip("Eye height above the middle of the skin at rest, m. It shrinks as the blob flattens.")]
         [SerializeField] float raise = 0.03f;
-        [Tooltip("How far the eyes climb onto the top of the flat standing puddle, degrees of tilt up from the heading; " +
-                 "straight ahead they'd hang off its thin rim.")]
-        [SerializeField] float puddleClimb = 8f;
         [Tooltip("How deep the back of each eye sits in the jelly, m.")]
         [SerializeField] float sink = 0.012f;
         [Tooltip("How quickly the eyes turn to follow the surface, 1/s. Smooths over the skin's facets.")]
@@ -44,9 +41,8 @@ namespace BounJam
             Vector3 up = skin.Up;
             Vector3 origin = skin.LocalCenter + up * (raise * (1f - skin.Flatten));
             float turn = 1f - Mathf.Exp(-turnRate * Time.deltaTime);
-            float climb = puddleClimb * skin.Spread;
-            Place(leftEye, -spread, climb, origin, skin.Forward, up, turn, skinSurface);
-            Place(rightEye, spread, climb, origin, skin.Forward, up, turn, skinSurface);
+            Place(leftEye, -spread, origin, skin.Forward, up, turn, skinSurface);
+            Place(rightEye, spread, origin, skin.Forward, up, turn, skinSurface);
         }
 
         /// <summary>
@@ -61,24 +57,18 @@ namespace BounJam
                 => MeshRay.Exit(vertices, triangles, origin, direction, out point, out normal);
 
             Vector3 center = mesh.bounds.center + Vector3.up * raise;
-            Place(leftEye, -spread, 0f, center, forward, Vector3.up, 1f, Surface);
-            Place(rightEye, spread, 0f, center, forward, Vector3.up, 1f, Surface);
+            Place(leftEye, -spread, center, forward, Vector3.up, 1f, Surface);
+            Place(rightEye, spread, center, forward, Vector3.up, 1f, Surface);
         }
 
-        void Place(Transform eye, float angle, float climb, Vector3 origin, Vector3 forward, Vector3 up, float turn,
-                   SurfaceFinder findSurface)
+        void Place(Transform eye, float angle, Vector3 origin, Vector3 forward, Vector3 up, float turn, SurfaceFinder findSurface)
         {
             if (eye == null) return;
             Vector3 direction = Quaternion.AngleAxis(angle, up) * forward;
-            Vector3 right = Vector3.Cross(up, direction);
-            direction = Quaternion.AngleAxis(-climb, right) * direction;
             if (!findSurface(origin, direction, out Vector3 point, out Vector3 normal)) return;
 
             eye.localPosition = point - normal * sink;
-            // Tipped back with the surface rather than toward world up: on top of the puddle the eye looks up, its top
-            // toward the middle.
-            Vector3 eyeUp = Vector3.Cross(normal, right);
-            eye.localRotation = Quaternion.Slerp(eye.localRotation, Quaternion.LookRotation(normal, eyeUp), turn);
+            eye.localRotation = Quaternion.Slerp(eye.localRotation, Quaternion.LookRotation(normal, up), turn);
         }
     }
 }

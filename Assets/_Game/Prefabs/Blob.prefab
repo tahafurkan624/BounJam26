@@ -189,7 +189,6 @@ MonoBehaviour:
   jumpStretch: 0.5
   idleBreath: 0.04
   idleBreathRate: 0.8
-  restSpread: 0.35
   drapeDistance: 0.6
   drapeStrength: 0.9
   collisionMask:
