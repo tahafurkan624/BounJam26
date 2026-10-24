@@ -6,10 +6,11 @@ namespace BounJam
 {
     /// <summary>
     /// Something the blob can take with it. It has no collider, so the liquid flows right over it; the way to pick it
-    /// up is to cover it completely with jelly and freeze. Whatever the crystal sets around gets stuck inside and is
-    /// carried from then on, in both forms (see <see cref="BlobCargo"/>). While it waits it sits on a glowing floor
-    /// marker, and it glows itself while it is fully inside the jelly: the cue to freeze now. Once carried it glows
-    /// softly, so it shows through the jelly and the crystal.
+    /// up is to cover it completely with jelly and freeze. Whatever the crystal sets around gets stuck inside and goes
+    /// where the crystal goes (see <see cref="BlobCargo"/>). Melting drops it: it falls from there onto whatever is
+    /// below and waits to be caught again, and one lost below the level goes back to where it started. While it waits
+    /// it sits on a glowing floor marker, and it glows itself while it is fully inside the jelly: the cue to freeze
+    /// now. Held in the crystal it glows softly, so it shows through.
     /// This object is the item's centre; the model and marker are children.
     /// </summary>
     public class Collectible : MonoBehaviour
@@ -18,20 +19,30 @@ namespace BounJam
         [SerializeField] float radius = 0.15f;
         [Tooltip("Gets the glow while the item is inside the jelly.")]
         [SerializeField] Renderer modelRenderer;
-        [Tooltip("Floor marker shown until the item is collected.")]
+        [Tooltip("Floor marker shown while the item rests, waiting to be caught.")]
         [SerializeField] Transform marker;
+
+        [Header("Dropping")]
+        [Tooltip("What a dropped item lands and rests on.")]
+        [SerializeField] LayerMask groundMask;
+        [Tooltip("A dropped item that falls below this height goes back to where it started, m.")]
+        [SerializeField] float lostHeight = -5f;
 
         [Header("Look")]
         [Tooltip("Glow while inside the jelly. The model's material needs emission enabled.")]
         [ColorUsage(false, true)]
         [SerializeField] Color engulfedGlow = new Color(4f, 2f, 0.5f);
-        [Tooltip("Glow while carried, so it shows through the jelly and the crystal.")]
+        [Tooltip("Glow while held in the crystal, so it shows through.")]
         [ColorUsage(false, true)]
         [SerializeField] Color carriedGlow = new Color(0.6f, 1.2f, 2.6f);
         [Tooltip("How quickly the glow fades in and out, 1/s.")]
         [SerializeField] float glowRate = 8f;
         [Tooltip("Marker pulses per second.")]
         [SerializeField] float markerPulseRate = 0.7f;
+
+        // A dropped item looks this far above itself for what it rests on, every physics step, so it rides up on a
+        // rising lift instead of sinking into it.
+        const float SupportReach = 0.3f;
 
         static readonly int EmissionColor = Shader.PropertyToID("_EmissionColor");
         static readonly List<Collectible> waiting = new List<Collectible>();
@@ -40,6 +51,10 @@ namespace BounJam
         Vector3 markerScale;
         Color glow = Color.black;
         float engulfedReportTime = float.NegativeInfinity;
+        Vector3 home;
+        // Dropped at least once: from then on it falls and rests on whatever is below it.
+        bool loose;
+        float fallSpeed;
 
         /// <summary>Every collectible in the loaded scenes that hasn't been collected yet.</summary>
         public static IReadOnlyList<Collectible> Waiting => waiting;
@@ -49,15 +64,19 @@ namespace BounJam
         /// <summary>True while it is fully inside the liquid blob, i.e. freezing now would catch it.</summary>
         public bool IsEngulfed { get; private set; }
         public event Action<Collectible> Collected;
+        public event Action<Collectible> Dropped;
 
         // Statics survive entering play mode with domain reload off.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() => waiting.Clear();
 
+        void Reset() => groundMask = LayerMask.GetMask("Default", "Environment", "Pushable");
+
         void Awake()
         {
             block = new MaterialPropertyBlock();
             if (marker != null) markerScale = marker.localScale;
+            home = transform.position;
             ApplyGlow();
         }
 
@@ -86,8 +105,52 @@ namespace BounJam
             IsCollected = true;
             IsEngulfed = false;
             waiting.Remove(this);
-            if (marker != null) marker.gameObject.SetActive(false);
+            ShowMarker(false);
             Collected?.Invoke(this);
+        }
+
+        /// <summary>Called by the crystal when it melts: the item falls from where it is and waits to be caught again.</summary>
+        public void Drop()
+        {
+            if (!IsCollected) return;
+            IsCollected = false;
+            loose = true;
+            fallSpeed = 0f;
+            // The crystal may have tumbled it; the marker below it has to lie flat.
+            transform.rotation = Quaternion.identity;
+            waiting.Add(this);
+            Dropped?.Invoke(this);
+        }
+
+        void FixedUpdate()
+        {
+            if (!loose || IsCollected) return;
+
+            float dt = Time.fixedDeltaTime;
+            fallSpeed -= Physics.gravity.y * dt;
+            Vector3 origin = transform.position + Vector3.up * SupportReach;
+            if (Physics.SphereCast(origin, radius, Vector3.down, out RaycastHit hit, SupportReach + fallSpeed * dt,
+                                   groundMask, QueryTriggerInteraction.Ignore))
+            {
+                transform.position = origin + Vector3.down * hit.distance;
+                fallSpeed = 0f;
+                ShowMarker(true);
+                return;
+            }
+
+            transform.position += Vector3.down * (fallSpeed * dt);
+            ShowMarker(false);
+            if (transform.position.y < lostHeight)
+            {
+                transform.position = home;
+                loose = false;
+                ShowMarker(true);
+            }
+        }
+
+        void ShowMarker(bool show)
+        {
+            if (marker != null && marker.gameObject.activeSelf != show) marker.gameObject.SetActive(show);
         }
 
         void Update()

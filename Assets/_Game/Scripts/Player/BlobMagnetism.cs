@@ -3,11 +3,11 @@ using UnityEngine;
 namespace BounJam
 {
     /// <summary>
-    /// Lets active magnets pull the blob while it carries iron. The nearest active magnet whose field reaches the
+    /// Lets active magnets pull the crystal while it holds iron. The nearest active magnet whose field reaches the
     /// blob takes over: the motor lets go, the field carries the blob's weight and draws it in a straight line to the
-    /// magnet's hold point, slowing down as it arrives, and keeps it there (a crystal stops tumbling) until that magnet
-    /// is switched off. Either form can be pulled, and changing form on the way is fine. Runs before the motor, so the
-    /// motor knows in the same physics step.
+    /// magnet's hold point, slowing down as it arrives, and keeps it there, tumbling settled, until that magnet is
+    /// switched off. Melting drops the iron, so it also ends the pull. Runs before the motor, so the motor knows in the
+    /// same physics step.
     /// </summary>
     [DefaultExecutionOrder(-10)]
     [RequireComponent(typeof(BlobMotor), typeof(BlobCargo))]

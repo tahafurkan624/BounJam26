@@ -68,6 +68,7 @@ namespace BounJam.EditorTools
             settings.FindProperty("radius").floatValue = IronBallRadius;
             settings.FindProperty("modelRenderer").objectReferenceValue = ball.GetComponent<MeshRenderer>();
             settings.FindProperty("marker").objectReferenceValue = marker.transform;
+            settings.FindProperty("groundMask").intValue = LayerMask.GetMask("Default", "Environment", "Pushable");
             settings.ApplyModifiedPropertiesWithoutUndo();
             root.AddComponent<IronBall>();
             return collectible;
