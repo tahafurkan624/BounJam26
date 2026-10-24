@@ -54,6 +54,7 @@ namespace BounJam
         Vector3 home;
         // Dropped at least once: from then on it falls and rests on whatever is below it.
         bool loose;
+        bool resting;
         float fallSpeed;
 
         /// <summary>Every collectible in the loaded scenes that hasn't been collected yet.</summary>
@@ -65,6 +66,8 @@ namespace BounJam
         public bool IsEngulfed { get; private set; }
         public event Action<Collectible> Collected;
         public event Action<Collectible> Dropped;
+        /// <summary>Raised when a dropped item comes to rest, with what it landed on.</summary>
+        public event Action<Collectible, Collider> Landed;
 
         // Statics survive entering play mode with domain reload off.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -115,6 +118,7 @@ namespace BounJam
             if (!IsCollected) return;
             IsCollected = false;
             loose = true;
+            resting = false;
             fallSpeed = 0f;
             // The crystal may have tumbled it; the marker below it has to lie flat.
             transform.rotation = Quaternion.identity;
@@ -135,10 +139,16 @@ namespace BounJam
                 transform.position = origin + Vector3.down * hit.distance;
                 fallSpeed = 0f;
                 ShowMarker(true);
+                if (!resting)
+                {
+                    resting = true;
+                    Landed?.Invoke(this, hit.collider);
+                }
                 return;
             }
 
             transform.position += Vector3.down * (fallSpeed * dt);
+            resting = false;
             ShowMarker(false);
             if (transform.position.y < lostHeight)
             {
