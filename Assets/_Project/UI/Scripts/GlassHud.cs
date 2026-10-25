@@ -48,6 +48,7 @@ namespace BounJam
             cargo = FindObjectsByType<Collectible>(FindObjectsSortMode.None);
             cargoPill.SetActive(cargo.Length > 0);
             pauseButton.onClick.AddListener(owner.TogglePause);
+            UISound.AddTo(pauseButton);
             formHint.text = string.Format(hintFormat, ToggleKey());
             formSwitch.onChanged.AddListener(OnSwitchClicked);
             // The liquid state is static and outlives the last level.

@@ -106,7 +106,7 @@ MonoBehaviour:
   Parameters: []
   MinDistance: 1
   MaxDistance: 20
-  Length: 0
+  Length: 2737
 --- !u!114 &-6258959782983610045
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -245,33 +245,6 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
---- !u!114 &-3970805484950419245
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
-  m_Name: event:/Water_Splash
-  m_EditorClassIdentifier: FMODUnityEditor::FMODUnity.EditorEventRef
-  Path: event:/Water_Splash
-  Guid:
-    Data1: 865693147
-    Data2: 1110478497
-    Data3: 451495335
-    Data4: 176298283
-  Banks:
-  - {fileID: 3483725996983891917}
-  IsStream: 0
-  Is3D: 1
-  IsOneShot: 1
-  Parameters: []
-  MinDistance: 1
-  MaxDistance: 20
-  Length: 0
 --- !u!114 &-2606483104679334965
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -300,6 +273,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 0
+--- !u!114 &-2604214959817360718
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Game_Music
+  m_EditorClassIdentifier: FMODUnityEditor::FMODUnity.EditorEventRef
+  Path: event:/Game_Music
+  Guid:
+    Data1: -561245027
+    Data2: 1271958285
+    Data3: -1630353245
+    Data4: 2005419433
+  Banks:
+  - {fileID: 3483725996983891917}
+  IsStream: 1
+  Is3D: 0
+  IsOneShot: 0
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 128016
 --- !u!114 &-1671364863953189786
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -434,19 +434,20 @@ MonoBehaviour:
   - {fileID: 6661168307936283499}
   - {fileID: -2606483104679334965}
   - {fileID: -6746979951931030235}
-  - {fileID: -3970805484950419245}
   - {fileID: -6369526129710755848}
   - {fileID: 3431813649450359288}
   - {fileID: -1671364863953189786}
   - {fileID: -6448446933158267441}
   - {fileID: -1464543916452838518}
+  - {fileID: 714764917075080536}
+  - {fileID: -2604214959817360718}
   EditorParameters: []
   MasterBanks:
   - {fileID: 3483725996983891917}
   StringsBanks:
   - {fileID: 4843938439618441920}
   cacheVersion: 131861
-  cacheTime: 639285099607431959
+  cacheTime: 639285250843664251
   SerializableEventsDict:
   - key: event:/Water_Movement
     index: 0
@@ -472,18 +473,20 @@ MonoBehaviour:
     index: 10
   - key: event:/Elevator
     index: 11
-  - key: event:/Water_Splash
-    index: 12
   - key: event:/Doors
-    index: 13
+    index: 12
   - key: event:/Item_Collect
-    index: 14
+    index: 13
   - key: event:/Ice_Movement
-    index: 15
+    index: 14
   - key: event:/Water_Freeze
-    index: 16
+    index: 15
   - key: event:/Conveyor_Belt
+    index: 16
+  - key: event:/UI
     index: 17
+  - key: event:/Game_Music
+    index: 18
 --- !u!114 &337298539252170236
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -511,6 +514,34 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 23506
+--- !u!114 &714764917075080536
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/UI
+  m_EditorClassIdentifier: FMODUnityEditor::FMODUnity.EditorEventRef
+  Path: event:/UI
+  Guid:
+    Data1: 1646435391
+    Data2: 1084377253
+    Data3: -920850545
+    Data4: -195010434
+  Banks:
+  - {fileID: 3483725996983891917}
+  IsStream: 0
+  Is3D: 0
+  IsOneShot: 1
+  Parameters:
+  - {fileID: 5865011744072690975}
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 0
 --- !u!114 &1630568306598551918
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -537,7 +568,7 @@ MonoBehaviour:
   Parameters: []
   MinDistance: 1
   MaxDistance: 20
-  Length: 3903
+  Length: 4625
 --- !u!114 &3059466334001384327
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -608,7 +639,7 @@ MonoBehaviour:
   Path: FMOD/Desktop/Master.bank
   Name: Master
   StudioPath: bank:/Master
-  lastModified: 639285099607370860
+  lastModified: 639285250843578145
   FileSizes: []
   Exists: 1
 --- !u!114 &4843938439618441920
@@ -626,10 +657,10 @@ MonoBehaviour:
   Path: FMOD/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 639285099607431959
+  lastModified: 639285250843664251
   FileSizes:
   - Name: 
-    Value: 1750
+    Value: 1810
   Exists: 1
 --- !u!114 &5195890314009137344
 MonoBehaviour:
@@ -659,6 +690,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 100210
+--- !u!114 &5865011744072690975
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fecb8ef7f94ca804a8ab72049b86782e, type: 3}
+  m_Name: parameter:/UI/UI
+  m_EditorClassIdentifier: FMODUnityEditor::FMODUnity.EditorParamRef
+  Name: UI
+  StudioPath: 
+  Min: 0
+  Max: 2
+  Default: 0
+  ID:
+    data1: 1086330837
+    data2: 1709820990
+  Type: 2
+  IsGlobal: 0
+  Labels:
+  - Hover
+  - Click
+  - PopUp
+  Exists: 1
 --- !u!114 &6661168307936283499
 MonoBehaviour:
   m_ObjectHideFlags: 0

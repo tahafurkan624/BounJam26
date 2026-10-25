@@ -31,6 +31,7 @@ namespace BounJam
         {
             if (IsPlanted || flower == null) return false;
             IsPlanted = true;
+            GameSounds.TreeSeed.PlayAt(transform.position);
             flower.gameObject.SetActive(true);
             flower.Grow(sprout: true);
             return true;

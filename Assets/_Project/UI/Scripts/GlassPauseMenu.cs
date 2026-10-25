@@ -14,7 +14,7 @@ namespace BounJam
     /// Pause menu on the Player/Pause action (Esc, gamepad Start) or the HUD's pause button: time stops, the blob's
     /// controls are off, and a 3D glass panel pours in with liquid buttons for resume, restart and quit, and the
     /// master volume (FMOD's master bus, kept between sessions). Closing drains the glass away. The HUD hides while it
-    /// is open.
+    /// is open. Opening plays event:/UI's PopUp, and its controls play Hover and Click (see <see cref="UISound"/>).
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
     public class GlassPauseMenu : MonoBehaviour
@@ -56,6 +56,7 @@ namespace BounJam
             resumeButton.onClick.AddListener(Close);
             restartButton.onClick.AddListener(RestartLevel);
             quitButton.onClick.AddListener(Quit);
+            UISound.AddTo(resumeButton, restartButton, quitButton, volume);
 
             float saved = PlayerPrefs.GetFloat(VolumeKey, 1f);
             volume.SetValueWithoutNotify(saved);
@@ -91,6 +92,7 @@ namespace BounJam
             SetBlocking(true);
             FadeBackdrop(1f);
             panel.Show();
+            GameSounds.UI.Play(GameSounds.UIParameter, GameSounds.UIPopUp);
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(resumeButton.gameObject);
         }
 
