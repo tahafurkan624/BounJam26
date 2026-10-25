@@ -180,12 +180,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipSounds
   splashEvent:
     Guid:
-      Data1: 865693147
-      Data2: 1110478497
-      Data3: 451495335
-      Data4: 176298283
+      Data1: 926442697
+      Data2: 1203260010
+      Data3: -1677784388
+      Data4: 2140948294
     Path: event:/Water_Splash
-  minTimeOut: 0.15
   dropEvent:
     Guid:
       Data1: -831967039

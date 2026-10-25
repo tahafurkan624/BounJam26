@@ -307,6 +307,8 @@ namespace BounJam.EditorTools
                 result += string.Format(CultureInfo.InvariantCulture, " floating={0} tilt={1:0.0}", ship.IsFloating, Vector3.Angle(target.transform.up, Vector3.up));
             if (target.TryGetComponent(out ShipSplash shipSplash))
                 result += $" splashed={shipSplash.Thrown} lastSplash=\"{shipSplash.LastSplash}\"";
+            if (target.TryGetComponent(out ShipSounds shipSounds))
+                result += $" splashSounds={shipSounds.Splashes} splashPlaying={shipSounds.IsSplashing} hitSounds={shipSounds.Hits}";
             if (target.TryGetComponent(out BlobCargo cargo))
                 result += $" carried={cargo.Count} iron={cargo.Has<IronBall>()}";
             if (target.TryGetComponent(out BlobMagnetism magnetism))

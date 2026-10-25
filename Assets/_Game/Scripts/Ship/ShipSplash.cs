@@ -122,6 +122,12 @@ namespace BounJam
         int lastCount;
         float lastSpeed;
 
+        /// <summary>
+        /// Raised once per splash, when the hull hits the jelly hard enough to throw droplets (an impact or a lurch through
+        /// it), as the splash is decided after the physics step.
+        /// </summary>
+        public event System.Action Hit;
+
         /// <summary>Droplets thrown since the ship started (for testing).</summary>
         public int Thrown { get; private set; }
         /// <summary>What threw the last droplets, how many and how fast, e.g. "Impact 12 3.4" (for testing).</summary>
@@ -283,6 +289,7 @@ namespace BounJam
             count = Mathf.Min(count, maxBurst);
             if (count <= 0 || pendingCount == pending.Length) return;
             lastSplashTime = Time.time;
+            Hit?.Invoke();
             pending[pendingCount++] = new Burst
             {
                 Kind = kind, Count = count, Direction = direction, Carried = carried, Speed = speed, Hardness = hardness,
