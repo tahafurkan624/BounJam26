@@ -23,6 +23,7 @@ namespace BounJam.EditorTools
         // The tropical floor's block, from the LogRamp kit, which brings its log materials along.
         const string TropicalBlockModel = ArtKit.ModelsFolder + "/LogRamp/Models/SM_LogBlock_NoWalls.fbx";
         const string LogMaterials = ArtKit.ModelsFolder + "/LogRamp/Materials";
+        const string WoodRampModel = ArtKit.ModelsFolder + "/LogRamp/Models/SM_LogRamp_NoWalls.fbx";
         const float RampThickness = 0.4f;
         // Walls lower than this wear the low SM_HalfWall (0.7 m), taller ones SM_Wall (1.5 m).
         const float LowWallHeight = 1.1f;
@@ -69,7 +70,7 @@ namespace BounJam.EditorTools
         {
             GameObject[] parts =
             {
-                Dock, PlatformBlock, TropicalBlock, WallPart, HalfWallPart, WoodWallPart, WoodLog, RampPart, PoolWallPart, HotPlatePart, GratePanel,
+                Dock, PlatformBlock, TropicalBlock, WallPart, HalfWallPart, WoodWallPart, WoodLog, RampPart, WoodRampPart, PoolWallPart, HotPlatePart, GratePanel,
                 FloorGratePanel, DrainWallPart, PipeSegment, PipeHousing, PipeOpening, PipeShipOpening, PipeSaw,
             };
             foreach (Placeable piece in Placeable.All)
@@ -191,6 +192,26 @@ namespace BounJam.EditorTools
 
         // Unit cubes with a collider, scaled to size.
         static GameObject RampPart => Part("Ramp", t => Box("Ramp", t, Vector3.zero, Vector3.one, CreatePalette().Structure));
+
+        /// <summary>
+        /// The SM_LogRamp_NoWalls log ramp, a deck of logs on trestles, turned to rise toward +Z with its footprint
+        /// centred on the pivot and its foot on the floor: about 1.8 m wide, 1 m tall and 4 m long. Only seen, the
+        /// ramp's slab holds the collider.
+        /// </summary>
+        static GameObject WoodRampPart => Part("Wood Ramp", t =>
+        {
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(WoodRampModel)
+                        ?? throw new System.InvalidOperationException($"No log ramp model at {WoodRampModel}.");
+            var ramp = new GameObject("Wood Ramp") { layer = LayerMask.NameToLayer("Environment") };
+            ramp.transform.SetParent(t, false);
+            GameObject logs = Object.Instantiate(model, ramp.transform, false);
+            logs.name = "Logs";
+            foreach (Transform part in logs.GetComponentsInChildren<Transform>(true)) part.gameObject.layer = ramp.layer;
+            // Modelled rising toward -Z.
+            logs.transform.localRotation = Quaternion.Euler(0f, 180f, 0f) * logs.transform.localRotation;
+            Bounds bounds = MeshBounds(ramp);
+            logs.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        });
         static GameObject PoolWallPart => Part("Pool Wall", t => Box("Pool Wall", t, Vector3.zero, Vector3.one, CreatePalette().Structure));
 
         /// <summary>A 1 x 1 m hot plate with its heat above it, scaled across the floor.</summary>
@@ -330,16 +351,31 @@ namespace BounJam.EditorTools
             }
         }
 
-        /// <summary>A ramp whose footprint is centred on the origin, rising <c>size.y</c> toward +Z over <c>size.z</c>.</summary>
-        public static void Ramp(Transform parent, Vector3 size)
+        /// <summary>
+        /// A ramp whose footprint is centred on the origin, rising <c>size.y</c> toward +Z over <c>size.z</c>.
+        /// A tropical <paramref name="look"/> is a log ramp stretched over the same slab, which is then only a collider.</summary>
+        public static void Ramp(Transform parent, Vector3 size, LevelPiece.FloorType look = LevelPiece.FloorType.Concrete)
         {
             float rise = Mathf.Max(0.05f, size.y), run = Mathf.Max(0.1f, size.z);
             float angle = Mathf.Atan2(rise, run);
-            Transform ramp = Instance(RampPart, parent, "Ramp").transform;
+            bool wood = look == LevelPiece.FloorType.Tropical;
+            Transform ramp = wood ? new GameObject("Ramp") { layer = LayerMask.NameToLayer("Environment") }.transform
+                                  : Instance(RampPart, parent, "Ramp").transform;
+            if (wood)
+            {
+                ramp.SetParent(parent, false);
+                ramp.gameObject.AddComponent<BoxCollider>();
+            }
             // As LevelKit.Ramp: the top surface runs from the bottom edge to the top edge, the slab below it.
             ramp.localPosition = new Vector3(0f, rise * 0.5f - RampThickness * 0.5f / Mathf.Cos(angle), 0f);
             ramp.localRotation = Quaternion.Euler(-angle * Mathf.Rad2Deg, 0f, 0f);
             ramp.localScale = new Vector3(size.x, RampThickness, rise / Mathf.Sin(angle));
+            if (!wood) return;
+
+            GameObject part = WoodRampPart;
+            Vector3 natural = MeshBounds(part).size;
+            Transform logs = Instance(part, parent, "Wood Ramp").transform;
+            logs.localScale = new Vector3(size.x / natural.x, rise / natural.y, run / natural.z);
         }
 
         /// <summary>A hot plate on the floor at the origin, <c>size.x</c> by <c>size.z</c>.</summary>

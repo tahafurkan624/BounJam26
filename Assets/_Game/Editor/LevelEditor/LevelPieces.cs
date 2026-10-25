@@ -146,7 +146,7 @@ namespace BounJam.EditorTools
                     LevelParts.Wall(space, size, piece.Floor);
                     break;
                 case Kind.Ramp:
-                    LevelParts.Ramp(space, size);
+                    LevelParts.Ramp(space, size, piece.Floor);
                     break;
                 case Kind.HotPlate:
                     LevelParts.HotPlate(space, size);

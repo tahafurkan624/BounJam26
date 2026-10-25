@@ -58,6 +58,7 @@ namespace BounJam.EditorTools
                             Vector3 s = size.vector3Value;
                             EditorGUILayout.LabelField("Slope", $"{Mathf.Atan2(s.y, s.z) * Mathf.Rad2Deg:0.#}°");
                         }
+                        EditorGUILayout.PropertyField(floor, new GUIContent("Made Of", "A concrete slab, or tropical logs on trestles."));
                         break;
                     case Kind.HotPlate:
                         SizeFields("Width", null, "Length");

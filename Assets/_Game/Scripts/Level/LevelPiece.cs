@@ -21,7 +21,7 @@ namespace BounJam
                  "pivot; everything else stands on the floor at the pivot. Ramps rise toward +Z.")]
         [SerializeField] Vector3 size = new Vector3(6f, 1f, 6f);
         [Tooltip("Platform, pool and floor grate: what the floor is made of, concrete blocks or tropical log blocks. " +
-                 "Wall: concrete brick or tropical wood.")]
+                 "Wall: concrete brick or tropical wood. Ramp: a concrete slab or tropical logs.")]
         [SerializeField] FloorType floor;
 
         [Tooltip("Pool and floor grate: the hole sunk into the floor, width and length, m.")]
