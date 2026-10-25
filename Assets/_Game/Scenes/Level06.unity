@@ -149,7 +149,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelManager
   levelTitle: Level 6
-  nextScene: Level07
+  nextScene: Level05
   isFinalLevel: 0
   blob: {fileID: 626635403}
   ship: {fileID: 195203622}
