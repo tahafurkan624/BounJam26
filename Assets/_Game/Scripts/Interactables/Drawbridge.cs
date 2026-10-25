@@ -10,9 +10,8 @@ namespace BounJam
     /// blob or a crate is in its path, it waits until they move off. The ship is the exception: one in its path is
     /// lifted straight up onto the deck, so the bridge never hangs on it (unless there's no room above it, when it
     /// waits like for anything else, or with Waits For Ship off grows on anyway). With Stays Out off it shrinks back when
-    /// the buttons are released. Growing and shrinking each play event:/Elevator, like a lift, faded out once the deck
-    /// settles. A deck lying flat works the same
-    /// way: the Grate Bridge grows one across a grate.
+    /// the buttons are released. Growing and shrinking each play event:/Doors once as they start, like a gate. A deck
+    /// lying flat works the same way: the Grate Bridge grows one across a grate.
     /// </summary>
     public class Drawbridge : MonoBehaviour
     {
@@ -41,8 +40,6 @@ namespace BounJam
         [Tooltip("Waits for the ship when it can't lift it onto the deck. Off, the ship never holds it up: it grows on anyway.")]
         [SerializeField] bool waitsForShip = true;
 
-        // How long the sound takes to fade out once the deck settles, s.
-        const float SoundFadeOut = 0.4f;
         // Spring steps no longer than this, so the spring stays stable at low frame rates.
         const float MaxSpringStep = 1f / 240f;
         // How finely it searches upward for room for the ship, m, and the gap it leaves under the hull.
@@ -53,7 +50,6 @@ namespace BounJam
         readonly List<ShipBuoyancy> shipsInTheWay = new List<ShipBuoyancy>();
 
         BoxCollider shape;
-        LoopingSound sound;
         Vector3 fullScale;
         // The deck's box at full length: its centre in the deck's frame, and its half size (a touch smaller, so
         // bodies merely touching it don't count), and its true half size. The slab lies square in the deck's frame,
@@ -85,12 +81,7 @@ namespace BounJam
 
             length = startLength;
             ApplyLength();
-            sound = new LoopingSound(GameSounds.Elevator.Reference, deck.transform, SoundFadeOut, deck);
         }
-
-        void OnDisable() => sound?.Release();
-
-        void Update() => sound?.Tick(Time.deltaTime);
 
         void FixedUpdate()
         {
@@ -98,9 +89,7 @@ namespace BounJam
             if (wanted != IsOut)
             {
                 IsOut = wanted;
-                // Sent back mid-way, it starts its sound over.
-                sound.Release();
-                sound.Play();
+                GameSounds.Doors.PlayAt(deck.position);
             }
 
             float target = IsOut ? 1f : startLength;
@@ -115,11 +104,7 @@ namespace BounJam
             // Never shorter than the stub, so shrinking back doesn't bounce through it.
             if (next < startLength) { next = startLength; speed = 0f; }
 
-            if (Mathf.Abs(next - length) < 1e-5f && Mathf.Abs(speed) < 1e-4f)
-            {
-                sound.Stop();
-                return;
-            }
+            if (Mathf.Abs(next - length) < 1e-5f && Mathf.Abs(speed) < 1e-4f) return;
             if (next > length && IsBlocked(next))
             {
                 lengthSpeed = 0f;

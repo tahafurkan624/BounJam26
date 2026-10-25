@@ -18,7 +18,7 @@ namespace BounJam
         const string MasterKey = "BounJam.Volume";
         const string MusicKey = "BounJam.MusicVolume";
         const string SfxKey = "BounJam.SfxVolume";
-        // The music's gain at a full music volume (about -9 dB): the track is mixed loud against the effects.
+        // The music's gain at a full music volume (about -11 dB): the track is mixed loud against the effects.
         const float MusicMix = 0.275f;
         // The lowest the master bus goes for the effects volume, so the music can still be raised back from it.
         const float MinSfxGain = 1e-4f;
