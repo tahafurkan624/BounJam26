@@ -67,8 +67,12 @@ namespace BounJam
         static string ToggleKey()
         {
             InputAction toggle = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/ToggleForm") : null;
-            string key = toggle != null ? toggle.GetBindingDisplayString() : "";
-            return string.IsNullOrEmpty(key) ? "E" : key.Replace(" | ", " / ");
+            // The keyboard key only: the gamepad's west button reads "X", a key the keyboard has no use for.
+            if (toggle != null)
+                for (int i = 0; i < toggle.bindings.Count; i++)
+                    if (toggle.bindings[i].effectivePath.StartsWith("<Keyboard>"))
+                        return toggle.GetBindingDisplayString(i);
+            return "E";
         }
 
         // Every piece of a cut blob switches, as with the key.

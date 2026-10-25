@@ -11,6 +11,8 @@ Shader "BlobShip/UI/Liquid Slab"
         [HDR] _Rim ("Liquid thin / edge", Color) = (0.54, 0.97, 0.89, 1)
         _Absorb ("Absorption (RGB)", Vector) = (2.6, 0.32, 0.55, 0)
         _GlowK ("Inner glow", Range(0, 2)) = 0.4
+        _BackDim ("Scene brightness through the liquid", Range(0, 1)) = 0.2
+        _BackSat ("Scene colour through the liquid", Range(0, 1)) = 0.6
         _GlassTint ("Glass tint", Color) = (0.86, 0.95, 1.0, 1)
         _GlassEdge ("Glass edge light", Color) = (0.4, 0.9, 1.0, 1)
         _Milk ("Glass milkiness", Color) = (0, 0, 0, 0)
@@ -66,7 +68,7 @@ Shader "BlobShip/UI/Liquid Slab"
             CBUFFER_START(UnityPerMaterial)
                 float4 _Core, _Rim, _Absorb, _GlassTint, _GlassEdge, _Milk;
                 float _GlowK, _GlassAll, _LiqC, _LiqHalf, _RefrK, _Iri, _FrostAmt, _EnvK, _SolidMask, _Hover, _Fade;
-                float _Fill, _Drain, _Seed, _PanelMask;
+                float _Fill, _Drain, _Seed, _PanelMask, _BackDim, _BackSat;
                 float4 _Size, _InnerB, _SimParams;
                 float4 _SpillR0, _SpillR1, _SpillR2, _SpillC0, _SpillC1, _SpillC2;
             CBUFFER_END
@@ -213,7 +215,12 @@ Shader "BlobShip/UI/Liquid Slab"
 
                 // liquid: coloured by absorption + a soft inner glow, clearer in the middle, glowing at the edges
                 float thin = pow(1.0 - ndv, 1.5);
-                float3 liq = bk * exp(-_Absorb.xyz * th) * 1.7;
+                // the bright level shows through dimmed and a little greyed, like the game behind the mockup's menu,
+                // so the liquid stays deep and the white LED labels and icons read on it; the scene is HDR, so it is
+                // clamped first or a sunlit floor would stay white however much it is dimmed
+                float3 bkC = saturate(bk);
+                float3 bkL = lerp(dot(bkC, float3(0.3, 0.55, 0.15)).xxx, bkC, _BackSat) * _BackDim;
+                float3 liq = bkL * exp(-_Absorb.xyz * th) * 1.7;
                 float3 emi = lerp(_Core.rgb, _Rim.rgb, thin * 0.8) * _GlowK;
                 emi *= (0.85 + 0.25 * smoothstep(0.3, -0.9, nObj.y)) * lerp(0.78, 1.0, thin);
                 float caustic = max(-lap - 0.006, 0.0) * 14.0 * (1.0 - solid);
