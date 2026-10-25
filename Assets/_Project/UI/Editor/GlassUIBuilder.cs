@@ -135,34 +135,6 @@ namespace BounJam.EditorTools
             TMP_Text levelKicker = Kicker(levelText, "Level", 15.6f);
             TMP_Text levelLabel = Label(levelText, "Title", "Level", display, 29f, Ink);
 
-            // Cargo counter, top centre.
-            RectTransform cargo = Node("CargoPill", hudRoot);
-            Place(cargo, new Vector2(0.5f, 1f), new Vector2(0f, -43f), new Vector2(456f, 90f));
-            Glass(cargo, 41f);
-            RectTransform cargoIcon = Icon(cargo, "drop", 0f, Aqua).rectTransform;
-            Place(cargoIcon, new Vector2(0f, 0.5f), new Vector2(24f, 0f), new Vector2(42f, 48f));
-            TMP_Text count = Label(cargo, "Count", "0 / 0", display, 34f, Ink);
-            Place(count.rectTransform, new Vector2(0f, 0.5f), new Vector2(82f, 14f), new Vector2(220f, 40f));
-            TMP_Text cargoName = Label(cargo, "Name", "Cargo", body, 18f, Teal, TextAlignmentOptions.Right);
-            Place(cargoName.rectTransform, new Vector2(1f, 0.5f), new Vector2(-28f, 14f), new Vector2(160f, 30f));
-            RectTransform track = Node("Track", cargo);
-            track.anchorMin = new Vector2(0f, 0.5f);
-            track.anchorMax = new Vector2(1f, 0.5f);
-            track.sizeDelta = new Vector2(-(82f + 28f), 17f);
-            track.anchoredPosition = new Vector2((82f - 28f) * 0.5f, -17f);
-            Solid(track, 8.5f, TrackFill, 0.4f);
-            RectTransform fill = Node("Fill", track);
-            Stretch(fill);
-            fill.anchorMax = new Vector2(0.6f, 1f);
-            Solid(fill, 8.5f, Mint);
-            // Bubbles drift through the filled part; kept clear of the rounded ends.
-            fill.gameObject.AddComponent<RectMask2D>();
-            RectTransform fillBubbles = Node("Bubbles", fill);
-            Stretch(fillBubbles);
-            fillBubbles.offsetMin = new Vector2(6f, 0f);
-            fillBubbles.offsetMax = new Vector2(-6f, 0f);
-            Particles(fillBubbles, LiquidPreset.BarBubbles);
-
             RectTransform hint = Node("Hint", hudRoot);
             Place(hint, new Vector2(0.5f, 0f), new Vector2(0f, 44f), Vector2.zero);
             Glass(hint, 17f, Color.white, 0.32f, 0.12f);
@@ -194,8 +166,7 @@ namespace BounJam.EditorTools
             switchSlab.FindLabels();
 
             Wire(hud, ("group", hudRoot.GetComponent<CanvasGroup>()), ("liquidGroup", liquidRoot.GetComponent<CanvasGroup>()),
-                ("levelKicker", levelKicker), ("levelLabel", levelLabel), ("cargoPill", cargo.gameObject), ("cargoIcon", cargoIcon),
-                ("cargoCount", count), ("cargoFill", fill), ("formSwitch", formSwitch), ("formHint", hintLabel), ("pauseButton", pauseButton));
+                ("levelKicker", levelKicker), ("levelLabel", levelLabel), ("formSwitch", formSwitch), ("formHint", hintLabel), ("pauseButton", pauseButton));
             return hud;
         }
 
@@ -339,10 +310,8 @@ namespace BounJam.EditorTools
             kicker.characterSpacing = 12f;
             TMP_Text title = Led(cardRect, "Title", "Delivered!", display, 64f, new Vector2(0f, 78f), new Vector2(660f, 84f));
 
-            TMP_Text timeValue = Led(cardRect, "TimeValue", "00:00", display, 42f, new Vector2(-110f, -6f), new Vector2(200f, 52f));
-            TMP_Text timeName = Led(cardRect, "TimeName", "Time", body, 19f, new Vector2(-110f, -48f), new Vector2(200f, 28f), 0.6f);
-            TMP_Text cargoValue = Led(cardRect, "CargoValue", "0 / 0", display, 42f, new Vector2(110f, -6f), new Vector2(200f, 52f));
-            TMP_Text cargoName = Led(cardRect, "CargoName", "Cargo", body, 19f, new Vector2(110f, -48f), new Vector2(200f, 28f), 0.6f);
+            TMP_Text timeValue = Led(cardRect, "TimeValue", "00:00", display, 42f, new Vector2(0f, -6f), new Vector2(200f, 52f));
+            TMP_Text timeName = Led(cardRect, "TimeName", "Time", body, 19f, new Vector2(0f, -48f), new Vector2(200f, 28f), 0.6f);
 
             Button replay = LiquidButton(ButtonNode(cardRect, "Replay", new Vector2(-160f, -172f), new Vector2(260f, 96f)), "Replay", "restart", 1);
             Button next = LiquidButton(ButtonNode(cardRect, "Next level", new Vector2(165f, -172f), new Vector2(310f, 96f)), "Next level", "arrow", 0,
@@ -360,7 +329,7 @@ namespace BounJam.EditorTools
 
             var component = cardRoot.gameObject.AddComponent<GlassCompleteCard>();
             Wire(component, ("panel", cardRect.GetComponent<LiquidPanel3D>()), ("wash", wash), ("kicker", kicker), ("title", title),
-                ("timeValue", timeValue), ("timeName", timeName), ("cargoValue", cargoValue), ("cargoName", cargoName),
+                ("timeValue", timeValue), ("timeName", timeName),
                 ("replayButton", replay), ("nextButton", next), ("nextLabel", next.transform.Find("Label").GetComponent<TMP_Text>()),
                 ("celebration", celebration));
             return component;

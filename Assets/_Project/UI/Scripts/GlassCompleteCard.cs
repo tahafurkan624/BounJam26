@@ -9,8 +9,8 @@ using UnityEngine.UI;
 namespace BounJam
 {
     /// <summary>
-    /// Level-complete card: a 3D glass panel that pours in with the delivery message, the time the level took, the
-    /// cargo carried home (when the level has any) and liquid replay / next-level buttons, with a splash of the badge
+    /// Level-complete card: a 3D glass panel that pours in with the delivery message, the time the level took and
+    /// liquid replay / next-level buttons, with a splash of the badge
     /// and a droplet rain as it lands. While it is bound, the LevelManager waits for the next-level button.
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
@@ -23,8 +23,6 @@ namespace BounJam
         [SerializeField] TMP_Text title;
         [SerializeField] TMP_Text timeValue;
         [SerializeField] TMP_Text timeName;
-        [SerializeField] TMP_Text cargoValue;
-        [SerializeField] TMP_Text cargoName;
         [SerializeField] Button replayButton;
         [SerializeField] Button nextButton;
         [SerializeField] TMP_Text nextLabel;
@@ -34,7 +32,6 @@ namespace BounJam
         [SerializeField] UILiquidSequence celebration;
 
         CanvasGroup group;
-        Collectible[] cargo = new Collectible[0];
         float startTime;
 
         void Awake()
@@ -51,7 +48,6 @@ namespace BounJam
         {
             startTime = Time.time;
             kicker.text = ui.Level.LevelTitle.ToUpperInvariant();
-            cargo = FindObjectsByType<Collectible>(FindObjectsSortMode.None);
             replayButton.onClick.AddListener(ui.Level.Restart);
             nextButton.onClick.AddListener(ui.Level.LoadNext);
             UISound.AddTo(replayButton, nextButton);
@@ -63,19 +59,6 @@ namespace BounJam
             title.text = message;
             int seconds = Mathf.FloorToInt(Time.time - startTime);
             timeValue.text = $"{seconds / 60:00}:{seconds % 60:00}";
-            bool hasCargo = cargo.Length > 0;
-            cargoValue.gameObject.SetActive(hasCargo);
-            cargoName.gameObject.SetActive(hasCargo);
-            if (!hasCargo)
-            {
-                // The time stands alone in the middle.
-                foreach (TMP_Text text in new[] { timeValue, timeName })
-                    text.rectTransform.anchoredPosition = new Vector2(0f, text.rectTransform.anchoredPosition.y);
-            }
-            int held = 0;
-            foreach (Collectible item in cargo)
-                if (item != null && item.IsCollected) held++;
-            cargoValue.text = $"{held} / {cargo.Length}";
 
             GlassUI.SetPlayerInput(false);
             group.interactable = true;

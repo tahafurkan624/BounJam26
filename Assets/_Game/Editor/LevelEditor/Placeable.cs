@@ -87,7 +87,7 @@ namespace BounJam.EditorTools
                    "A floor with a pool sunk in it: the liquid dissolves in the water, ice floats and swims. Drag to draw the floor."),
             Shaped(Kind.Water, "Water", "Water & Hazards", "Water", true, "A block of water whose surface is on the build height, level with the floor."),
             Fixed("Freeze Zone", "Water & Hazards", "Hazards",
-                  "Holds the blob frozen while its core is inside: it freezes on entering and can't melt until it leaves. " +
+                  "Holds the blob frozen while its core is inside: it freezes on entering and can't melt or move until something carries it out. " +
                   "Each half of a cut blob counts on its own. Resize its box collider in the Inspector.",
                   "Freeze Zone", t => FreezeZone("Freeze Zone", t, new Vector3(0f, 1f, 0f), new Vector3(4f, 2f, 4f)),
                   new Bounds(new Vector3(0f, 1f, 0f), new Vector3(4f, 2f, 4f))),
@@ -106,6 +106,9 @@ namespace BounJam.EditorTools
 
             Fixed("Button", "Machines", "Machines", "Pressed by the frozen blob, a crate or the ship. Link it to gates, lifts and magnets.",
                   "Button", t => Button("Button", t, Vector3.zero, CreatePalette()), ButtonBounds),
+            Fixed("Latch Button", "Machines", "Machines",
+                  "Looks like a button, but once pressed it stays pressed for good: what it's linked to stays open or on.",
+                  "Latch Button", t => Button("Latch Button", t, Vector3.zero, CreatePalette(), latch: true), ButtonBounds),
             Fixed("Gate", "Machines", "Machines", "Its panel sinks into the floor while a linked button is pressed, and for 3 s after.",
                   "Gate", t => Gate("Gate", t, new Vector3(0f, 0.75f, 0f), new Vector2(3f, 1.5f), new PressureButton[0],
                                     new Vector3(0f, -1.55f, 0f), speed: 3f, holdTime: 3f, CreatePalette()),
@@ -118,6 +121,11 @@ namespace BounJam.EditorTools
                   "Lift", t => Mover("Lift", t, new Vector3(0f, 0.1f, 0f), new Vector3(2f, 0.2f, 2f), CreatePalette().Lift,
                                      new PressureButton[0], new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f, cycle: true, carriesRiders: true),
                   new Bounds(new Vector3(0f, 0.1f, 0f), new Vector3(2f, 0.2f, 2f))),
+            Fixed("Drawbridge", "Machines", "Machines",
+                  "A 2 m wide ramp rising 1.5 m toward the arrow, hinged at its top: it stands raised until a linked button " +
+                  "is pressed, then falls into place as a bridge and stays there.",
+                  "Drawbridge", t => Drawbridge("Drawbridge", t, Vector3.zero, new Vector3(2f, 1.5f, 4f), new PressureButton[0]),
+                  new Bounds(new Vector3(0f, 0.75f, 0f), new Vector3(2f, 1.5f, 4f)), directional: true),
             Fixed("Crate", "Machines", "Machines", "Only the frozen blob pushes it; heavy enough to hold a button down.",
                   "Crate", t => Crate("Crate", t, new Vector3(0f, 0.5f, 0f), 1f, 4f, CreatePalette()),
                   new Bounds(new Vector3(0f, 0.5f, 0f), Vector3.one)),

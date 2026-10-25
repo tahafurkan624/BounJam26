@@ -245,7 +245,8 @@ namespace BounJam.EditorTools
         {
             GameObject[] selected = Selection.gameObjects;
             PressureButton[] buttons = Components<PressureButton>(selected);
-            ButtonMover[] movers = Components<ButtonMover>(selected);
+            // Gates, lifts and drawbridges: each keeps its buttons in "buttons".
+            Component[] movers = Components<ButtonMover>(selected).Concat<Component>(Components<Drawbridge>(selected)).ToArray();
             Magnet[] magnets = Components<Magnet>(selected);
 
             if (buttons.Length > 0 && movers.Length + magnets.Length > 0)
@@ -254,14 +255,14 @@ namespace BounJam.EditorTools
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     if (movers.Length > 0 && GUILayout.Button("Link"))
-                        foreach (ButtonMover mover in movers) Link(mover, "buttons", null, buttons);
+                        foreach (Component mover in movers) Link(mover, "buttons", null, buttons);
                     if (magnets.Length > 0 && GUILayout.Button("Link: Switches On"))
                         foreach (Magnet magnet in magnets) Link(magnet, "onButtons", "offButtons", buttons);
                     if (magnets.Length > 0 && GUILayout.Button("Link: Switches Off"))
                         foreach (Magnet magnet in magnets) Link(magnet, "offButtons", "onButtons", buttons);
                     if (GUILayout.Button("Unlink"))
                     {
-                        foreach (ButtonMover mover in movers) Unlink(mover, buttons, "buttons");
+                        foreach (Component mover in movers) Unlink(mover, buttons, "buttons");
                         foreach (Magnet magnet in magnets) Unlink(magnet, buttons, "onButtons", "offButtons");
                     }
                 }
@@ -277,7 +278,7 @@ namespace BounJam.EditorTools
             }
             else if (buttons.Length > 0)
             {
-                EditorGUILayout.HelpBox("Ctrl-click a gate, lift or magnet too to link this button to it.", MessageType.None);
+                EditorGUILayout.HelpBox("Ctrl-click a gate, lift, drawbridge or magnet too to link this button to it.", MessageType.None);
             }
             else if (Components<LevelPiece>(selected).Length > 0)
             {
@@ -836,6 +837,8 @@ namespace BounJam.EditorTools
         {
             foreach (ButtonMover mover in FindObjectsByType<ButtonMover>(FindObjectsSortMode.None))
                 DrawLinks(mover, "buttons", GateLinkColor);
+            foreach (Drawbridge bridge in FindObjectsByType<Drawbridge>(FindObjectsSortMode.None))
+                DrawLinks(bridge, "buttons", GateLinkColor);
             foreach (Magnet magnet in FindObjectsByType<Magnet>(FindObjectsSortMode.None))
             {
                 DrawLinks(magnet, "onButtons", MagnetOnLinkColor);
@@ -958,6 +961,8 @@ namespace BounJam.EditorTools
             {
                 foreach (ButtonMover mover in FindObjectsByType<ButtonMover>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                     Unlink(mover, buttons, "buttons");
+                foreach (Drawbridge bridge in FindObjectsByType<Drawbridge>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    Unlink(bridge, buttons, "buttons");
                 foreach (Magnet magnet in FindObjectsByType<Magnet>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                     Unlink(magnet, buttons, "onButtons", "offButtons");
             }

@@ -152,6 +152,11 @@ namespace BounJam
         /// or jump, and the blob counts as airborne.
         /// </summary>
         public bool IsDriven { get; set; }
+        /// <summary>
+        /// While true, the solid ignores the move input (a freeze zone holds it): it brakes on the ground and drifts to a
+        /// stop in water, but gravity, conveyors and pushes still move it.
+        /// </summary>
+        public bool IgnoresInput { get; set; }
         /// <summary>Raised on the physics step the blob takes off, with the upward speed the jump added, m/s.</summary>
         public event Action<float> Jumped;
 
@@ -335,7 +340,7 @@ namespace BounJam
             solidCrateContact = false;
             shoreContact = false;
 
-            Vector3 wish = WishDirection();
+            Vector3 wish = IgnoresInput ? Vector3.zero : WishDirection();
             // Still wet but resting on something (a ramp out of the water, a shallow bottom): push along it as on land.
             // Paddling only moves level with the water and can't climb a slope.
             if (climbingOut || (IsSwimming && !IsGrounded))

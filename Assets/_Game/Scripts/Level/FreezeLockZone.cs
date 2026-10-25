@@ -5,8 +5,9 @@ namespace BounJam
 {
     /// <summary>
     /// A trigger region that keeps the blob frozen: a piece whose core is inside freezes (as soon as it can) and the
-    /// player can't melt it until it leaves. It counts each piece on its own, so when the blob was cut in two, only the
-    /// half that is inside is held; the twin outside freezes and melts as usual. Leaving doesn't melt the crystal.
+    /// player can't melt or move it: it stays put unless something else carries it out, and being stuck there doesn't
+    /// lose the level. It counts each piece on its own, so when the blob was cut in two, only the half that is inside
+    /// is held; the twin outside moves, freezes and melts as usual. Leaving doesn't melt the crystal.
     /// </summary>
     [RequireComponent(typeof(Collider))]
     public class FreezeLockZone : MonoBehaviour

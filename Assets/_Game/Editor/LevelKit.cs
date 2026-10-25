@@ -136,7 +136,8 @@ namespace BounJam.EditorTools
             crate.AddComponent<Pushable>();
         }
 
-        public static PressureButton Button(string name, Transform parent, Vector3 position, Palette m)
+        /// <summary>A pressure button; a <paramref name="latch"/>ing one stays pressed for good once it's pressed.</summary>
+        public static PressureButton Button(string name, Transform parent, Vector3 position, Palette m, bool latch = false)
         {
             var root = new GameObject(name) { layer = LayerMask.NameToLayer("Interactable") };
             root.transform.SetParent(parent, false);
@@ -149,6 +150,7 @@ namespace BounJam.EditorTools
             settings.FindProperty("idleMaterial").objectReferenceValue = m.ButtonIdle;
             settings.FindProperty("pressedMaterial").objectReferenceValue = m.ButtonPressed;
             settings.FindProperty("detectMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Pushable", "Ship");
+            settings.FindProperty("latch").boolValue = latch;
             settings.ApplyModifiedPropertiesWithoutUndo();
             return button;
         }
@@ -174,6 +176,42 @@ namespace BounJam.EditorTools
             gate.transform.SetParent(parent, false);
             gate.transform.position = position;
             return Drive(ArtKit.SlidingGate(gate.transform, size, m.Door), buttons, activeOffset, speed, holdTime);
+        }
+
+        /// <summary>
+        /// A ramp like the level editor's (<see cref="LevelParts.Ramp"/>), footprint centred on <paramref name="position"/>
+        /// and rising <c>size.y</c> toward +Z, hinged at its top edge: it stands raised until its buttons lower it.
+        /// </summary>
+        public static Drawbridge Drawbridge(string name, Transform parent, Vector3 position, Vector3 size, PressureButton[] buttons,
+                                            LevelPiece.FloorType look = LevelPiece.FloorType.Concrete)
+        {
+            var root = new GameObject(name) { layer = LayerMask.NameToLayer("Environment") };
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = position;
+
+            var deck = new GameObject("Deck") { layer = root.layer };
+            deck.transform.SetParent(root.transform, false);
+            deck.transform.localPosition = new Vector3(0f, size.y, size.z * 0.5f);
+            var slab = new GameObject("Ramp Shape") { layer = root.layer };
+            slab.transform.SetParent(deck.transform, false);
+            slab.transform.localPosition = -deck.transform.localPosition;
+            LevelParts.Ramp(slab.transform, size, look);
+
+            var body = deck.AddComponent<Rigidbody>();
+            body.isKinematic = true;
+            body.interpolation = RigidbodyInterpolation.Interpolate;
+
+            var bridge = root.AddComponent<Drawbridge>();
+            var settings = new SerializedObject(bridge);
+            SerializedProperty list = settings.FindProperty("buttons");
+            list.arraySize = buttons.Length;
+            for (int i = 0; i < buttons.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = buttons[i];
+            settings.FindProperty("deck").objectReferenceValue = body;
+            // Raised to stand 85 degrees above level, leaning a little out over the gap.
+            settings.FindProperty("raisedAngle").floatValue = Mathf.Atan2(size.y, size.z) * Mathf.Rad2Deg + 85f;
+            settings.FindProperty("blockingMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Ship", "Pushable");
+            settings.ApplyModifiedPropertiesWithoutUndo();
+            return bridge;
         }
 
         /// <summary>Makes <paramref name="go"/>, with its box collider, a kinematic body its buttons move.</summary>

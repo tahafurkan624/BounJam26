@@ -75,9 +75,12 @@ namespace BounJam.EditorTools
         {
             if (go.TryGetComponent(out PressureButton button))
             {
-                Object idle = new SerializedObject(button).FindProperty("idleMaterial").objectReferenceValue;
+                var settings = new SerializedObject(button);
+                Object idle = settings.FindProperty("idleMaterial").objectReferenceValue;
                 string material = idle != null ? idle.name : "";
-                return material == "Button_MagnetOn" ? "Magnet On" : material == "Button_MagnetOff" ? "Magnet Off" : "Button";
+                if (material == "Button_MagnetOn") return "Magnet On";
+                if (material == "Button_MagnetOff") return "Magnet Off";
+                return settings.FindProperty("latch").boolValue ? "Latch Button" : "Button";
             }
             if (go.TryGetComponent(out ButtonMover mover))
                 return new SerializedObject(mover).FindProperty("carriesRiders").boolValue ? "Lift" : "Gate";

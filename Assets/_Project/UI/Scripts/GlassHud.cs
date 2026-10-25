@@ -8,8 +8,7 @@ using UnityEngine.UI;
 namespace BounJam
 {
     /// <summary>
-    /// In-game HUD: level pill, carried-cargo counter (hidden when the level has no collectibles; the drop icon splashes
-    /// when cargo comes aboard) and the key hint on the glass overlay; the 3D liquid pause button and the Liquid / Solid
+    /// In-game HUD: level pill and the key hint on the glass overlay; the 3D liquid pause button and the Liquid / Solid
     /// switch on the liquid canvas. The switch follows the blob's form, and clicking it switches the form. While the
     /// blob is solid, every liquid button freezes with it (<see cref="LiquidUI.SetSolid"/>).
     /// </summary>
@@ -21,12 +20,6 @@ namespace BounJam
         [SerializeField] TMP_Text levelKicker;
         [SerializeField] TMP_Text levelLabel;
 
-        [Header("Cargo")]
-        [SerializeField] GameObject cargoPill;
-        [SerializeField] RectTransform cargoIcon;
-        [SerializeField] TMP_Text cargoCount;
-        [SerializeField] RectTransform cargoFill;
-
         [Header("Form")]
         [SerializeField] LiquidToggle formSwitch;
         [SerializeField] TMP_Text formHint;
@@ -35,8 +28,6 @@ namespace BounJam
         [SerializeField] Button pauseButton;
 
         BlobForm form;
-        Collectible[] cargo = new Collectible[0];
-        int shownHeld = -1;
 
         public void Bind(GlassUI owner)
         {
@@ -45,8 +36,6 @@ namespace BounJam
             int colon = title.IndexOf(':');
             levelKicker.text = (colon > 0 ? title.Substring(0, colon).Trim() : "Level").ToUpperInvariant();
             levelLabel.text = colon > 0 ? title.Substring(colon + 1).Trim() : title;
-            cargo = FindObjectsByType<Collectible>(FindObjectsSortMode.None);
-            cargoPill.SetActive(cargo.Length > 0);
             pauseButton.onClick.AddListener(owner.TogglePause);
             UISound.AddTo(pauseButton);
             formHint.text = string.Format(hintFormat, ToggleKey());
@@ -89,19 +78,6 @@ namespace BounJam
             // The blob decides: a click it refused (cooldown, inside a grate) flows back.
             bool solid = form != null && form.IsSolid;
             if (solid != formSwitch.solid) formSwitch.SetSolid(solid, false);
-
-            if (cargo.Length == 0) return;
-            int held = 0;
-            foreach (Collectible item in cargo)
-                if (item != null && item.IsCollected) held++;
-            if (held == shownHeld) return;
-            // Only a pickup splashes, not the first count or a restart.
-            if (shownHeld >= 0 && held > shownHeld && cargoIcon != null) UILiquidFX.Splash(cargoIcon, 10, 0.8f);
-            shownHeld = held;
-            cargoCount.text = $"{held} / {cargo.Length}";
-            cargoFill.anchorMax = new Vector2((float)held / cargo.Length, 1f);
-            // An empty bar would still draw a hairline at its left end.
-            cargoFill.gameObject.SetActive(held > 0);
         }
     }
 }
