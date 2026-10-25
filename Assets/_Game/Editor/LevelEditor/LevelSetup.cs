@@ -232,7 +232,8 @@ namespace BounJam.EditorTools
         /// </summary>
         public static void LinkLevels()
         {
-            List<string> order = PlayOrder();
+            // Levels only: the main menu comes first in the build, but the last level starts over at the first level, not the menu.
+            List<string> order = PlayOrder().Where(path => ReadLevel(path).IsLevel).ToList();
             if (order.Count == 0 || !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
             var unsaved = new List<string>();
