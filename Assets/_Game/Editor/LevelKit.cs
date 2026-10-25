@@ -279,6 +279,18 @@ namespace BounJam.EditorTools
             return water.GetComponent<Water>();
         }
 
+        /// <summary>A trigger box that holds the blob frozen while its core is inside (see <see cref="FreezeLockZone"/>).</summary>
+        public static FreezeLockZone FreezeZone(string name, Transform parent, Vector3 center, Vector3 size)
+        {
+            var zone = new GameObject(name) { layer = LayerMask.NameToLayer("Triggers") };
+            zone.transform.SetParent(parent, false);
+            zone.transform.localPosition = center;
+            var box = zone.AddComponent<BoxCollider>();
+            box.isTrigger = true;
+            box.size = size;
+            return zone.AddComponent<FreezeLockZone>();
+        }
+
         /// <summary>The goal: a glowing pad with corner posts and a beacon. <paramref name="position"/> is on the floor surface.</summary>
         public static ShipDock Dock(string name, Transform parent, Vector3 position, Palette m, ShipBuoyancy ship)
         {

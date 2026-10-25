@@ -128,8 +128,11 @@ namespace BounJam
         Coroutine lookTransition;
         readonly Collider[] nearby = new Collider[32];
         readonly RaycastHit[] passageHits = new RaycastHit[8];
+        int freezeLocks;
 
         public bool IsSolid { get; private set; }
+        /// <summary>True while a <see cref="FreezeLockZone"/> holds this piece frozen: the player can't melt it.</summary>
+        public bool IsFreezeLocked => freezeLocks > 0;
         /// <summary>The colliders that have the frozen shape: one, or the pieces it was cut into (none while liquid).</summary>
         public IReadOnlyList<Collider> SolidColliders => solidColliders;
         /// <summary>
@@ -209,7 +212,10 @@ namespace BounJam
         public void Toggle()
         {
             if (Time.time - lastSwitchTime < cooldown || !skin.IsReady) return;
-            if (IsSolid) Melt();
+            if (IsSolid)
+            {
+                if (!IsFreezeLocked) Melt();
+            }
             // The pieces of a cut blob freeze together: none of them while another is partway through a grate.
             else if (!OtherPieceInPassage()) Freeze();
         }
@@ -271,6 +277,9 @@ namespace BounJam
             StartLookTransition(0f, meltTime, 0f);
             FormChanged?.Invoke(false);
         }
+
+        /// <summary>Adds or removes a hold that keeps the player from melting the crystal (one per zone it is in).</summary>
+        public void SetFreezeLock(bool locked) => freezeLocks = Mathf.Max(0, freezeLocks + (locked ? 1 : -1));
 
         /// <summary>Makes every collider of the crystal ignore collisions with <paramref name="other"/>, or stop ignoring them.</summary>
         public void IgnoreCollision(Collider other, bool ignore)

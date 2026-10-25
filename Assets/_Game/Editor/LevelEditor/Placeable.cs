@@ -83,6 +83,11 @@ namespace BounJam.EditorTools
             Shaped(Kind.Pool, "Pool", "Water & Hazards", "Water", true,
                    "A floor with a pool sunk in it: the liquid dissolves in the water, ice floats and swims. Drag to draw the floor."),
             Shaped(Kind.Water, "Water", "Water & Hazards", "Water", true, "A block of water whose surface is on the build height, level with the floor."),
+            Fixed("Freeze Zone", "Water & Hazards", "Hazards",
+                  "Holds the blob frozen while its core is inside: it freezes on entering and can't melt until it leaves. " +
+                  "Each half of a cut blob counts on its own. Resize its box collider in the Inspector.",
+                  "Freeze Zone", t => FreezeZone("Freeze Zone", t, new Vector3(0f, 1f, 0f), new Vector3(4f, 2f, 4f)),
+                  new Bounds(new Vector3(0f, 1f, 0f), new Vector3(4f, 2f, 4f))),
             Shaped(Kind.HotPlate, "Hot Plate", "Water & Hazards", "Hazards", false,
                    "Burns the ship if it's dropped on it; the blob crosses safely."),
             Shaped(Kind.FloorGrate, "Floor Grate", "Water & Hazards", "Hazards", true,
