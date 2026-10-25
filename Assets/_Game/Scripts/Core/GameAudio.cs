@@ -9,7 +9,7 @@ namespace BounJam
     /// menu options) and an overall volume. Music plays through <see cref="MusicBus"/> and the sounds through
     /// <see cref="SfxBus"/> when the FMOD project has that bus. Without an effects bus the effects volume goes on the
     /// master bus and the music bus (or, without one, the music event's own volume) is raised by as much, so the
-    /// effects slider leaves the music alone.
+    /// effects slider leaves the music alone. The music is mixed down by <see cref="MusicMix"/> under the slider.
     /// </summary>
     public static class GameAudio
     {
@@ -18,6 +18,8 @@ namespace BounJam
         const string MasterKey = "BounJam.Volume";
         const string MusicKey = "BounJam.MusicVolume";
         const string SfxKey = "BounJam.SfxVolume";
+        // The music's gain at a full music volume (about -9 dB): the track is mixed loud against the effects.
+        const float MusicMix = 0.275f;
         // The lowest the master bus goes for the effects volume, so the music can still be raised back from it.
         const float MinSfxGain = 1e-4f;
 
@@ -58,7 +60,7 @@ namespace BounJam
             bool hasSfx = studio.getBus(SfxBus, out Bus sfx) == FMOD.RESULT.OK;
             bool hasMusic = studio.getBus(MusicBus, out Bus music) == FMOD.RESULT.OK;
             float sfxOnMaster = hasSfx ? 1f : Mathf.Max(Sfx, MinSfxGain);
-            float musicGain = Music / sfxOnMaster;
+            float musicGain = Music * MusicMix / sfxOnMaster;
             if (studio.getBus("bus:/", out Bus master) == FMOD.RESULT.OK) master.setVolume(Master * sfxOnMaster);
             if (hasSfx) sfx.setVolume(Sfx);
             if (hasMusic) music.setVolume(musicGain);

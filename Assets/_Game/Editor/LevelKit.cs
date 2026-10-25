@@ -180,7 +180,7 @@ namespace BounJam.EditorTools
 
         /// <summary>
         /// A ramp like the level editor's (<see cref="LevelParts.Ramp"/>), footprint centred on <paramref name="position"/>
-        /// and rising <c>size.y</c> toward +Z, hinged at its top edge: it stands raised until its buttons lower it.
+        /// and rising <c>size.y</c> toward +Z: a stub at its foot until its buttons grow it up its slope.
         /// </summary>
         public static Drawbridge Drawbridge(string name, Transform parent, Vector3 position, Vector3 size, PressureButton[] buttons,
                                             LevelPiece.FloorType look = LevelPiece.FloorType.Concrete)
@@ -188,15 +188,24 @@ namespace BounJam.EditorTools
             var root = new GameObject(name) { layer = LayerMask.NameToLayer("Environment") };
             root.transform.SetParent(parent, false);
             root.transform.localPosition = position;
+            LevelParts.Ramp(root.transform, size, look);
+            int shapes = root.transform.childCount;
 
+            // Pivoted at the ramp's foot with its Z up the slope; the ramp goes in it where it is.
             var deck = new GameObject("Deck") { layer = root.layer };
             deck.transform.SetParent(root.transform, false);
-            deck.transform.localPosition = new Vector3(0f, size.y, size.z * 0.5f);
-            var slab = new GameObject("Ramp Shape") { layer = root.layer };
-            slab.transform.SetParent(deck.transform, false);
-            slab.transform.localPosition = -deck.transform.localPosition;
-            LevelParts.Ramp(slab.transform, size, look);
+            deck.transform.localPosition = new Vector3(0f, 0f, -size.z * 0.5f);
+            deck.transform.localRotation = Quaternion.Euler(-Mathf.Atan2(size.y, size.z) * Mathf.Rad2Deg, 0f, 0f);
+            for (int i = 0; i < shapes; i++) root.transform.GetChild(0).SetParent(deck.transform, true);
+            return DrawbridgeDeck(root, deck, buttons);
+        }
 
+        /// <summary>
+        /// Makes <paramref name="deck"/>, a child of <paramref name="root"/> pivoted where it grows from with its Z the way
+        /// it grows, a kinematic body a <see cref="BounJam.Drawbridge"/> on the root grows out once its buttons are pressed.
+        /// </summary>
+        public static Drawbridge DrawbridgeDeck(GameObject root, GameObject deck, PressureButton[] buttons)
+        {
             var body = deck.AddComponent<Rigidbody>();
             body.isKinematic = true;
             body.interpolation = RigidbodyInterpolation.Interpolate;
@@ -207,8 +216,6 @@ namespace BounJam.EditorTools
             list.arraySize = buttons.Length;
             for (int i = 0; i < buttons.Length; i++) list.GetArrayElementAtIndex(i).objectReferenceValue = buttons[i];
             settings.FindProperty("deck").objectReferenceValue = body;
-            // Raised to stand 85 degrees above level, leaning a little out over the gap.
-            settings.FindProperty("raisedAngle").floatValue = Mathf.Atan2(size.y, size.z) * Mathf.Rad2Deg + 85f;
             settings.FindProperty("blockingMask").intValue = LayerMask.GetMask("PlayerLiquid", "PlayerSolid", "Ship", "Pushable");
             settings.ApplyModifiedPropertiesWithoutUndo();
             return bridge;

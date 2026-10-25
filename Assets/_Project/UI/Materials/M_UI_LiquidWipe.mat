@@ -31,14 +31,14 @@ Material:
     m_Floats:
     - _Clear: 0.22
     - _ColorMask: 15
-    - _Level: 0
+    - _Level: 1.15
     - _Stencil: 0
     - _StencilComp: 8
     - _StencilOp: 0
     - _StencilReadMask: 255
     - _StencilWriteMask: 255
     - _Wave: 0.035
-    - _WipeTime: 0
+    - _WipeTime: 0.5999718
     m_Colors:
     - _Deep: {r: 0.02, g: 0.41999996, b: 0.45, a: 1}
     - _Shallow: {r: 0.54, g: 0.97, b: 0.89, a: 1}

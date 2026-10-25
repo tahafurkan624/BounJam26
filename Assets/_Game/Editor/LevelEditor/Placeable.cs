@@ -122,10 +122,18 @@ namespace BounJam.EditorTools
                                      new PressureButton[0], new Vector3(0f, 1.8f, 0f), speed: 1f, holdTime: 0f, cycle: true, carriesRiders: true),
                   new Bounds(new Vector3(0f, 0.1f, 0f), new Vector3(2f, 0.2f, 2f))),
             Fixed("Drawbridge", "Machines", "Machines",
-                  "A 2 m wide ramp rising 1.5 m toward the arrow, hinged at its top: it stands raised until a linked button " +
-                  "is pressed, then falls into place as a bridge and stays there.",
+                  "A 2 m wide ramp rising 1.5 m toward the arrow: a stub at its foot until a linked button is pressed, then " +
+                  "it grows up its slope as a bridge and stays there.",
                   "Drawbridge", t => Drawbridge("Drawbridge", t, Vector3.zero, new Vector3(2f, 1.5f, 4f), new PressureButton[0]),
                   new Bounds(new Vector3(0f, 0.75f, 0f), new Vector3(2f, 1.5f, 4f)), directional: true),
+            new Placeable
+            {
+                Name = "Grate Bridge", Category = "Machines", Group = "Machines", How = Placement.Click, OnBuildPlane = true,
+                Directional = true,
+                Tooltip = "A 2 m grate, its top on the build height, that a linked button turns into floor: a flat drawbridge " +
+                          "grows across it toward the arrow and stays. Until then the liquid drips through. The ship never holds it up.",
+                Prefab = GrateBridgeKit.Prefab, Footprint = GrateBridgeKit.Footprint,
+            },
             Fixed("Crate", "Machines", "Machines", "Only the frozen blob pushes it; heavy enough to hold a button down.",
                   "Crate", t => Crate("Crate", t, new Vector3(0f, 0.5f, 0f), 1f, 4f, CreatePalette()),
                   new Bounds(new Vector3(0f, 0.5f, 0f), Vector3.one)),

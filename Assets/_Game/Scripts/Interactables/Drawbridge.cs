@@ -9,7 +9,7 @@ namespace BounJam
     /// the slope; only that Z scale changes, springing out with a small overshoot. It shoves nothing on the way: if the
     /// blob or a crate is in its path, it waits until they move off. The ship is the exception: one in its path is
     /// lifted straight up onto the deck, so the bridge never hangs on it (unless there's no room above it, when it
-    /// waits like for anything else). With Stays Out off it shrinks back when
+    /// waits like for anything else, or with Waits For Ship off grows on anyway). With Stays Out off it shrinks back when
     /// the buttons are released. Growing and shrinking each play event:/Elevator, like a lift, faded out once the deck
     /// settles. A deck lying flat works the same
     /// way: the Grate Bridge grows one across a grate.
@@ -38,6 +38,8 @@ namespace BounJam
         [SerializeField] LayerMask blockingMask;
         [Tooltip("The highest it will lift the ship onto the deck in one step, m; past that it waits for the ship instead.")]
         [SerializeField] float maxShipLift = 3f;
+        [Tooltip("Waits for the ship when it can't lift it onto the deck. Off, the ship never holds it up: it grows on anyway.")]
+        [SerializeField] bool waitsForShip = true;
 
         // How long the sound takes to fade out once the deck settles, s.
         const float SoundFadeOut = 0.4f;
@@ -160,8 +162,8 @@ namespace BounJam
             Vector3 fullHalfExtents = new Vector3(shapeFullHalfExtents.x, shapeFullHalfExtents.y, shapeFullHalfExtents.z * next);
             foreach (ShipBuoyancy ship in shipsInTheWay)
             {
-                if (!TryFindLift(ship, center, fullHalfExtents, rotation, out float lift)) return true;
-                LiftShip(ship.Body, lift);
+                if (TryFindLift(ship, center, fullHalfExtents, rotation, out float lift)) LiftShip(ship.Body, lift);
+                else if (waitsForShip) return true;
             }
             return false;
         }

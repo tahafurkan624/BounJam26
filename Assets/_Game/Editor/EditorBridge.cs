@@ -19,6 +19,7 @@ namespace BounJam.EditorTools
     ///   wait &lt;seconds&gt;                              delay the next command (real time)
     ///   play | stop                                 enter or leave play mode
     ///   waitgame &lt;seconds&gt;                          delay the next command (game time, play mode)
+    ///   frames &lt;n&gt;                                  step n frames before the next command, even at time scale 0 (a pause menu)
     ///   stick &lt;x&gt; &lt;y&gt;                              override the player's Move input; "stick 0 0" holds still
     ///   probe &lt;GameObject name&gt;                     position, velocity, render bounds (and blob skin stats)
     ///   teleport &lt;GameObject name&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;     move an object (and its rigidbody, stopped) there
@@ -39,6 +40,7 @@ namespace BounJam.EditorTools
 
         static double nextPoll;
         static float waitUntilGameTime;
+        static int framesLeft;
 
         static EditorBridge()
         {
@@ -47,6 +49,7 @@ namespace BounJam.EditorTools
             {
                 // Statics survive play mode when domain reload is off, and game time restarts at 0.
                 waitUntilGameTime = 0f;
+                framesLeft = 0;
                 if (state == PlayModeStateChange.EnteredEditMode) SessionState.EraseBool(BridgePlayKey);
             };
         }
@@ -59,8 +62,9 @@ namespace BounJam.EditorTools
             if (bridgePlay)
             {
                 EditorApplication.isPaused = true;
-                if (Time.time < waitUntilGameTime)
+                if (Time.time < waitUntilGameTime || framesLeft > 0)
                 {
+                    if (framesLeft > 0) framesLeft--;
                     EditorApplication.Step();
                     return;
                 }
@@ -126,6 +130,10 @@ namespace BounJam.EditorTools
                     if (!EditorApplication.isPlaying) return "error: waitgame needs play mode";
                     waitUntilGameTime = Time.time + ParseFloat(rest);
                     return $"ok: waiting {rest}s of game time";
+                case "frames":
+                    if (!EditorApplication.isPlaying) return "error: frames needs play mode";
+                    framesLeft = int.Parse(rest, CultureInfo.InvariantCulture);
+                    return $"ok: stepping {rest} frames";
                 case "stick":
                     return Stick(args);
                 case "probe":

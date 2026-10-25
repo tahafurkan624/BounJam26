@@ -206,7 +206,7 @@ namespace BounJam.EditorTools
         static GameObject HalfWallPart => Part("Half Wall", t => ArtKit.WallSegment("Half Wall", t, true, CreatePalette().Wall));
 
         // Unit cubes with a collider, scaled to size.
-        static GameObject RampPart => Part("Ramp", t => Box("Ramp", t, Vector3.zero, Vector3.one, CreatePalette().Structure));
+        public static GameObject RampPart => Part("Ramp", t => Box("Ramp", t, Vector3.zero, Vector3.one, CreatePalette().Structure));
 
         /// <summary>
         /// The SM_LogRamp_NoWalls log ramp, a deck of logs on trestles, turned to rise toward +Z with its footprint
