@@ -133,6 +133,7 @@ namespace BlobShip.UI.Liquid3D
         IEnumerator OpenRoutine()
         {
             _visible = true;
+            _slab.ripplesOnly = false;
             _slab.seed = UnityEngine.Random.Range(0f, 10f);
             _slab.fill = 0f; _slab.drain = 0f; _slab.fade = 1f;
             SetButtons(0f, false); SetTitles(0f);
@@ -172,12 +173,15 @@ namespace BlobShip.UI.Liquid3D
             _slab.fill = 1f;
             for (int i = 0; i < buttons.Count; i++) if (buttons[i] != null) buttons[i].Rect.localScale = scale[i];
             SetButtons(1f, true); SetTitles(1f);
+            // once full, the glass ripples under the pointer and rings on a click, as a liquid would
+            _slab.ripplesOnly = true;
             _running = null;
         }
 
         IEnumerator CloseRoutine(Action onHidden)
         {
             _visible = false;
+            _slab.ripplesOnly = false;
             _slab.seed = UnityEngine.Random.Range(0f, 10f);
             foreach (var b in buttons) if (b != null) { b.interactive = false; var sel = b.GetComponent<Selectable>(); if (sel != null) sel.interactable = false; }
             var scale = new List<Vector3>(); foreach (var b in buttons) scale.Add(b != null ? b.Rect.localScale : Vector3.one);

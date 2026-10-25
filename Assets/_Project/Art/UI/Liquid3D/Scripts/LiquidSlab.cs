@@ -65,6 +65,8 @@ namespace BlobShip.UI.Liquid3D
         [System.NonSerialized] public bool isSwitch;
         [System.NonSerialized] public float fill = 1f, drain = 0f, seed = 1.7f, fade = 1f;
         [System.NonSerialized] public bool panelMask;
+        // the surface still ripples under the pointer and rings on a click, without lifting, squashing or clicking
+        [System.NonSerialized] public bool ripplesOnly;
         [System.NonSerialized] public readonly Vector4[] spillRects = new Vector4[3];
         [System.NonSerialized] public readonly Color[] spillColors = new Color[3];
 
@@ -295,9 +297,14 @@ namespace BlobShip.UI.Liquid3D
         public void OnPointerEnter(PointerEventData e) { if (interactive) _hovering = true; _hasLast = false; }
         public void OnPointerExit(PointerEventData e) { _hovering = false; _hasLast = false; }
 
+        bool TakesPointer => interactive || ripplesOnly;
+
+        // A ripples-only slab answers only where it is hit itself, not while the pointer is over a button on it.
+        bool Ripples(PointerEventData e) => interactive || (ripplesOnly && e.pointerCurrentRaycast.gameObject == gameObject);
+
         public void OnPointerMove(PointerEventData e)
         {
-            if (!interactive || !UvFrom(e, out var uv)) { _hasLast = false; return; }
+            if (!Ripples(e) || !UvFrom(e, out var uv)) { _hasLast = false; return; }
             if (_hasLast)
             {
                 float sp = new Vector2((uv.x - _lastUv.x) * Width, (uv.y - _lastUv.y) * Height).magnitude / Unit;
@@ -308,11 +315,11 @@ namespace BlobShip.UI.Liquid3D
 
         public void OnPointerDown(PointerEventData e)
         {
-            if (!interactive || !UvFrom(e, out var uv)) return;
+            if (!Ripples(e) || !UvFrom(e, out var uv)) return;
             float k = (1f - 0.88f * Frozen) * (glass ? 0.5f : 1f);
             Impulse(uv, 0.06f, 1.25f * k);           // a sharp drop: a peak with a trough round it -> crisp rings
             Impulse(uv, 0.14f, -0.5f * k);
-            if (!glass) _sqV -= 2.2f;
+            if (!glass && interactive) _sqV -= 2.2f;
         }
 
         public void OnPointerClick(PointerEventData e) { if (interactive) onClick.Invoke(); }
@@ -339,8 +346,10 @@ namespace BlobShip.UI.Liquid3D
 
             if (Application.isPlaying)
             {
-                // interactive changes after OnEnable (LiquidPanel3D turns it off to drain, on again after the next pour)
-                if (_ownGraphic != null && _ownGraphic.raycastTarget != interactive) _ownGraphic.raycastTarget = interactive;
+                // interactive / ripplesOnly change after OnEnable (LiquidPanel3D turns them off to drain, on again after
+                // the next pour); a panel that only ripples gets its catch-all graphic the first time it opens
+                if (_ownGraphic == null && TakesPointer) _ownGraphic = gameObject.AddComponent<LiquidRaycastTarget>();
+                if (_ownGraphic != null && _ownGraphic.raycastTarget != TakesPointer) _ownGraphic.raycastTarget = TakesPointer;
 
                 // springs: hover lift, press squash
                 const float kS = 260f, kD = 12f;
