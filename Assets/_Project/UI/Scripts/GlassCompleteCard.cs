@@ -54,6 +54,7 @@ namespace BounJam
             cargo = FindObjectsByType<Collectible>(FindObjectsSortMode.None);
             replayButton.onClick.AddListener(ui.Level.Restart);
             nextButton.onClick.AddListener(ui.Level.LoadNext);
+            UISound.AddTo(replayButton, nextButton);
             nextLabel.text = ui.Level.IsFinalLevel ? finalNextText : nextText;
         }
 

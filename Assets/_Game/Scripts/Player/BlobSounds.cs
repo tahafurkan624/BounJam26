@@ -47,6 +47,9 @@ namespace BounJam
         /// <summary>Landing sounds played since the blob started (for testing).</summary>
         public int Landings { get; private set; }
 
+        /// <summary>The liquid landing sound just played.</summary>
+        public event System.Action Landed;
+
         void Awake()
         {
             body = GetComponent<Rigidbody>();
@@ -101,7 +104,11 @@ namespace BounJam
             if (!carried && airTime >= minAirTime && fallSpeed >= minLandSpeed)
             {
                 // The crystal has its own landing sound.
-                if (!form.IsSolid) Play(jumpEvent, JumpDownLabel);
+                if (!form.IsSolid)
+                {
+                    Play(jumpEvent, JumpDownLabel);
+                    Landed?.Invoke();
+                }
                 else if (iceSound != null) iceSound.PlayDrop();
             }
             airTime = fallSpeed = 0f;

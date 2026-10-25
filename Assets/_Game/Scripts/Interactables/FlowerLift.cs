@@ -114,8 +114,9 @@ namespace BounJam
 
         void Enter(Stage next)
         {
-            // event:/Tree as it grows up to the top, every time.
+            // event:/Tree as it grows up to the top, every time, and event:/Tree_Down as it goes back down.
             if (next == Stage.Rising) GameSounds.Tree.PlayAt(transform.position);
+            else if (next == Stage.Descending) GameSounds.TreeDown.PlayAt(transform.position);
             stage = next;
             time = 0f;
             riderTime = 0f;

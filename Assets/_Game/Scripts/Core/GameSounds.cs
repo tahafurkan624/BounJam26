@@ -12,6 +12,8 @@ namespace BounJam
     public static class GameSounds
     {
         public static readonly Sound Tree = new Sound("event:/Tree");
+        public static readonly Sound TreeDown = new Sound("event:/Tree_Down");
+        public static readonly Sound TreeSeed = new Sound("event:/Tree_Seed");
         public static readonly Sound Doors = new Sound("event:/Doors");
         public static readonly Sound Buttons = new Sound("event:/Buttons");
         public static readonly Sound ItemCollect = new Sound("event:/Item_Collect");
@@ -19,6 +21,8 @@ namespace BounJam
         public static readonly Sound Elevator = new Sound("event:/Elevator");
         public static readonly Sound ConveyorBelt = new Sound("event:/Conveyor_Belt");
         public static readonly Sound Level = new Sound("event:/Level");
+        public static readonly Sound UI = new Sound("event:/UI");
+        public static readonly Sound Music = new Sound("event:/Game_Music");
 
         // Item_Collect's "Parameter 1" labels, one per kind of item.
         public const string ItemParameter = "Parameter 1";
@@ -33,6 +37,12 @@ namespace BounJam
         public const string LevelParameter = "Level";
         public const string LevelSuccess = "Success";
         public const string LevelFail = "Fail";
+
+        // UI's "UI" labels.
+        public const string UIParameter = "UI";
+        public const string UIHover = "Hover";
+        public const string UIClick = "Click";
+        public const string UIPopUp = "PopUp";
 
         /// <summary>An event by path, looked up in the loaded banks the first time it's used.</summary>
         public class Sound
@@ -62,6 +72,16 @@ namespace BounJam
             public void PlayAt(Vector3 position)
             {
                 if (!Reference.IsNull) RuntimeManager.PlayOneShot(Reference, position);
+            }
+
+            /// <summary>Plays a 2D event once with one parameter set to a label.</summary>
+            public void Play(string parameter, string label)
+            {
+                if (Reference.IsNull) return;
+                var instance = RuntimeManager.CreateInstance(Reference);
+                instance.setParameterByNameWithLabel(parameter, label);
+                instance.start();
+                instance.release();
             }
 
             /// <summary>Plays it once at a point with one parameter set to a label.</summary>

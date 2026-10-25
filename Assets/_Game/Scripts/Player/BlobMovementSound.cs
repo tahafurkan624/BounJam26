@@ -17,6 +17,8 @@ namespace BounJam
     /// plays its own.
     /// Melting back into jelly starts the event too. If the blob sets off within the melt play time, that same sound goes
     /// on as its movement sound, uncut and not started again; if it stays put, the sound is cut short and fades out.
+    /// The liquid landing sound (<see cref="BlobSounds"/>) stands in for the ending: an ending playing when the blob lands
+    /// fades out, and so does a sound that stops within the land quiet time after.
     /// </summary>
     [RequireComponent(typeof(BlobMotor))]
     public class BlobMovementSound : MonoBehaviour
@@ -36,19 +38,25 @@ namespace BounJam
         [Tooltip("The speed has to stay below the stop speed this long before the ending plays, so a bump that stalls " +
                  "the blob for a moment doesn't cut the loop, s.")]
         [SerializeField] float stopDelay = 0.1f;
-        [Tooltip("A sound stopped before it has played this long fades out instead of playing its ending, s.")]
-        [SerializeField] float minPlayTime = 0.2f;
+        [Tooltip("A sound stopped before it has played this long fades out instead of playing its ending, so stopping " +
+                 "while the start is still playing doesn't put the ending right after it. About the length of the " +
+                 "event's start, s.")]
+        [SerializeField] float minPlayTime = 0.6f;
         [Tooltip("How long the sound melting starts plays when the blob doesn't set off, s. Setting off before then " +
                  "keeps it going as the movement sound.")]
         [SerializeField] float meltPlayTime = 0.5f;
         [Tooltip("How long a cut sound (a melt sound or one too short for its ending) takes to fade out, s.")]
         [SerializeField] float meltFadeOut = 0.2f;
+        [Tooltip("Stopping within this long of the liquid landing sound fades out instead of playing the ending, so " +
+                 "the two don't play back to back, s.")]
+        [SerializeField] float landQuietTime = 0.6f;
 
         Rigidbody body;
         BlobMotor motor;
         BlobForm form;
         BlobSplit split;
         BlobWater water;
+        BlobSounds sounds;
         EventInstance instance;
         EventInstance ending; // the last instance let go of, which may still be playing its ending
         EventInstance fading; // a cut sound on its way out
@@ -58,6 +66,7 @@ namespace BounJam
         float playTime; // how long the current instance has played, s
         float meltLeft; // how long the melt sound plays on before it's cut, unless the blob sets off, s
         float fadeLeft; // how long the cut melt sound has left to fade out, s
+        float landQuietLeft; // how long a stop still fades out instead of playing its ending after a landing, s
 
         void Awake()
         {
@@ -66,6 +75,7 @@ namespace BounJam
             form = GetComponent<BlobForm>();
             split = GetComponent<BlobSplit>();
             water = GetComponent<BlobWater>();
+            sounds = GetComponent<BlobSounds>();
             if (movementEvent.IsNull)
             {
                 Debug.LogWarning("[BounJam] BlobMovementSound has no FMOD event assigned.", this);
@@ -76,10 +86,12 @@ namespace BounJam
         void OnEnable()
         {
             if (form != null) form.FormChanged += OnFormChanged;
+            if (sounds != null) sounds.Landed += OnLanded;
         }
 
         void Update()
         {
+            if (landQuietLeft > 0f) landQuietLeft -= Time.deltaTime;
             if (fading.isValid())
             {
                 fadeLeft -= Time.deltaTime;
@@ -110,7 +122,7 @@ namespace BounJam
             if (speed >= stopSpeed) slowTime = 0f;
             else if ((slowTime += Time.deltaTime) >= stopDelay)
             {
-                if (playTime < minPlayTime) Cut();
+                if (playTime < minPlayTime || landQuietLeft > 0f) Cut();
                 else StopMoving();
             }
         }
@@ -119,6 +131,8 @@ namespace BounJam
         void OnDisable()
         {
             if (form != null) form.FormChanged -= OnFormChanged;
+            if (sounds != null) sounds.Landed -= OnLanded;
+            landQuietLeft = 0f;
             if (moving)
             {
                 // Too short for its ending: cut, and stopped right away just below.
@@ -141,6 +155,18 @@ namespace BounJam
             StartMoving();
             melting = true;
             meltLeft = meltPlayTime;
+        }
+
+        // The landing sound covers the stop: an ending already playing (stopped mid-fall) fades out, and stopping
+        // shortly after fades out instead of playing its ending.
+        void OnLanded()
+        {
+            landQuietLeft = landQuietTime;
+            if (!ending.isValid()) return;
+            StopFading();
+            fading = ending;
+            ending.clearHandle();
+            fadeLeft = meltFadeOut;
         }
 
         void StartMoving()
