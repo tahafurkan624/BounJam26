@@ -6,9 +6,9 @@ namespace BounJam
 {
     /// <summary>
     /// The crystal's FMOD sounds, 3D and following it. On the ground, event:/Ice_Movement with its Movement parameter:
-    /// sliding along without turning plays it on the Slide label for as long as the slide lasts; turning (rolling,
-    /// tipping over) plays nothing until the crystal stops turning, then the Rotate label once, the thud of it settling.
-    /// Floating in water and moving, event:/Ice_On_Water plays instead. Liquid, carried by a pipe or a magnet, or
+    /// moving along the ground plays it on the Slide label for as long as the move lasts, whether or not the crystal
+    /// turns as it goes. Landing after a fall plays it on the Drop label once (<see cref="BlobSounds"/> notices the
+    /// landing and calls <see cref="PlayDrop"/>). Floating in water and moving, event:/Ice_On_Water plays instead. Liquid, carried by a pipe or a magnet, or
     /// dissolved, it's silent (the liquid's sound is <see cref="BlobMovementSound"/>).
     /// </summary>
     [RequireComponent(typeof(BlobMotor), typeof(BlobForm))]
@@ -16,7 +16,7 @@ namespace BounJam
     {
         const string MovementParameter = "Movement";
         const string SlideLabel = "Slide";
-        const string RotateLabel = "Rotate";
+        const string DropLabel = "Drop";
 
         [SerializeField] EventReference iceMovementEvent;
         [SerializeField] EventReference iceOnWaterEvent;
@@ -27,17 +27,11 @@ namespace BounJam
         [Tooltip("The speed has to stay below the stop speed (or the crystal off the ground) this long before they " +
                  "stop, s.")]
         [SerializeField] float stopDelay = 0.1f;
-        [Tooltip("Turning faster than this counts as rolling or tipping, not sliding, rad/s.")]
-        [SerializeField] float turnSpeed = 1f;
-        [Tooltip("Once it has turned, it has to stay below this turning speed for the settle time before the Rotate " +
-                 "sound plays, rad/s.")]
-        [SerializeField] float settledTurnSpeed = 0.2f;
-        [SerializeField] float settleTime = 0.1f;
-        [Tooltip("The Rotate sound is stopped this long after it starts, s. The event loops for sliding, so it never " +
-                 "ends by itself; set this past the longest Rotate sound.")]
-        [SerializeField] float rotateSoundLength = 3f;
         [Tooltip("How long the slide and water sounds take to fade out, s.")]
         [SerializeField] float fadeOut = 0.2f;
+        [Tooltip("The Drop sound is stopped this long after it starts, s. The event loops for sliding, so it may " +
+                 "never end by itself; set this past the Drop sound's length.")]
+        [SerializeField] float dropSoundLength = 3f;
 
         Rigidbody body;
         BlobMotor motor;
@@ -46,16 +40,14 @@ namespace BounJam
         BlobWater water;
         LoopingSound slide;
         LoopingSound floating;
-        EventInstance settle;
-        float settleStopTime;
-        bool turning;
-        float calmTime; // how long the turning has been slow since it last turned fast, s
+        EventInstance drop;
+        float dropStopTime;
         float slowTime; // how long the slide or water sound has been without enough speed, s
 
         /// <summary>Slide sounds started since the blob started (for testing).</summary>
         public int Slides { get; private set; }
-        /// <summary>Settling (Rotate) sounds played since the blob started (for testing).</summary>
-        public int Settles { get; private set; }
+        /// <summary>Landing (Drop) sounds played since the blob started (for testing).</summary>
+        public int Drops { get; private set; }
         /// <summary>Water sounds started since the blob started (for testing).</summary>
         public int Glides { get; private set; }
 
@@ -74,8 +66,7 @@ namespace BounJam
         {
             slide.Release();
             floating.Release();
-            StopSettle();
-            turning = false;
+            StopDrop();
         }
 
         void Update()
@@ -83,7 +74,7 @@ namespace BounJam
             float dt = Time.deltaTime;
             slide.Tick(dt);
             floating.Tick(dt);
-            if (settle.isValid() && Time.time >= settleStopTime) StopSettle();
+            if (drop.isValid() && Time.time >= dropStopTime) StopDrop();
 
             bool silent = !form.IsSolid || motor.IsDriven || (split != null && split.InPipe)
                           || (water != null && water.IsDissolved);
@@ -91,35 +82,16 @@ namespace BounJam
             {
                 slide.Stop();
                 floating.Stop();
-                turning = false;
                 return;
             }
 
             if (motor.IsSwimming)
             {
                 slide.Stop();
-                turning = false;
                 Keep(floating, Vector3.ProjectOnPlane(body.linearVelocity, Vector3.up).magnitude, dt);
                 return;
             }
             floating.Stop();
-
-            // Turning: quiet until it has stopped, then the settling sound once.
-            float spin = body.angularVelocity.magnitude;
-            if (spin > turnSpeed)
-            {
-                turning = true;
-                calmTime = 0f;
-                slide.Stop();
-                return;
-            }
-            if (turning)
-            {
-                calmTime = spin < settledTurnSpeed ? calmTime + dt : 0f;
-                if (calmTime < settleTime) return;
-                turning = false;
-                PlaySettle();
-            }
 
             float speed = motor.IsGrounded ? Vector3.ProjectOnPlane(body.linearVelocity, motor.GroundNormal).magnitude : 0f;
             Keep(slide, speed, dt);
@@ -143,24 +115,25 @@ namespace BounJam
             else if ((slowTime += dt) >= stopDelay) sound.Stop();
         }
 
-        void PlaySettle()
+        /// <summary>The crystal came down onto the ground after a fall: the Drop sound, once.</summary>
+        public void PlayDrop()
         {
             if (iceMovementEvent.IsNull) return;
-            Settles++;
-            StopSettle();
-            settle = RuntimeManager.CreateInstance(iceMovementEvent);
-            RuntimeManager.AttachInstanceToGameObject(settle, gameObject, body);
-            settle.setParameterByNameWithLabel(MovementParameter, RotateLabel);
-            settle.start();
-            settleStopTime = Time.time + rotateSoundLength;
+            Drops++;
+            StopDrop();
+            drop = RuntimeManager.CreateInstance(iceMovementEvent);
+            RuntimeManager.AttachInstanceToGameObject(drop, gameObject, body);
+            drop.setParameterByNameWithLabel(MovementParameter, DropLabel);
+            drop.start();
+            dropStopTime = Time.time + dropSoundLength;
         }
 
-        void StopSettle()
+        void StopDrop()
         {
-            if (!settle.isValid()) return;
-            settle.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
-            settle.release();
-            settle.clearHandle();
+            if (!drop.isValid()) return;
+            drop.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
+            drop.release();
+            drop.clearHandle();
         }
     }
 }

@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.IO;
 using BlobShip.UI;
+using BlobShip.UI.Liquid3D;
 using TMPro;
 using UnityEditor;
 using UnityEngine;
@@ -13,8 +15,11 @@ namespace BounJam.EditorTools
     /// needs: the TMP font assets made from the bundled Fredoka / Nunito fonts, the icons set up as sprites and the glass
     /// material. GlassUI loads the prefab by itself in every level, so re-running this after a layout change is all
     /// it takes. Layout is at the 1920×1080 reference resolution of the game's canvases.
-    /// The BlobShip Liquid UI components (Assets/Assets/BlobShip/UI) make it move like liquid: jelly buttons and panels,
-    /// the flowing form lens, bubbles, drips and splashes.
+    /// The prefab has two canvases. The overlay canvas holds the flat glass: HUD pills and toasts, moving like liquid
+    /// through the BlobShip Liquid UI components (Assets/Assets/BlobShip/UI). The liquid canvas holds the 3D liquid
+    /// kit (Assets/_Project/Art/UI/Liquid3D): thick turquoise liquid buttons with white LED labels, glass panels that
+    /// pour in and drain away, and the Liquid / Solid switch. A slab keeps its labels in front of its body only when
+    /// they are its direct children, so those panels are laid out by hand, not with layout groups.
     /// </summary>
     public static class GlassUIBuilder
     {
@@ -24,6 +29,8 @@ namespace BounJam.EditorTools
         const string Charset =
             " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" +
             "·×–—…’“”çÇğĞıİöÖşŞüÜ";
+        // Liquid canvas draw order: its own images, then glass panels (+1), the buttons on them (+2), labels (+3).
+        const int LiquidSorting = 10;
 
         static readonly Color Ink = Hex("0B2233");
         static readonly Color Muted = Hex("22475C");
@@ -31,10 +38,9 @@ namespace BounJam.EditorTools
         static readonly Color Mint = Hex("1FC9AE");
         static readonly Color Aqua = Hex("46E6CF");
         static readonly Color Orange = Hex("FF8A1F");
-        static readonly Color LensTint = new Color(0.75f, 1f, 0.95f);
-        static readonly Color PrimaryFill = new Color(0.62f, 0.96f, 0.9f, 0.92f);
-        static readonly Color SecondaryFill = new Color(1f, 1f, 1f, 0.42f);
         static readonly Color TrackFill = new Color(0.043f, 0.133f, 0.2f, 0.16f);
+        static readonly Color LiquidTrack = new Color(0.55f, 0.95f, 1f, 0.22f);
+        static readonly Color SmokedGlass = new Color(0.4f, 0.52f, 0.58f);
 
         static Material glassMaterial;
         static TMP_FontAsset display;
@@ -61,32 +67,29 @@ namespace BounJam.EditorTools
             Weight(display, 1.7f);
             Weight(body, 1.6f);
 
-            var root = new GameObject("GlassUI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var root = new GameObject("GlassUI");
             root.layer = LayerMask.NameToLayer("UI");
-            var canvas = root.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;            canvas.sortingOrder = 10;
-            canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
-            var scaler = root.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 0.5f;
+            Canvas overlay = MakeCanvas("Overlay", root.transform, RenderMode.ScreenSpaceOverlay, 10);
+            // GlassUI puts it on the main camera at run time.
+            Canvas liquid = MakeCanvas("Liquid3D", root.transform, RenderMode.ScreenSpaceCamera, LiquidSorting);
 
-            GlassHud hud = BuildHud(root.transform);
-            GlassToast title = BuildToast(root.transform, "TitleToast", new Vector2(0.5f, 1f), new Vector2(0f, -170f), 43f, 40f);
-            GlassToast message = BuildToast(root.transform, "MessageToast", new Vector2(0.5f, 0.5f), Vector2.zero, 58f, 52f);
-            GlassPauseMenu pause = BuildPauseMenu(root.transform);
-            GlassCompleteCard complete = BuildCompleteCard(root.transform);
+            GlassHud hud = BuildHud(overlay.transform, liquid.transform);
+            GlassToast title = BuildToast(overlay.transform, "TitleToast", new Vector2(0.5f, 1f), new Vector2(0f, -170f), 43f, 40f);
+            GlassToast message = BuildToast(overlay.transform, "MessageToast", new Vector2(0.5f, 0.5f), Vector2.zero, 58f, 52f);
+            GlassPauseMenu pause = BuildPauseMenu(liquid.transform);
+            GlassCompleteCard complete = BuildCompleteCard(liquid.transform);
 
-            // Overlays start hidden, as their components hide them on Awake; this keeps the prefab readable.
-            foreach (Component overlay in new Component[] { title, message, pause, complete })
+            // Toasts start hidden, as their components hide them on Awake; this keeps the prefab readable.
+            foreach (Component toast in new Component[] { title, message })
             {
-                var group = overlay.GetComponent<CanvasGroup>();
+                var group = toast.GetComponent<CanvasGroup>();
                 group.alpha = 0f;
                 group.interactable = group.blocksRaycasts = false;
             }
 
             var ui = root.AddComponent<GlassUI>();
-            Wire(ui, ("hud", hud), ("titleToast", title), ("messageToast", message), ("pauseMenu", pause), ("completeCard", complete));
+            Wire(ui, ("overlayCanvas", overlay), ("liquidCanvas", liquid), ("hud", hud), ("titleToast", title), ("messageToast", message),
+                ("pauseMenu", pause), ("completeCard", complete));
 
             Directory.CreateDirectory(Path.GetDirectoryName(PrefabPath));
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
@@ -95,11 +98,25 @@ namespace BounJam.EditorTools
             Debug.Log($"Glass UI built: {PrefabPath}");
         }
 
+        static Canvas MakeCanvas(string name, Transform parent, RenderMode mode, int sorting)
+        {
+            RectTransform rect = Node(name, parent, typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            var canvas = rect.GetComponent<Canvas>();
+            canvas.renderMode = mode;
+            canvas.sortingOrder = sorting;
+            canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
+            var scaler = rect.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.matchWidthOrHeight = 0.5f;
+            return canvas;
+        }
+
         // ---------------------------------------------------------------- HUD
 
-        static GlassHud BuildHud(Transform parent)
+        static GlassHud BuildHud(Transform overlay, Transform liquid)
         {
-            RectTransform hudRoot = Node("HUD", parent, typeof(CanvasGroup));
+            RectTransform hudRoot = Node("HUD", overlay, typeof(CanvasGroup));
             Stretch(hudRoot);
             var hud = hudRoot.gameObject.AddComponent<GlassHud>();
 
@@ -146,50 +163,40 @@ namespace BounJam.EditorTools
             fillBubbles.offsetMax = new Vector2(-6f, 0f);
             Particles(fillBubbles, LiquidPreset.BarBubbles);
 
-            // Pause button, top right.
-            RectTransform pauseRect = Node("PauseButton", hudRoot);
-            Place(pauseRect, new Vector2(1f, 1f), new Vector2(-48f, -43f), new Vector2(86f, 86f));
-            Button pauseButton = MakeButton(Glass(pauseRect, 43f));
-            Icon(pauseRect, "pause", 31f, Ink);
-            Liquid(pauseButton);
-
-            // Form switch, bottom centre: the glass lens flows under the active form like a drop.
-            RectTransform formSwitch = Node("FormSwitch", hudRoot);
-            Place(formSwitch, new Vector2(0.5f, 0f), new Vector2(0f, 100f), new Vector2(504f, 91f));
-            Glass(formSwitch, 45.5f);
-            RectTransform lens = Node("Lens", formSwitch);
-            Place(lens, new Vector2(0.5f, 0.5f), new Vector2(-122.5f, 0f), new Vector2(245f, 77f));
-            GlassGraphic lensGlass = Glass(lens, 38.5f, LensTint, 0.55f, 0.25f, 0.35f);
-            lensGlass.color = LensTint;
-            (RectTransform liquidSide, Graphic liquidIcon, Graphic liquidText) = FormSide(formSwitch, "Liquid", "drop_outline", -122.5f);
-            (RectTransform solidSide, Graphic solidIcon, Graphic solidText) = FormSide(formSwitch, "Solid", "crystal", 122.5f);
-            var formFlow = formSwitch.gameObject.AddComponent<UILiquidSegmented>();
-            formFlow.indicator = lens;
-            formFlow.options = new[] { liquidSide, solidSide };
-
             RectTransform hint = Node("Hint", hudRoot);
-            Place(hint, new Vector2(0.5f, 0f), new Vector2(0f, 48f), Vector2.zero);
+            Place(hint, new Vector2(0.5f, 0f), new Vector2(0f, 44f), Vector2.zero);
             Glass(hint, 17f, Color.white, 0.32f, 0.12f);
             Row(hint, 0f, new RectOffset(17, 17, 7, 8), TextAnchor.MiddleCenter);
             Fit(hint, true, true);
             TMP_Text hintLabel = Label(hint, "Text", "E  ·  switch form", body, 17f, Muted);
 
-            Wire(hud, ("group", hudRoot.GetComponent<CanvasGroup>()), ("levelKicker", levelKicker), ("levelLabel", levelLabel), ("cargoPill", cargo.gameObject),
-                ("cargoIcon", cargoIcon), ("cargoCount", count), ("cargoFill", fill), ("formSwitch", formFlow), ("formHint", hintLabel),
-                ("pauseButton", pauseButton));
-            WireArray(hud, "liquidParts", liquidIcon, liquidText);
-            WireArray(hud, "solidParts", solidIcon, solidText);
-            return hud;
-        }
+            // The 3D half: liquid pause button, top right, and the Liquid / Solid switch, bottom centre.
+            RectTransform liquidRoot = Node("HUD3D", liquid, typeof(CanvasGroup));
+            Stretch(liquidRoot);
 
-        static (RectTransform side, Graphic icon, Graphic label) FormSide(RectTransform formSwitch, string name, string icon, float x)
-        {
-            RectTransform side = Node(name, formSwitch);
-            Place(side, new Vector2(0.5f, 0.5f), new Vector2(x, 0f), new Vector2(245f, 77f));
-            Row(side, 12f, new RectOffset(), TextAnchor.MiddleCenter);
-            Image image = Icon(side, icon, 28f, Ink);
-            TMP_Text label = Label(side, "Label", name, body, 24f, Ink);
-            return (side, image, label);
+            RectTransform pauseRect = Node("PauseButton", liquidRoot);
+            Place(pauseRect, new Vector2(1f, 1f), new Vector2(-48f, -43f), new Vector2(90f, 90f));
+            Button pauseButton = LiquidButton(pauseRect, null, "pause", 1);
+
+            RectTransform switchRect = Node("FormSwitch", liquidRoot);
+            Place(switchRect, new Vector2(0.5f, 0f), new Vector2(0f, 96f), new Vector2(400f, 100f));
+            switchRect.gameObject.AddComponent<LiquidRaycastTarget>();
+            var switchSlab = switchRect.gameObject.AddComponent<LiquidSlab>();
+            switchSlab.colors = LiquidPalette.Turquoise;
+            switchSlab.glassMilk = new Color(0.035f, 0.06f, 0.08f, 0f);
+            switchSlab.glassTint = SmokedGlass;
+            switchSlab.refraction = 0.026f;
+            switchSlab.iridescence = 0.4f;
+            switchSlab.sortingOffset = 2;
+            var formSwitch = switchRect.gameObject.AddComponent<LiquidToggle>();
+            formSwitch.liquidLabel = Led(switchRect, "Liquid", "Liquid", body, 30f, new Vector2(-92f, 0f), new Vector2(180f, 80f));
+            formSwitch.solidLabel = Led(switchRect, "Solid", "Solid", body, 30f, new Vector2(92f, 0f), new Vector2(180f, 80f));
+            switchSlab.FindLabels();
+
+            Wire(hud, ("group", hudRoot.GetComponent<CanvasGroup>()), ("liquidGroup", liquidRoot.GetComponent<CanvasGroup>()),
+                ("levelKicker", levelKicker), ("levelLabel", levelLabel), ("cargoPill", cargo.gameObject), ("cargoIcon", cargoIcon),
+                ("cargoCount", count), ("cargoFill", fill), ("formSwitch", formSwitch), ("formHint", hintLabel), ("pauseButton", pauseButton));
+            return hud;
         }
 
         static GlassToast BuildToast(Transform parent, string name, Vector2 anchor, Vector2 position, float fontSize, float radius)
@@ -213,90 +220,65 @@ namespace BounJam.EditorTools
         {
             RectTransform menuRoot = Node("PauseMenu", parent, typeof(CanvasGroup));
             Stretch(menuRoot);
-            RectTransform backdrop = Node("Backdrop", menuRoot);
-            Stretch(backdrop);
-            GlassGraphic dim = Glass(backdrop, 0f, new Color(0.024f, 0.11f, 0.19f), 0.4f, 0f, 0.6f, 0f);
-            dim.raycastTarget = true;
+            Image backdrop = Backdrop(menuRoot, new Color(0.016f, 0.07f, 0.11f, 0.55f));
+            RectTransform tilt = Tilt(menuRoot);
 
-            RectTransform panel = Node("Panel", menuRoot);
-            Place(panel, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(672f, 0f));
-            Glass(panel, 48f, Color.white, 0.42f, 0.35f);
-            Column(panel, 34f, TextAnchor.UpperLeft, new RectOffset(48, 48, 48, 48), true);
-            Fit(panel, false, true);
-            Jelly(panel);
-            // Bubbles rise behind the contents, inside the glass; drops gather on its bottom edge and fall.
-            RectTransform bubbles = Overlay(panel, "Bubbles");
-            Stretch(bubbles);
-            bubbles.offsetMin = new Vector2(30f, 30f);
-            bubbles.offsetMax = new Vector2(-30f, -30f);
-            bubbles.gameObject.AddComponent<RectMask2D>();
-            RectTransform bubbleArea = Node("Emitter", bubbles);
-            Stretch(bubbleArea);
-            Particles(bubbleArea, LiquidPreset.AmbientBubbles);
-            RectTransform drip = Overlay(panel, "Drip");
-            drip.anchorMin = new Vector2(0f, 0f);
-            drip.anchorMax = new Vector2(1f, 0f);
-            drip.pivot = new Vector2(0.5f, 0f);
-            drip.sizeDelta = new Vector2(-2f * 70f, 0f);
-            Particles(drip, LiquidPreset.Drip);
+            RectTransform panelRect = Node("Panel", tilt);
+            Place(panelRect, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(560f, 700f));
+            LiquidSlab panel = GlassPanel(panelRect);
 
-            RectTransform header = Node("Header", panel);
-            Row(header, 22f, new RectOffset(), TextAnchor.MiddleLeft);
-            RectTransform disc = Node("Disc", header);
-            Solid(disc, 36f, Ink);
-            Size(disc, 72f, 72f);
-            Icon(disc, "pause", 26f, Color.white);
-            RectTransform titles = Node("Titles", header);
-            Column(titles, 6f, TextAnchor.MiddleLeft);
-            Label(titles, "Title", "Paused", display, 48f, Ink);
-            TMP_Text subtitle = Label(titles, "Subtitle", "Level", body, 19f, Muted);
+            TMP_Text title = Led(panelRect, "Title", "Paused", display, 52f, new Vector2(0f, 280f), new Vector2(520f, 66f));
+            TMP_Text subtitle = Led(panelRect, "Subtitle", "Level", body, 20f, new Vector2(0f, 234f), new Vector2(520f, 32f), 0.6f);
 
-            RectTransform buttons = Node("Buttons", panel);
-            Column(buttons, 14f, TextAnchor.UpperLeft, new RectOffset(), true);
-            Button resume = MenuButton(buttons, "Resume", "play", true);
-            Button restart = MenuButton(buttons, "Restart level", "restart", false);
-            Button quit = MenuButton(buttons, "Quit game", "exit", false);
+            var size = new Vector2(450f, 96f);
+            Button resume = LiquidButton(ButtonNode(panelRect, "Resume", new Vector2(0f, 120f), size), "Resume", "play", 0);
+            Button restart = LiquidButton(ButtonNode(panelRect, "Restart level", Vector2.zero, size), "Restart level", "restart", 1);
+            Button quit = LiquidButton(ButtonNode(panelRect, "Quit game", new Vector2(0f, -120f), size), "Quit game", "exit", 2);
 
-            RectTransform settings = Node("Settings", panel);
-            Solid(settings, 31f, new Color(1f, 1f, 1f, 0.26f), 0.6f);
-            Column(settings, 14f, TextAnchor.UpperLeft, new RectOffset(26, 26, 24, 26), true);
-            RectTransform volumeRow = Node("VolumeRow", settings);
-            Row(volumeRow, 12f, new RectOffset(), TextAnchor.MiddleLeft);
-            Icon(volumeRow, "volume", 26f, Ink);
-            TMP_Text volumeName = Label(volumeRow, "Name", "Volume", body, 20f, Ink);
-            volumeName.GetComponent<LayoutElement>().flexibleWidth = 1f;
-            TMP_Text volumeValue = Label(volumeRow, "Value", "100%", body, 20f, Teal, TextAlignmentOptions.Right);
-            Slider volume = MakeSlider(settings);
+            TMP_Text volumeName = Led(panelRect, "VolumeName", "Volume", body, 22f, new Vector2(-115f, -226f), new Vector2(220f, 34f), 0.85f,
+                TextAlignmentOptions.Left);
+            TMP_Text volumeValue = Led(panelRect, "VolumeValue", "100%", body, 22f, new Vector2(115f, -226f), new Vector2(220f, 34f), 0.85f,
+                TextAlignmentOptions.Right);
+            (Slider volume, Graphic[] sliderParts) = MakeSlider(panelRect, new Vector2(0f, -274f), new Vector2(450f, 36f), panel);
+
+            // The slider has its own canvas (it would sort apart as labels), so the panel's labels are set here.
+            var labels = new List<Graphic> { title, subtitle, volumeName, volumeValue };
+            panel.autoFindLabels = false;
+            panel.labels = labels;
+            LiquidPanel3D glass = Panel3D(panel);
+            glass.fadeWith = new List<Graphic>(labels);
+            glass.fadeWith.AddRange(sliderParts);
+            panelRect.gameObject.SetActive(false);
 
             var menu = menuRoot.gameObject.AddComponent<GlassPauseMenu>();
-            Wire(menu, ("subtitle", subtitle), ("resumeButton", resume), ("restartButton", restart), ("quitButton", quit),
-                ("volume", volume), ("volumeValue", volumeValue));
+            Wire(menu, ("panel", glass), ("backdrop", backdrop), ("subtitle", subtitle), ("resumeButton", resume), ("restartButton", restart),
+                ("quitButton", quit), ("volume", volume), ("volumeValue", volumeValue));
             return menu;
         }
 
-        static Button MenuButton(Transform parent, string text, string icon, bool primary)
+        /// <summary>
+        /// The volume slider, built from flat shapes in front of a glass panel. It has a canvas of its own, drawn after
+        /// the panel, so its parts keep their order; it is set just in front of the panel's face.
+        /// </summary>
+        static (Slider slider, Graphic[] parts) MakeSlider(RectTransform parent, Vector2 position, Vector2 size, LiquidSlab panel)
         {
-            RectTransform rect = Node(text, parent);
-            Size(rect, -1f, 77f);
-            Button button = MakeButton(Solid(rect, 26f, primary ? PrimaryFill : SecondaryFill, 0.85f, primary ? 0.2f : 0.1f));
-            Row(rect, 17f, new RectOffset(26, 26, 0, 0), TextAnchor.MiddleLeft);
-            Icon(rect, icon, 26f, Ink);
-            Label(rect, "Label", text, body, 24f, Ink);
-            Liquid(button, 3, 1.6f, 150f);
-            return button;
-        }
-
-        static Slider MakeSlider(Transform parent)
-        {
-            RectTransform rect = Node("VolumeSlider", parent);
-            Size(rect, -1f, 36f);
+            RectTransform rect = Node("VolumeSlider", parent, typeof(Canvas), typeof(GraphicRaycaster));
+            Place(rect, new Vector2(0.5f, 0.5f), position, size);
+            rect.anchoredPosition3D = new Vector3(position.x, position.y, -(panel.HalfThickness + 6f));
+            var canvas = rect.GetComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = LiquidSorting + 2;
+            // A nested canvas doesn't take the root's channels, and GlassGraphic packs its shape into them.
+            canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
             var slider = rect.gameObject.AddComponent<Slider>();
 
             RectTransform background = Node("Background", rect);
             background.anchorMin = new Vector2(0f, 0.5f);
             background.anchorMax = new Vector2(1f, 0.5f);
             background.sizeDelta = new Vector2(0f, 17f);
-            Solid(background, 8.5f, TrackFill, 0.4f);
+            GlassGraphic track = Solid(background, 8.5f, LiquidTrack, 0.4f);
+            // A click anywhere on the bar jumps the knob there, not only a drag of the knob.
+            track.raycastTarget = true;
 
             RectTransform fillArea = Node("Fill Area", rect);
             fillArea.anchorMin = new Vector2(0f, 0.5f);
@@ -306,7 +288,7 @@ namespace BounJam.EditorTools
             Stretch(fill);
             fill.offsetMin = new Vector2(-18f, 0f);
             fill.offsetMax = new Vector2(18f, 0f);
-            Solid(fill, 8.5f, Mint);
+            GlassGraphic fillShape = Solid(fill, 8.5f, LiquidPalette.Turquoise.rim);
 
             RectTransform slideArea = Node("Handle Slide Area", rect);
             Stretch(slideArea);
@@ -329,7 +311,7 @@ namespace BounJam.EditorTools
             slider.maxValue = 1f;
             slider.value = 1f;
             slider.colors = Tints();
-            return slider;
+            return (slider, new Graphic[] { track, fillShape, knob });
         }
 
         // ---------------------------------------------------------------- Level complete
@@ -338,36 +320,35 @@ namespace BounJam.EditorTools
         {
             RectTransform cardRoot = Node("CompleteCard", parent, typeof(CanvasGroup));
             Stretch(cardRoot);
-            RectTransform wash = Node("Wash", cardRoot);
-            Stretch(wash);
-            GlassGraphic washGlass = Glass(wash, 0f, new Color(0.47f, 0.86f, 0.9f), 0.2f, 0f, 0.35f, 0f);
-            washGlass.raycastTarget = true;
+            Image wash = Backdrop(cardRoot, new Color(0.05f, 0.3f, 0.34f, 0.4f));
             // The celebration rain falls here, over the wash and behind the card.
             RectTransform rain = Node("Rain", cardRoot);
             Stretch(rain);
+            RectTransform tilt = Tilt(cardRoot);
 
-            RectTransform card = Node("Card", cardRoot);
-            Place(card, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(768f, 0f));
-            Glass(card, 58f, Color.white, 0.44f, 0.32f);
-            Column(card, 26f, TextAnchor.UpperCenter, new RectOffset(58, 58, 53, 53), true);
-            Fit(card, false, true);
-            Jelly(card);
+            RectTransform cardRect = Node("Card", tilt);
+            Place(cardRect, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(700f, 560f));
+            LiquidSlab card = GlassPanel(cardRect);
 
-            Image badge = Icon(card, "drop", 0f, Aqua);
+            Image badge = Icon(cardRect, "drop", 0f, Aqua);
             badge.preserveAspect = true;
-            Size(badge.rectTransform, -1f, 115f);
-            TMP_Text kicker = Kicker(card, "Level", 17f, TextAlignmentOptions.Center);
-            TMP_Text title = Label(card, "Title", "Delivered!", display, 67f, Ink, TextAlignmentOptions.Center);
+            Place(badge.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 200f), new Vector2(100f, 100f));
+            FrontCanvas(badge);
+            TMP_Text kicker = Led(cardRect, "Kicker", "LEVEL", body, 18f, new Vector2(0f, 134f), new Vector2(640f, 30f), 0.6f);
+            kicker.characterSpacing = 12f;
+            TMP_Text title = Led(cardRect, "Title", "Delivered!", display, 64f, new Vector2(0f, 78f), new Vector2(660f, 84f));
 
-            RectTransform stats = Node("Stats", card);
-            Row(stats, 17f, new RectOffset(), TextAnchor.MiddleCenter, true);
-            (_, TMP_Text timeValue) = StatTile(stats, "Time", "00:00");
-            (RectTransform cargoTile, TMP_Text cargoValue) = StatTile(stats, "Cargo", "0 / 0");
+            TMP_Text timeValue = Led(cardRect, "TimeValue", "00:00", display, 42f, new Vector2(-110f, -6f), new Vector2(200f, 52f));
+            TMP_Text timeName = Led(cardRect, "TimeName", "Time", body, 19f, new Vector2(-110f, -48f), new Vector2(200f, 28f), 0.6f);
+            TMP_Text cargoValue = Led(cardRect, "CargoValue", "0 / 0", display, 42f, new Vector2(110f, -6f), new Vector2(200f, 52f));
+            TMP_Text cargoName = Led(cardRect, "CargoName", "Cargo", body, 19f, new Vector2(110f, -48f), new Vector2(200f, 28f), 0.6f);
 
-            RectTransform buttons = Node("Buttons", card);
-            Row(buttons, 17f, new RectOffset(), TextAnchor.MiddleCenter, true);
-            Button replay = PillButton(buttons, "Replay", "restart", false, 1f);
-            Button next = PillButton(buttons, "Next level", "arrow", true, 1.4f);
+            Button replay = LiquidButton(ButtonNode(cardRect, "Replay", new Vector2(-160f, -172f), new Vector2(260f, 96f)), "Replay", "restart", 1);
+            Button next = LiquidButton(ButtonNode(cardRect, "Next level", new Vector2(165f, -172f), new Vector2(310f, 96f)), "Next level", "arrow", 0,
+                iconRight: true);
+            card.FindLabels();
+            Panel3D(card);
+            cardRect.gameObject.SetActive(false);
 
             // As the card lands the badge splashes and droplets rain down; GlassCompleteCard starts it.
             var celebration = cardRoot.gameObject.AddComponent<UILiquidSequence>();
@@ -377,42 +358,126 @@ namespace BounJam.EditorTools
             celebration.playOnEnable = false;
 
             var component = cardRoot.gameObject.AddComponent<GlassCompleteCard>();
-            Wire(component, ("kicker", kicker), ("title", title), ("timeValue", timeValue), ("cargoTile", cargoTile.gameObject),
-                ("cargoValue", cargoValue), ("replayButton", replay), ("nextButton", next),
-                ("nextLabel", next.transform.Find("Label").GetComponent<TMP_Text>()), ("card", card), ("celebration", celebration));
+            Wire(component, ("panel", cardRect.GetComponent<LiquidPanel3D>()), ("wash", wash), ("kicker", kicker), ("title", title),
+                ("timeValue", timeValue), ("timeName", timeName), ("cargoValue", cargoValue), ("cargoName", cargoName),
+                ("replayButton", replay), ("nextButton", next), ("nextLabel", next.transform.Find("Label").GetComponent<TMP_Text>()),
+                ("celebration", celebration));
             return component;
         }
 
-        static (RectTransform tile, TMP_Text value) StatTile(Transform parent, string name, string value)
+        // ---------------------------------------------------------------- 3D liquid blocks
+
+        /// <summary>Full-screen tint behind a 3D panel; it catches the clicks that miss the panel.</summary>
+        static Image Backdrop(RectTransform parent, Color color)
         {
-            RectTransform tile = Node(name, parent);
-            Solid(tile, 29f, new Color(1f, 1f, 1f, 0.3f), 0.7f);
-            Column(tile, 7f, TextAnchor.MiddleCenter, new RectOffset(12, 12, 22, 22), true);
-            Size(tile, 1f, -1f).flexibleWidth = 1f;
-            TMP_Text valueText = Label(tile, "Value", value, display, 36f, Ink, TextAlignmentOptions.Center);
-            Label(tile, "Name", name, body, 18f, Muted, TextAlignmentOptions.Center);
-            return (tile, valueText);
+            RectTransform rect = Node("Backdrop", parent);
+            Stretch(rect);
+            var image = rect.gameObject.AddComponent<Image>();
+            image.color = color;
+            return image;
         }
 
-        static Button PillButton(Transform parent, string text, string icon, bool primary, float weight)
+        /// <summary>Leans what it holds back a little, so the camera sees the thick undersides of the buttons.</summary>
+        static RectTransform Tilt(RectTransform parent)
         {
-            RectTransform rect = Node(text, parent);
-            LayoutElement size = Size(rect, 1f, 82f);
-            size.flexibleWidth = weight;
-            Button button = MakeButton(Solid(rect, 41f, primary ? PrimaryFill : SecondaryFill, 0.85f, primary ? 0.22f : 0.12f));
-            Row(rect, 14f, new RectOffset(24, 24, 0, 0), TextAnchor.MiddleCenter);
-            if (primary)
-            {
-                Label(rect, "Label", text, body, 25f, Ink);
-                Icon(rect, icon, 26f, Ink);
-            }
-            else
-            {
-                Icon(rect, icon, 26f, Ink);
-                Label(rect, "Label", text, body, 25f, Ink);
-            }
-            Liquid(button, 3, 1.2f, 120f);
+            RectTransform rect = Node("Tilt", parent);
+            Stretch(rect);
+            rect.gameObject.AddComponent<LiquidViewTilt>();
+            return rect;
+        }
+
+        /// <summary>A thick pane of frosted glass that pours in and drains away (<see cref="Panel3D"/>).</summary>
+        static LiquidSlab GlassPanel(RectTransform rect)
+        {
+            var panel = rect.gameObject.AddComponent<LiquidSlab>();
+            panel.shape = LiquidSlab.SlabShape.Rounded;
+            panel.cornerRadius = 62f;
+            panel.edgeRadius = 20f;
+            panel.thickness = 20f;
+            panel.glass = true;
+            panel.frost = 0.82f;
+            panel.refraction = 0.012f;
+            panel.iridescence = 0.55f;
+            panel.glassMilk = LiquidPalette.GlassMilk;
+            // Smoked, so the white LED text reads over the bright levels.
+            panel.glassTint = SmokedGlass;
+            panel.colors = new LiquidColors(LiquidPalette.GlassRim, LiquidPalette.GlassRim, Vector3.zero);
+            panel.simRows = 170;
+            panel.sortingOffset = 1;
+            panel.alive = false;
+            // A panel that lifted on hover would move its face past the slider in front of it.
+            panel.interactive = false;
+            return panel;
+        }
+
+        static LiquidPanel3D Panel3D(LiquidSlab panel)
+        {
+            var glass = panel.gameObject.AddComponent<LiquidPanel3D>();
+            glass.showOnEnable = false;
+            glass.deactivateOnHide = true;
+            return glass;
+        }
+
+        static RectTransform ButtonNode(RectTransform parent, string name, Vector2 position, Vector2 size)
+        {
+            RectTransform rect = Node(name, parent);
+            Place(rect, new Vector2(0.5f, 0.5f), position, size);
+            return rect;
+        }
+
+        /// <summary>
+        /// Makes the rect a thick 3D liquid button (colour <see cref="LiquidPalette.ForIndex"/>) with a white LED label
+        /// and icon. A button without a label shows the icon in the middle.
+        /// </summary>
+        static Button LiquidButton(RectTransform rect, string text, string icon, int colour, bool iconRight = false)
+        {
+            var target = rect.gameObject.AddComponent<LiquidRaycastTarget>();
+            var slab = rect.gameObject.AddComponent<LiquidSlab>();
+            slab.colors = LiquidPalette.ForIndex(colour);
+            slab.sortingOffset = 2;
+            var button = rect.gameObject.AddComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.targetGraphic = target;
+            rect.gameObject.AddComponent<LiquidButtonFocus>();
+
+            Vector2 size = rect.sizeDelta;
+            float iconX = text == null ? 0f : (size.x * 0.5f - 52f) * (iconRight ? 1f : -1f);
+            Image image = Icon(rect, icon, 0f, Color.white);
+            Place(image.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(iconX, 0f), new Vector2(30f, 30f));
+            FrontCanvas(image);
+            if (text != null) Led(rect, "Label", text, body, 31f, Vector2.zero, size - new Vector2(20f, 10f));
+            slab.FindLabels();
             return button;
+        }
+
+        /// <summary>
+        /// White text that reads like an LED inside the liquid (<see cref="LiquidLEDLabel"/>); it goes over 1, so the
+        /// bloom gives it a soft glow. It sits on a slab, as a direct child, with its own canvas to draw after it.
+        /// </summary>
+        static TMP_Text Led(RectTransform parent, string name, string text, TMP_FontAsset font, float size, Vector2 position, Vector2 box,
+            float alpha = 1f, TextAlignmentOptions align = TextAlignmentOptions.Center)
+        {
+            RectTransform rect = Node(name, parent);
+            Place(rect, new Vector2(0.5f, 0.5f), position, box);
+            var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
+            label.font = font;
+            label.fontSize = size;
+            label.fontStyle = FontStyles.Bold;
+            label.color = new Color(1f, 1f, 1f, alpha);
+            label.alignment = align;
+            label.text = text;
+            label.textWrappingMode = TextWrappingModes.NoWrap;
+            label.raycastTarget = false;
+            FrontCanvas(label);
+            rect.gameObject.AddComponent<LiquidLEDLabel>();
+            return label;
+        }
+
+        static void FrontCanvas(Graphic graphic)
+        {
+            var canvas = graphic.gameObject.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = LiquidSorting + 3;
         }
 
         // ---------------------------------------------------------------- Building blocks
@@ -500,45 +565,6 @@ namespace BounJam.EditorTools
             GlassGraphic solid = Glass(rect, radius, fill, 0f, shadow, 1f, highlight);
             solid.ShapeMode = GlassGraphic.Mode.Solid;
             return solid;
-        }
-
-        static Button MakeButton(Graphic target)
-        {
-            target.raycastTarget = true;
-            var button = target.gameObject.AddComponent<Button>();
-            button.targetGraphic = target;
-            button.colors = Tints();
-            return button;
-        }
-
-        /// <summary>
-        /// Makes a button a drop of liquid glass: it swells towards the pointer, squashes, ripples and splashes when
-        /// pressed. A GlassGraphic is one quad, so wide buttons need more subdivisions and a broader bulge and ripple
-        /// for the bend to stay smooth.
-        /// </summary>
-        static void Liquid(Button button, int subdivisions = 2, float bulgeRadius = 0.6f, float rippleWavelength = 70f)
-        {
-            var jelly = button.gameObject.AddComponent<UILiquidJelly>();
-            jelly.subdivisions = subdivisions;
-            jelly.bulgeRadius = bulgeRadius;
-            jelly.rippleWavelength = rippleWavelength;
-            button.gameObject.AddComponent<UILiquidInteractable>().jelly = jelly;
-        }
-
-        /// <summary>A big glass panel whose outline slowly waves.</summary>
-        static void Jelly(RectTransform panel)
-        {
-            var jelly = panel.gameObject.AddComponent<UILiquidJelly>();
-            jelly.subdivisions = 3;
-            jelly.idleWave = 1.5f;
-        }
-
-        /// <summary>A child the parent's layout group leaves alone, for effects laid over a panel.</summary>
-        static RectTransform Overlay(RectTransform parent, string name)
-        {
-            RectTransform rect = Node(name, parent, typeof(LayoutElement));
-            rect.GetComponent<LayoutElement>().ignoreLayout = true;
-            return rect;
         }
 
         static UILiquidParticles Particles(RectTransform area, LiquidPreset preset)
@@ -664,15 +690,6 @@ namespace BounJam.EditorTools
             var serialized = new SerializedObject(target);
             foreach ((string field, Object value) in references)
                 serialized.FindProperty(field).objectReferenceValue = value;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        static void WireArray(Object target, string field, params Object[] values)
-        {
-            var serialized = new SerializedObject(target);
-            SerializedProperty array = serialized.FindProperty(field);
-            array.arraySize = values.Length;
-            for (int i = 0; i < values.Length; i++) array.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 

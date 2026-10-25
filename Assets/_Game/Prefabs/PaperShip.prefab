@@ -186,7 +186,6 @@ MonoBehaviour:
       Data4: 176298283
     Path: event:/Water_Splash
   minTimeOut: 0.15
-  minAirTime: 0.25
   dropEvent:
     Guid:
       Data1: -831967039

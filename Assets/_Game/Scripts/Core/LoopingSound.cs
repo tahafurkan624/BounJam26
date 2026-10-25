@@ -7,7 +7,9 @@ namespace BounJam
     /// <summary>
     /// An FMOD event kept going while it's wanted and faded out once it isn't, 3D and following a transform. An event
     /// built without a loop in FMOD Studio is started again each time it ends while still wanted. Asking for it again
-    /// while it fades brings it straight back. The owner calls <see cref="Tick"/> every frame and <see cref="Release"/>
+    /// while it fades brings it straight back. Given an ending parameter, it doesn't fade: stopping sets that parameter
+    /// to 1 and lets the event play its ending and stop by itself; asking for it again before the ending is over cuts
+    /// the ending and starts a fresh event. The owner calls <see cref="Tick"/> every frame and <see cref="Release"/>
     /// when it's disabled.
     /// </summary>
     public class LoopingSound
@@ -18,16 +20,20 @@ namespace BounJam
         readonly float fadeOut;
         readonly string parameter;
         readonly string label;
+        readonly string endParameter;
         EventInstance instance;
+        EventInstance ending; // the last instance let go of, which may still be playing its ending
         bool wanted;
         float volume;
 
         /// <summary>
         /// <paramref name="parameter"/> and <paramref name="label"/>, when given, are set on the event before it starts.
+        /// <paramref name="endParameter"/>, when given, is set to 1 on stopping to play the event's ending.
         /// </summary>
         public LoopingSound(EventReference sound, Transform follow, float fadeOut, Rigidbody body = null,
-                            string parameter = null, string label = null)
+                            string parameter = null, string label = null, string endParameter = null)
         {
+            this.endParameter = endParameter;
             this.sound = sound;
             this.follow = follow;
             this.body = body;
@@ -51,6 +57,7 @@ namespace BounJam
                 return;
             }
             if (sound.IsNull) return;
+            StopEnding(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
             instance = RuntimeManager.CreateInstance(sound);
             if (body != null) RuntimeManager.AttachInstanceToGameObject(instance, follow.gameObject, body);
             else RuntimeManager.AttachInstanceToGameObject(instance, follow.gameObject);
@@ -58,7 +65,16 @@ namespace BounJam
             instance.start();
         }
 
-        public void Stop() => wanted = false;
+        public void Stop()
+        {
+            wanted = false;
+            if (endParameter == null || !instance.isValid()) return;
+            // On to the ending. Released, so FMOD frees the instance once the ending has played.
+            instance.setParameterByName(endParameter, 1f);
+            instance.release();
+            ending = instance;
+            instance.clearHandle();
+        }
 
         public void Tick(float deltaTime)
         {
@@ -78,10 +94,18 @@ namespace BounJam
         public void Release()
         {
             wanted = false;
+            StopEnding(FMOD.Studio.STOP_MODE.IMMEDIATE);
             if (!instance.isValid()) return;
             instance.stop(FMOD.Studio.STOP_MODE.IMMEDIATE);
             instance.release();
             instance.clearHandle();
+        }
+
+        // Already released, so stopping it is all it needs.
+        void StopEnding(FMOD.Studio.STOP_MODE mode)
+        {
+            if (ending.isValid()) ending.stop(mode);
+            ending.clearHandle();
         }
     }
 }

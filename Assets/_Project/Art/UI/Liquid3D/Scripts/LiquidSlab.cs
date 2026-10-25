@@ -339,6 +339,9 @@ namespace BlobShip.UI.Liquid3D
 
             if (Application.isPlaying)
             {
+                // interactive changes after OnEnable (LiquidPanel3D turns it off to drain, on again after the next pour)
+                if (_ownGraphic != null && _ownGraphic.raycastTarget != interactive) _ownGraphic.raycastTarget = interactive;
+
                 // springs: hover lift, press squash
                 const float kS = 260f, kD = 12f;
                 float h = dt / 4f;
@@ -382,7 +385,8 @@ namespace BlobShip.UI.Liquid3D
             _body.transform.localRotation = Quaternion.identity;
             _body.transform.localScale = new Vector3(1f + s * 0.06f + _lift * 0.012f, 1f + s * 0.1f + _lift * 0.012f, Mathf.Max(0.3f, 1f - s * 0.9f));
             if (!Application.isPlaying) return;
-            float front = FrontZ - 0.02f * u;
+            // clear of the ripples: a frozen wave can bulge the face ~0.06 units forward and cut into the text
+            float front = FrontZ - 0.08f * u;
             foreach (var l in labels)
             {
                 if (l == null) continue;
