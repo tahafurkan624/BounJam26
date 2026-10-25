@@ -220,7 +220,8 @@ namespace BounJam.EditorTools
         {
             RectTransform menuRoot = Node("PauseMenu", parent, typeof(CanvasGroup));
             Stretch(menuRoot);
-            Image backdrop = Backdrop(menuRoot, new Color(0.016f, 0.07f, 0.11f, 0.55f));
+            // Dims the level about as much as the mockup's game backdrop (the UI draws before tone mapping).
+            Image backdrop = Backdrop(menuRoot, new Color(0.12f, 0.16f, 0.2f, 0.86f));
             RectTransform tilt = Tilt(menuRoot);
 
             RectTransform panelRect = Node("Panel", tilt);
@@ -320,7 +321,7 @@ namespace BounJam.EditorTools
         {
             RectTransform cardRoot = Node("CompleteCard", parent, typeof(CanvasGroup));
             Stretch(cardRoot);
-            Image wash = Backdrop(cardRoot, new Color(0.05f, 0.3f, 0.34f, 0.4f));
+            Image wash = Backdrop(cardRoot, new Color(0.1f, 0.17f, 0.2f, 0.84f));
             // The celebration rain falls here, over the wash and behind the card.
             RectTransform rain = Node("Rain", cardRoot);
             Stretch(rain);

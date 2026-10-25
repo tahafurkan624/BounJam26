@@ -17,7 +17,8 @@ namespace BlobShip.UI.Liquid3D
         public Graphic liquidLabel;
         [Tooltip("Label on the solid (right) end.")]
         public Graphic solidLabel;
-        [Range(0f, 1f)] public float inactiveAlpha = 0.35f;
+        // low: the label is an LED brighter than 1, so it still reads clearly faded at this
+        [Range(0f, 1f)] public float inactiveAlpha = 0.2f;
         [Range(0.15f, 0.45f)] public float liquidShare = 0.27f;
         [Tooltip("Also freeze / melt every liquid button (LiquidUI.SetSolid).")]
         public bool driveGlobal = true;
