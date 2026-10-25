@@ -300,6 +300,33 @@ MonoBehaviour:
   MinDistance: 1
   MaxDistance: 20
   Length: 128016
+--- !u!114 &-2506940987037496054
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Tree_Seed
+  m_EditorClassIdentifier: FMODUnityEditor::FMODUnity.EditorEventRef
+  Path: event:/Tree_Seed
+  Guid:
+    Data1: 1030353799
+    Data2: 1112230892
+    Data3: 1483451008
+    Data4: 216296566
+  Banks:
+  - {fileID: 3483725996983891917}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 2500
 --- !u!114 &-1671364863953189786
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -441,13 +468,15 @@ MonoBehaviour:
   - {fileID: -1464543916452838518}
   - {fileID: 714764917075080536}
   - {fileID: -2604214959817360718}
+  - {fileID: -2506940987037496054}
+  - {fileID: 8716494982707952950}
   EditorParameters: []
   MasterBanks:
   - {fileID: 3483725996983891917}
   StringsBanks:
   - {fileID: 4843938439618441920}
   cacheVersion: 131861
-  cacheTime: 639285250843664251
+  cacheTime: 639285337402680240
   SerializableEventsDict:
   - key: event:/Water_Movement
     index: 0
@@ -487,6 +516,10 @@ MonoBehaviour:
     index: 17
   - key: event:/Game_Music
     index: 18
+  - key: event:/Tree_Seed
+    index: 19
+  - key: event:/Tree_Down
+    index: 20
 --- !u!114 &337298539252170236
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -639,7 +672,7 @@ MonoBehaviour:
   Path: FMOD/Desktop/Master.bank
   Name: Master
   StudioPath: bank:/Master
-  lastModified: 639285250843578145
+  lastModified: 639285337402563515
   FileSizes: []
   Exists: 1
 --- !u!114 &4843938439618441920
@@ -657,10 +690,10 @@ MonoBehaviour:
   Path: FMOD/Desktop/Master.strings.bank
   Name: Master.strings
   StudioPath: bank:/Master.strings
-  lastModified: 639285250843664251
+  lastModified: 639285337402680240
   FileSizes:
   - Name: 
-    Value: 1810
+    Value: 1974
   Exists: 1
 --- !u!114 &5195890314009137344
 MonoBehaviour:
@@ -770,6 +803,33 @@ MonoBehaviour:
   - Up
   - Down
   Exists: 1
+--- !u!114 &8716494982707952950
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ceb653cd98e289a4e8697a1af55201f2, type: 3}
+  m_Name: event:/Tree_Down
+  m_EditorClassIdentifier: FMODUnityEditor::FMODUnity.EditorEventRef
+  Path: event:/Tree_Down
+  Guid:
+    Data1: -1620083302
+    Data2: 1216997566
+    Data3: -524837986
+    Data4: 1017957578
+  Banks:
+  - {fileID: 3483725996983891917}
+  IsStream: 0
+  Is3D: 1
+  IsOneShot: 1
+  Parameters: []
+  MinDistance: 1
+  MaxDistance: 20
+  Length: 2804
 --- !u!114 &8839276165074599674
 MonoBehaviour:
   m_ObjectHideFlags: 0
