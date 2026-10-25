@@ -93,6 +93,13 @@ namespace BounJam.EditorTools
             Shaped(Kind.FloorGrate, "Floor Grate", "Water & Hazards", "Hazards", true,
                    "A floor with a grated drain in it: the liquid drips through and is lost; ice, the ship and crates cross. " +
                    "Drag to draw the floor."),
+            new Placeable
+            {
+                Name = "Grate Floor", Category = "Water & Hazards", Group = "Hazards", How = Placement.Click, OnBuildPlane = true,
+                Tooltip = "A 2 m grate on its own, its top on the build height: the liquid drips through, ice, the ship and crates " +
+                          "stand on it. No floor or drain around it: lay it over a gap or water.",
+                Prefab = GrateFloorKit.Prefab, Footprint = GrateFloorKit.Footprint,
+            },
 
             Fixed("Button", "Machines", "Machines", "Pressed by the frozen blob, a crate or the ship. Link it to gates, lifts and magnets.",
                   "Button", t => Button("Button", t, Vector3.zero, CreatePalette()), ButtonBounds),
