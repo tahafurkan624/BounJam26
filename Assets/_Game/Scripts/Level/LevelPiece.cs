@@ -12,12 +12,12 @@ namespace BounJam
     public class LevelPiece : MonoBehaviour
     {
         // New kinds go at the end: scenes keep the kind as its number.
-        public enum Kind { Platform, Wall, Ramp, HotPlate, Water, Pool, Grate, PiercerPipe, FloorGrate }
+        public enum Kind { Platform, Wall, Ramp, HotPlate, Water, Pool, Grate, PiercerPipe, FloorGrate, TopPlatform }
         /// <summary>What a floor or wall is made of: concrete blocks and brick, or tropical log blocks and wood.</summary>
         public enum FloorType { Concrete, Tropical }
 
         [SerializeField] Kind kind;
-        [Tooltip("Width (x), height (y) and length (z), m. Platforms, pools, floor grates and water have their top at the " +
+        [Tooltip("Width (x), height (y) and length (z), m. Platforms, top platforms, pools, floor grates and water have their top at the " +
                  "pivot; everything else stands on the floor at the pivot. Ramps rise toward +Z.")]
         [SerializeField] Vector3 size = new Vector3(6f, 1f, 6f);
         [Tooltip("Platform, pool and floor grate: what the floor is made of, concrete blocks or tropical log blocks. " +

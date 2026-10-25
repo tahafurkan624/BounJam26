@@ -20,6 +20,8 @@ namespace BounJam.EditorTools
         public const string PartsFolder = Folder + "/Parts";
 
         const float PlatformBlockSize = 2f;
+        /// <summary>A top platform block's depth, m: SM_Platform_2x2_Thin, the platform block cut down for upper floors.</summary>
+        public const float TopPlatformThickness = 0.5f;
         // The tropical floor's block, from the LogRamp kit, which brings its log materials along.
         const string TropicalBlockModel = ArtKit.ModelsFolder + "/LogRamp/Models/SM_LogBlock_NoWalls.fbx";
         const string LogMaterials = ArtKit.ModelsFolder + "/LogRamp/Materials";
@@ -70,7 +72,7 @@ namespace BounJam.EditorTools
         {
             GameObject[] parts =
             {
-                Dock, PlatformBlock, TropicalBlock, WallPart, HalfWallPart, WoodWallPart, WoodLog, RampPart, WoodRampPart, PoolWallPart, HotPlatePart, GratePanel,
+                Dock, PlatformBlock, TopPlatformBlock, TropicalBlock, WallPart, HalfWallPart, WoodWallPart, WoodLog, RampPart, WoodRampPart, PoolWallPart, HotPlatePart, GratePanel,
                 FloorGratePanel, DrainWallPart, PipeSegment, PipeHousing, PipeOpening, PipeShipOpening, PipeSaw,
             };
             foreach (Placeable piece in Placeable.All)
@@ -110,6 +112,19 @@ namespace BounJam.EditorTools
             block.SetParent(t, true);
             block.name = "Platform Block";
             Object.DestroyImmediate(platform);
+        });
+
+        /// <summary>
+        /// One 2 m top platform block, the platform block only <see cref="TopPlatformThickness"/> deep, its pivot at the
+        /// top centre; only seen, the top platform holds the collider.
+        /// </summary>
+        static GameObject TopPlatformBlock => Part("Top Platform", t =>
+        {
+            if (ArtKit.ThinPlatformBlock("Top Platform", t) != null) return;
+            // No model: a greybox stands in, its collider left to the top platform.
+            var box = Box("Top Platform", t, new Vector3(0f, -TopPlatformThickness * 0.5f, 0f),
+                          new Vector3(PlatformBlockSize, TopPlatformThickness, PlatformBlockSize), CreatePalette().Floor);
+            Object.DestroyImmediate(box.GetComponent<Collider>());
         });
 
         /// <summary>
@@ -307,6 +322,29 @@ namespace BounJam.EditorTools
             bool tropical = floor == LevelPiece.FloorType.Tropical;
             GameObject block = tropical ? TropicalBlock : PlatformBlock;
             Vector3 natural = tropical ? MeshBounds(block).size : Vector3.one * PlatformBlockSize;
+            LayBlocks(root.transform, size, block, natural);
+            return root;
+        }
+
+        /// <summary>
+        /// A solid box at <paramref name="center"/> of <paramref name="size"/> covered in top platform blocks, laid as
+        /// <see cref="Platform"/> lays platform blocks but only <see cref="TopPlatformThickness"/> deep, so an upper floor
+        /// hides as little as it can of the floor under it.
+        /// </summary>
+        public static GameObject TopPlatform(string name, Transform parent, Vector3 center, Vector3 size)
+        {
+            var root = new GameObject(name) { layer = LayerMask.NameToLayer("Environment") };
+            root.transform.SetParent(parent, false);
+            root.transform.localPosition = center;
+            root.AddComponent<BoxCollider>().size = size;
+            LayBlocks(root.transform, size, TopPlatformBlock, new Vector3(PlatformBlockSize, TopPlatformThickness, PlatformBlockSize));
+            return root;
+        }
+
+        // Fills a box of size, centred on root, with copies of block (natural in size, its pivot at the top centre),
+        // stretched a little to fit, tops level with the box top.
+        static void LayBlocks(Transform root, Vector3 size, GameObject block, Vector3 natural)
+        {
             int countX = Mathf.Max(1, Mathf.RoundToInt(size.x / natural.x));
             int countY = Mathf.Max(1, Mathf.RoundToInt(size.y / natural.y));
             int countZ = Mathf.Max(1, Mathf.RoundToInt(size.z / natural.z));
@@ -316,11 +354,10 @@ namespace BounJam.EditorTools
             for (int x = 0; x < countX; x++)
             for (int z = 0; z < countZ; z++)
             {
-                Transform tile = Instance(block, root.transform, $"Block {x},{y},{z}").transform;
+                Transform tile = Instance(block, root, $"Block {x},{y},{z}").transform;
                 tile.localPosition = corner + new Vector3((x + 0.5f) * step.x, -y * step.y, (z + 0.5f) * step.z);
                 tile.localScale = new Vector3(step.x / natural.x, step.y / natural.y, step.z / natural.z);
             }
-            return root;
         }
 
         /// <summary>

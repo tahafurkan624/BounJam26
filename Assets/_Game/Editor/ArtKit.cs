@@ -26,6 +26,7 @@ namespace BounJam.EditorTools
         const string PushBlockPath = ModelsFolder + "/SM_PushBlock.fbx";
         const string ButtonPath = ModelsFolder + "/SM_PressureButton.fbx";
         const string PlatformPath = ModelsFolder + "/SM_Platform_2x2.fbx";
+        const string ThinPlatformPath = ModelsFolder + "/SM_Platform_2x2_Thin.fbx";
         const string GratePath = ModelsFolder + "/SM_Grate.fbx";
         const string WallPath = ModelsFolder + "/SM_Wall.fbx";
         const string HalfWallPath = ModelsFolder + "/SM_HalfWall.fbx";
@@ -246,6 +247,20 @@ namespace BounJam.EditorTools
                 tile.transform.localScale = block / PlatformSize;
             }
             return root;
+        }
+
+        /// <summary>
+        /// One SM_Platform_2x2_Thin block in the platform materials: the platform block, 2 m on a side but only 0.5 m
+        /// deep, its pivot at the top centre. Only seen, no collider. Null without the model.
+        /// </summary>
+        public static GameObject ThinPlatformBlock(string name, Transform parent)
+        {
+            Mesh mesh = TryPart(ThinPlatformPath, "SM_Platform_2x2_Thin")?.sharedMesh;
+            if (mesh == null) return null;
+            Materials m = CreateMaterials();
+            GameObject block = Model(name, parent, mesh, TopAndSides(mesh, m.PlatformTop, m.PlatformSide));
+            block.layer = LayerMask.NameToLayer("Environment");
+            return block;
         }
 
         /// <summary>

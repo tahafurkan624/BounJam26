@@ -47,6 +47,9 @@ namespace BounJam.EditorTools
                         SizeFields("Width", "Thickness", "Length");
                         EditorGUILayout.PropertyField(floor);
                         break;
+                    case Kind.TopPlatform:
+                        SizeFields("Width", "Thickness", "Length");
+                        break;
                     case Kind.Wall:
                         SizeFields("Width", "Height", "Thickness");
                         EditorGUILayout.PropertyField(floor, new GUIContent("Made Of", "Concrete brick, or tropical wood logs."));

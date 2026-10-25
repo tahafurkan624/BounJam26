@@ -59,6 +59,9 @@ namespace BounJam.EditorTools
             Shaped(Kind.Platform, "Tropical Floor", "Ground", "Ground", true,
                    "Floor of tropical log blocks to walk on, its top on the build height. Drag to draw one.",
                    floor: LevelPiece.FloorType.Tropical),
+            Shaped(Kind.TopPlatform, "Top Platform", "Ground", "Ground", true,
+                   "A concrete floor only 0.5 m thick, its top on the build height: for upper floors, so they hide as little " +
+                   "as they can of the floor under them. Drag to draw one."),
             Shaped(Kind.Ramp, "Ramp", "Ground", "Ground", false,
                    "Rises toward the arrow. Drag to draw its footprint; set its rise in the Inspector.", directional: true),
             Shaped(Kind.Ramp, "Wood Ramp", "Ground", "Ground", false,

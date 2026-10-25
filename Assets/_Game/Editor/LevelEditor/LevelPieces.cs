@@ -34,6 +34,7 @@ namespace BounJam.EditorTools
         public static Vector3 DefaultSize(Kind kind) => kind switch
         {
             Kind.Platform => new Vector3(6f, 1f, 6f),
+            Kind.TopPlatform => new Vector3(6f, LevelParts.TopPlatformThickness, 6f),
             Kind.Wall => new Vector3(4f, 1.5f, 0.5f),
             Kind.Ramp => new Vector3(4f, 1.5f, 5.6f), // 15 degrees
             Kind.HotPlate => new Vector3(3f, 0.25f, 3f),
@@ -53,8 +54,8 @@ namespace BounJam.EditorTools
             _ => PrimitiveBoundsHandle.Axes.All,
         };
 
-        /// <summary>Platforms, pools, floor grates and water have their top at the pivot (level with the floor); the rest stand on the floor at it.</summary>
-        public static bool PivotOnTop(Kind kind) => kind == Kind.Platform || kind == Kind.Pool || kind == Kind.FloorGrate || kind == Kind.Water;
+        /// <summary>Platforms, top platforms, pools, floor grates and water have their top at the pivot (level with the floor); the rest stand on the floor at it.</summary>
+        public static bool PivotOnTop(Kind kind) => kind == Kind.Platform || kind == Kind.TopPlatform || kind == Kind.Pool || kind == Kind.FloorGrate || kind == Kind.Water;
 
         /// <summary>The space the piece takes up, in its own space.</summary>
         public static Bounds LocalBounds(LevelPiece piece)
@@ -141,6 +142,9 @@ namespace BounJam.EditorTools
             {
                 case Kind.Platform:
                     LevelParts.Platform("Platform", space, new Vector3(0f, -size.y * 0.5f, 0f), size, piece.Floor);
+                    break;
+                case Kind.TopPlatform:
+                    LevelParts.TopPlatform("Top Platform", space, new Vector3(0f, -size.y * 0.5f, 0f), size);
                     break;
                 case Kind.Wall:
                     LevelParts.Wall(space, size, piece.Floor);
