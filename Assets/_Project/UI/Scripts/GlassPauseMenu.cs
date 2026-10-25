@@ -1,7 +1,5 @@
 using System.Collections;
 using BlobShip.UI.Liquid3D;
-using FMOD.Studio;
-using FMODUnity;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -13,14 +11,12 @@ namespace BounJam
     /// <summary>
     /// Pause menu on the Player/Pause action (Esc, gamepad Start) or the HUD's pause button: time stops, the blob's
     /// controls are off, and a 3D glass panel pours in with liquid buttons for resume, restart and quit, and the
-    /// master volume (FMOD's master bus, kept between sessions). Closing drains the glass away. The HUD hides while it
+    /// overall volume (see GameAudio, kept between sessions). Closing drains the glass away. The HUD hides while it
     /// is open. Opening plays event:/UI's PopUp, and its controls play Hover and Click (see <see cref="UISound"/>).
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
     public class GlassPauseMenu : MonoBehaviour
     {
-        const string VolumeKey = "BounJam.Volume";
-
         [SerializeField] LiquidPanel3D panel;
         [Tooltip("Dims the level behind the panel.")]
         [SerializeField] Graphic backdrop;
@@ -58,9 +54,9 @@ namespace BounJam
             quitButton.onClick.AddListener(Quit);
             UISound.AddTo(resumeButton, restartButton, quitButton, volume);
 
-            float saved = PlayerPrefs.GetFloat(VolumeKey, 1f);
+            float saved = GameAudio.Master;
             volume.SetValueWithoutNotify(saved);
-            SetVolume(saved);
+            ShowVolume(saved);
             volume.onValueChanged.AddListener(SetVolume);
 
             pauseAction = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/Pause") : null;
@@ -128,11 +124,11 @@ namespace BounJam
 
         void SetVolume(float value)
         {
-            // Every sound plays through FMOD, so its master bus is the whole mix (Unity's AudioListener hears nothing).
-            if (RuntimeManager.StudioSystem.getBus("bus:/", out Bus master) == FMOD.RESULT.OK) master.setVolume(value);
-            PlayerPrefs.SetFloat(VolumeKey, value);
-            volumeValue.text = $"{Mathf.RoundToInt(value * 100f)}%";
+            GameAudio.Master = value;
+            ShowVolume(value);
         }
+
+        void ShowVolume(float value) => volumeValue.text = $"{Mathf.RoundToInt(value * 100f)}%";
 
         void SetBlocking(bool on)
         {

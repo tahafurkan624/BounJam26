@@ -21,7 +21,7 @@ namespace BounJam.EditorTools
     /// pour in and drain away, and the Liquid / Solid switch. A slab keeps its labels in front of its body only when
     /// they are its direct children, so those panels are laid out by hand, not with layout groups.
     /// </summary>
-    public static class GlassUIBuilder
+    public static partial class GlassUIBuilder
     {
         const string Root = "Assets/_Project/UI";
         const string PrefabPath = Root + "/Resources/GlassUI.prefab";
