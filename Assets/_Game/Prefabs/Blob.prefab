@@ -523,10 +523,6 @@ MonoBehaviour:
   startSpeed: 0.3
   stopSpeed: 0.15
   stopDelay: 0.1
-  turnSpeed: 1
-  settledTurnSpeed: 0.2
-  settleTime: 0.1
-  rotateSoundLength: 3
   fadeOut: 0.2
 --- !u!1 &336757933177050986
 GameObject:

@@ -1,4 +1,5 @@
 using BlobShip.UI;
+using BlobShip.UI.Liquid3D;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -8,12 +9,15 @@ namespace BounJam
 {
     /// <summary>
     /// In-game HUD: level pill, carried-cargo counter (hidden when the level has no collectibles; the drop icon splashes
-    /// when cargo comes aboard), the Liquid / Solid switch whose glass lens flows to the blob's current form, the key
-    /// hint and the pause button.
+    /// when cargo comes aboard) and the key hint on the glass overlay; the 3D liquid pause button and the Liquid / Solid
+    /// switch on the liquid canvas. The switch follows the blob's form, and clicking it switches the form. While the
+    /// blob is solid, every liquid button freezes with it (<see cref="LiquidUI.SetSolid"/>).
     /// </summary>
     public class GlassHud : MonoBehaviour
     {
         [SerializeField] CanvasGroup group;
+        [Tooltip("The HUD's part on the liquid canvas.")]
+        [SerializeField] CanvasGroup liquidGroup;
         [SerializeField] TMP_Text levelKicker;
         [SerializeField] TMP_Text levelLabel;
 
@@ -24,21 +28,15 @@ namespace BounJam
         [SerializeField] RectTransform cargoFill;
 
         [Header("Form")]
-        [Tooltip("Moves the lens: option 0 is Liquid, 1 is Solid.")]
-        [SerializeField] UILiquidSegmented formSwitch;
-        [SerializeField] Graphic[] liquidParts;
-        [SerializeField] Graphic[] solidParts;
+        [SerializeField] LiquidToggle formSwitch;
         [SerializeField] TMP_Text formHint;
         [SerializeField] string hintFormat = "{0}  ·  switch form";
-        [SerializeField] Color activeColor = new Color32(0x0B, 0x22, 0x33, 0xFF);
-        [SerializeField] Color idleColor = new Color32(0x3A, 0x5A, 0x6E, 0xFF);
 
         [SerializeField] Button pauseButton;
 
         BlobForm form;
         Collectible[] cargo = new Collectible[0];
         int shownHeld = -1;
-        bool shownSolid;
 
         public void Bind(GlassUI owner)
         {
@@ -51,13 +49,19 @@ namespace BounJam
             cargoPill.SetActive(cargo.Length > 0);
             pauseButton.onClick.AddListener(owner.TogglePause);
             formHint.text = string.Format(hintFormat, ToggleKey());
-            ApplyForm(false);
+            formSwitch.onChanged.AddListener(OnSwitchClicked);
+            // The liquid state is static and outlives the last level.
+            formSwitch.SetSolid(false, false);
+            LiquidUI.SetSolid(false);
         }
 
         public void SetVisible(bool visible)
         {
-            group.alpha = visible ? 1f : 0f;
-            group.blocksRaycasts = visible;
+            foreach (CanvasGroup part in new[] { group, liquidGroup })
+            {
+                part.alpha = visible ? 1f : 0f;
+                part.interactable = part.blocksRaycasts = visible;
+            }
         }
 
         static string ToggleKey()
@@ -67,11 +71,19 @@ namespace BounJam
             return string.IsNullOrEmpty(key) ? "E" : key.Replace(" | ", " / ");
         }
 
+        // Every piece of a cut blob switches, as with the key.
+        static void OnSwitchClicked(bool solid)
+        {
+            foreach (BlobForm piece in FindObjectsByType<BlobForm>(FindObjectsSortMode.None))
+                if (piece.IsSolid != solid) piece.Toggle();
+        }
+
         void Update()
         {
             if (form == null) form = FindAnyObjectByType<BlobForm>();
+            // The blob decides: a click it refused (cooldown, inside a grate) flows back.
             bool solid = form != null && form.IsSolid;
-            if (solid != shownSolid) ApplyForm(solid);
+            if (solid != formSwitch.solid) formSwitch.SetSolid(solid, false);
 
             if (cargo.Length == 0) return;
             int held = 0;
@@ -85,14 +97,6 @@ namespace BounJam
             cargoFill.anchorMax = new Vector2((float)held / cargo.Length, 1f);
             // An empty bar would still draw a hairline at its left end.
             cargoFill.gameObject.SetActive(held > 0);
-        }
-
-        void ApplyForm(bool solid)
-        {
-            shownSolid = solid;
-            foreach (Graphic part in liquidParts) part.color = solid ? idleColor : activeColor;
-            foreach (Graphic part in solidParts) part.color = solid ? activeColor : idleColor;
-            if (formSwitch != null) formSwitch.Select(solid ? 1 : 0);
         }
     }
 }

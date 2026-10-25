@@ -26,6 +26,9 @@ namespace BounJam
         public const string ItemWater = "Water";
         public const string ItemSeed = "Seed";
 
+        // Magnet's parameter that switches from its loop (0) to its ending (1).
+        public const string MagnetEndParameter = "Parameter 2";
+
         // Level's "Level" labels.
         public const string LevelParameter = "Level";
         public const string LevelSuccess = "Success";

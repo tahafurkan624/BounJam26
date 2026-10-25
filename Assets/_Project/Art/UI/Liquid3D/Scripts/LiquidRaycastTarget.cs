@@ -4,6 +4,8 @@ using UnityEngine.UI;
 
 namespace BlobShip.UI.Liquid3D
 {
+    // Graphic itself doesn't require one (Image and Text do it themselves); the raycaster reads canvasRenderer.cull.
+    [RequireComponent(typeof(CanvasRenderer))]
     [AddComponentMenu("UI/BlobShip/Liquid Raycast Target")]
     public class LiquidRaycastTarget : Graphic
     {

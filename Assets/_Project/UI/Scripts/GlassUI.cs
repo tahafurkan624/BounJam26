@@ -3,6 +3,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace BounJam
 {
@@ -10,14 +11,20 @@ namespace BounJam
     /// Root of the Liquid Glass UI (Resources/GlassUI prefab). It installs itself into every scene that has a
     /// <see cref="LevelManager"/>, so the level scenes need no changes: it takes over from the old text HUD, shows the
     /// level title and end messages, and owns the in-game HUD, the pause menu and the level-complete card.
-    /// The canvas is Screen Space - Overlay, so post-processing leaves the UI alone; <see cref="GlassSceneCapture"/>
-    /// hands the glass the finished frame to blur.
+    /// It has two canvases. The overlay canvas holds the flat glass (HUD pills, toasts); it is Screen Space - Overlay,
+    /// so post-processing leaves it alone and <see cref="GlassSceneCapture"/> hands the glass the finished frame to
+    /// blur. The liquid canvas holds the 3D liquid buttons and glass panels (BlobShip Liquid3D: pause menu, complete
+    /// card, pause button, form switch); they are meshes, so it is Screen Space - Camera on the main camera, close in
+    /// front of it, where they can refract the scene and the LED labels catch the bloom.
     /// </summary>
-    [RequireComponent(typeof(Canvas))]
     public class GlassUI : MonoBehaviour
     {
         const string PrefabPath = "GlassUI";
 
+        [SerializeField] Canvas overlayCanvas;
+        [SerializeField] Canvas liquidCanvas;
+        [Tooltip("Distance of the liquid canvas from the camera, m. Anything in the level closer than this covers it.")]
+        [SerializeField] float liquidPlaneDistance = 0.5f;
         [SerializeField] GlassHud hud;
         [SerializeField] GlassToast titleToast;
         [SerializeField] GlassToast messageToast;
@@ -72,14 +79,38 @@ namespace BounJam
 
         void Awake()
         {
-            var canvas = GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
+            overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            liquidCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+            liquidCanvas.planeDistance = liquidPlaneDistance;
+            // GlassGraphic shapes (the volume slider) draw on the liquid canvas too.
+            foreach (Canvas canvas in new[] { overlayCanvas, liquidCanvas })
+                canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
+            AttachCamera();
         }
 
         void OnEnable() => GlassSceneCapture.Acquire();
 
         void OnDisable() => GlassSceneCapture.Release();
+
+        // A level may swap or re-enable its camera after the UI is installed.
+        void LateUpdate() => AttachCamera();
+
+        void AttachCamera()
+        {
+            if (liquidCanvas.worldCamera != null && liquidCanvas.worldCamera.isActiveAndEnabled) return;
+            Camera main = Camera.main;
+            liquidCanvas.worldCamera = main;
+            // A nested canvas with its own raycaster (the volume slider) doesn't take the root's camera, and without
+            // one its raycaster tests the pointer as if the canvas were an overlay.
+            foreach (GraphicRaycaster raycaster in liquidCanvas.GetComponentsInChildren<GraphicRaycaster>(true))
+                raycaster.GetComponent<Canvas>().worldCamera = main;
+        }
+
+        /// <summary>Shows or hides the in-game HUD (the pause menu covers it).</summary>
+        public void SetHudVisible(bool visible)
+        {
+            if (hud != null) hud.SetVisible(visible);
+        }
 
         void Bind(LevelManager level)
         {

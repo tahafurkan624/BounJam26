@@ -8,7 +8,9 @@ namespace BounJam
     /// Plays the FMOD movement event (event:/Water_Movement) while the blob actually moves, whatever moves it: its own
     /// input, a slope, a push. Speeding up past the start speed starts the event with State at 0: its start, then a loop
     /// it holds by itself. Slowing below the lower stop speed, and staying there for the stop delay, sets State to 1: the
-    /// event plays its ending and stops on its own. Only speed along the ground counts, so a fall or a straight-up jump
+    /// event plays its ending and stops on its own. A sound that has played for less than the minimum play time skips
+    /// the ending and fades out quickly instead, so a short nudge doesn't play a whole ending; so does one cut off by
+    /// freezing into the crystal. Only speed along the ground counts, so a fall or a straight-up jump
     /// doesn't slosh. Moving again before an ending is over stops that ending and starts a fresh event, so a blob never
     /// plays more than one at a time. A piece a pipe carries, a dissolved one or the crystal (see
     /// <see cref="BlobIceSound"/>) counts as not moving. The event is 3D and follows the blob; each piece of a cut blob
@@ -34,10 +36,12 @@ namespace BounJam
         [Tooltip("The speed has to stay below the stop speed this long before the ending plays, so a bump that stalls " +
                  "the blob for a moment doesn't cut the loop, s.")]
         [SerializeField] float stopDelay = 0.1f;
+        [Tooltip("A sound stopped before it has played this long fades out instead of playing its ending, s.")]
+        [SerializeField] float minPlayTime = 0.2f;
         [Tooltip("How long the sound melting starts plays when the blob doesn't set off, s. Setting off before then " +
                  "keeps it going as the movement sound.")]
         [SerializeField] float meltPlayTime = 0.5f;
-        [Tooltip("How long the cut melt sound takes to fade out, s.")]
+        [Tooltip("How long a cut sound (a melt sound or one too short for its ending) takes to fade out, s.")]
         [SerializeField] float meltFadeOut = 0.2f;
 
         Rigidbody body;
@@ -47,10 +51,11 @@ namespace BounJam
         BlobWater water;
         EventInstance instance;
         EventInstance ending; // the last instance let go of, which may still be playing its ending
-        EventInstance fading; // a cut melt sound on its way out
+        EventInstance fading; // a cut sound on its way out
         bool moving;
         bool melting; // the instance was started by melting, and the blob hasn't set off since
         float slowTime; // how long the speed has been below the stop speed while moving, s
+        float playTime; // how long the current instance has played, s
         float meltLeft; // how long the melt sound plays on before it's cut, unless the blob sets off, s
         float fadeLeft; // how long the cut melt sound has left to fade out, s
 
@@ -91,6 +96,7 @@ namespace BounJam
                 if (speed > startSpeed) StartMoving();
                 return;
             }
+            playTime += Time.deltaTime;
             if (melting)
             {
                 if (speed > startSpeed)
@@ -98,25 +104,40 @@ namespace BounJam
                     melting = false;
                     slowTime = 0f;
                 }
-                else if ((meltLeft -= Time.deltaTime) <= 0f) CutMelt();
+                else if ((meltLeft -= Time.deltaTime) <= 0f) Cut();
                 return;
             }
             if (speed >= stopSpeed) slowTime = 0f;
-            else if ((slowTime += Time.deltaTime) >= stopDelay) StopMoving();
+            else if ((slowTime += Time.deltaTime) >= stopDelay)
+            {
+                if (playTime < minPlayTime) Cut();
+                else StopMoving();
+            }
         }
 
         // Disabled or destroyed mid-move (a level restart, a half flowing back into the other): end it the usual way.
         void OnDisable()
         {
             if (form != null) form.FormChanged -= OnFormChanged;
-            if (moving) StopMoving();
+            if (moving)
+            {
+                // Too short for its ending: cut, and stopped right away just below.
+                if (playTime < minPlayTime) Cut();
+                else StopMoving();
+            }
             StopFading();
         }
 
         // Already sloshing (melted again before the last slosh ended): that sound just goes on.
         void OnFormChanged(bool solid)
         {
-            if (solid || moving) return;
+            // Froze mid-move: the slosh fades out without its ending.
+            if (solid)
+            {
+                if (moving) Cut();
+                return;
+            }
+            if (moving) return;
             StartMoving();
             melting = true;
             meltLeft = meltPlayTime;
@@ -126,6 +147,7 @@ namespace BounJam
         {
             moving = true;
             slowTime = 0f;
+            playTime = 0f;
             // Cut the previous ending short so quick stop-and-go doesn't pile up instances. Fade-out keeps any release
             // the event has in FMOD Studio; without one it stops right away.
             if (ending.isValid()) ending.stop(FMOD.Studio.STOP_MODE.ALLOWFADEOUT);
@@ -145,8 +167,11 @@ namespace BounJam
             ending = instance;
         }
 
-        /// <summary>Melted and stayed put: the melt sound fades out quickly instead of playing its ending.</summary>
-        void CutMelt()
+        /// <summary>
+        /// Melted and stayed put, froze, or stopped before the minimum play time: the sound fades out quickly instead of
+        /// playing its ending.
+        /// </summary>
+        void Cut()
         {
             moving = false;
             melting = false;

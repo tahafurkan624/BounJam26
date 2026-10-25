@@ -101,12 +101,10 @@ namespace BounJam
         }
 
         /// <summary>
-        /// Starts it growing: from a sprout, playing event:/Tree once, or (<paramref name="sprout"/> false) as a bud
-        /// already waiting at the bottom.
+        /// Starts it growing: from a sprout, or (<paramref name="sprout"/> false) as a bud already waiting at the bottom.
         /// </summary>
         public void Grow(bool sprout)
         {
-            if (sprout) GameSounds.Tree.PlayAt(transform.position);
             Enter(sprout ? Stage.Sprouting : Stage.Bottom);
             previousStage = stage;
             previousTime = time;
@@ -116,6 +114,8 @@ namespace BounJam
 
         void Enter(Stage next)
         {
+            // event:/Tree as it grows up to the top, every time.
+            if (next == Stage.Rising) GameSounds.Tree.PlayAt(transform.position);
             stage = next;
             time = 0f;
             riderTime = 0f;
