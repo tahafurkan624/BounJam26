@@ -47,7 +47,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipDock
   ship: {fileID: 0}
   zoneSize: {x: 3, y: 2, z: 3}
-  dwellTime: 1
+  dwellTime: 0.5
   maxShipSpeed: 1.5
   padRenderer: {fileID: 2877379305324252311}
   idleColor: {r: 1, g: 1, b: 1, a: 1}

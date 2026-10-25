@@ -14,7 +14,7 @@ namespace BounJam
         [Tooltip("The zone the ship's centre has to be in, m, centred on this object and rising from it.")]
         [SerializeField] Vector3 zoneSize = new Vector3(2.4f, 2f, 2.4f);
         [Tooltip("How long the ship has to stay in the zone, s.")]
-        [SerializeField] float dwellTime = 1f;
+        [SerializeField] float dwellTime = 0.5f;
         [Tooltip("The ship has to be moving slower than this to count as resting, m/s.")]
         [SerializeField] float maxShipSpeed = 1.5f;
 

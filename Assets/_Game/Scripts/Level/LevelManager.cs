@@ -31,7 +31,7 @@ namespace BounJam
         [Tooltip("Falling below this world height loses the blob or the ship.")]
         [SerializeField] float killHeight = -5f;
         [Tooltip("Celebration time before the next level loads, s.")]
-        [SerializeField] float completeDelay = 2f;
+        [SerializeField] float completeDelay = 1f;
         [Tooltip("Pause on a lost ship before the level restarts, s.")]
         [SerializeField] float failDelay = 1.5f;
 

@@ -3150,7 +3150,7 @@ MonoBehaviour:
   dock: {fileID: 1090727115}
   hud: {fileID: 929596249}
   killHeight: -5
-  completeDelay: 2
+  completeDelay: 1
   failDelay: 1.5
 --- !u!4 &999244706
 Transform:
@@ -3750,7 +3750,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.ShipDock
   ship: {fileID: 1941728472}
   zoneSize: {x: 2.4, y: 2, z: 2.4}
-  dwellTime: 1
+  dwellTime: 0.5
   maxShipSpeed: 1.5
   padRenderer: {fileID: 1983595607}
   idleColor: {r: 0.2, g: 0.7, b: 1, a: 1}
