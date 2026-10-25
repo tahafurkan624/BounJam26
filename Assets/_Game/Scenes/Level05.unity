@@ -199,6 +199,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 1
   size: {x: 2, y: 1.5, z: 0.5}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -310,6 +311,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 0
   size: {x: 6, y: 1, z: 6}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -364,6 +366,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 6
   size: {x: 3.5026, y: 2.62695, z: 0.3}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -537,6 +540,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 1
   size: {x: 2, y: 1.5, z: 0.5}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -653,6 +657,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 1
   size: {x: 2, y: 1.5, z: 0.5}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -1311,6 +1316,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 0
   size: {x: 2, y: 1, z: 3.5}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -2001,7 +2007,7 @@ Transform:
   m_GameObject: {fileID: 1108337193}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -5.5, y: 12.082, z: 17}
+  m_LocalPosition: {x: 0.5, y: 7.43, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -2054,15 +2060,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 639343595197406122, guid: 5a4853c3e9030154cac8c0266f2fce51, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -5.5
+      value: 0.5
       objectReference: {fileID: 0}
     - target: {fileID: 639343595197406122, guid: 5a4853c3e9030154cac8c0266f2fce51, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 12.082
+      value: 7.43
       objectReference: {fileID: 0}
     - target: {fileID: 639343595197406122, guid: 5a4853c3e9030154cac8c0266f2fce51, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 17
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 639343595197406122, guid: 5a4853c3e9030154cac8c0266f2fce51, type: 3}
       propertyPath: m_LocalRotation.w
@@ -2211,6 +2217,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 1
   size: {x: 2, y: 1.5, z: 0.5}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -2449,7 +2456,7 @@ Transform:
   m_GameObject: {fileID: 1324545297}
   serializedVersion: 2
   m_LocalRotation: {x: 0.4297717, y: 0, z: 0, w: 0.9029376}
-  m_LocalPosition: {x: -5.5, y: 20.082, z: 10.5}
+  m_LocalPosition: {x: 0.5, y: 15.430001, z: -6.4999995}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3010,15 +3017,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7922441870947424707, guid: 466c689f491746e48a4b183c84a5e733, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -1.5
+      value: -0.5
       objectReference: {fileID: 0}
     - target: {fileID: 7922441870947424707, guid: 466c689f491746e48a4b183c84a5e733, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 5.98
+      value: 7.29
       objectReference: {fileID: 0}
     - target: {fileID: 7922441870947424707, guid: 466c689f491746e48a4b183c84a5e733, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 14
+      value: -1.5
       objectReference: {fileID: 0}
     - target: {fileID: 7922441870947424707, guid: 466c689f491746e48a4b183c84a5e733, type: 3}
       propertyPath: m_LocalRotation.w
@@ -3364,6 +3371,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 0
   size: {x: 6, y: 1, z: 6}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
@@ -3800,7 +3808,7 @@ Transform:
   m_GameObject: {fileID: 1959081067}
   serializedVersion: 2
   m_LocalRotation: {x: 0.4297717, y: 0, z: 0, w: 0.9029376}
-  m_LocalPosition: {x: -5.5, y: 20.082, z: 10.5}
+  m_LocalPosition: {x: 0.5, y: 15.43, z: -6.5}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -4155,6 +4163,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BounJam.LevelPiece
   kind: 1
   size: {x: 2, y: 1.5, z: 0.5}
+  floor: 0
   poolSize: {x: 4, y: 4}
   poolOffset: {x: 0, y: 0}
   waterBelowTop: 0.15
