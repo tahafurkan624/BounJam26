@@ -196,36 +196,47 @@ namespace BounJam.EditorTools
             RectTransform tilt = Tilt(menuRoot);
 
             RectTransform panelRect = Node("Panel", tilt);
-            Place(panelRect, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(560f, 700f));
+            Place(panelRect, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(560f, 820f));
             LiquidSlab panel = GlassPanel(panelRect);
 
-            TMP_Text title = Led(panelRect, "Title", "Paused", display, 52f, new Vector2(0f, 280f), new Vector2(520f, 66f));
-            TMP_Text subtitle = Led(panelRect, "Subtitle", "Level", body, 20f, new Vector2(0f, 234f), new Vector2(520f, 32f), 0.6f);
+            TMP_Text title = Led(panelRect, "Title", "Paused", display, 52f, new Vector2(0f, 340f), new Vector2(520f, 66f));
+            TMP_Text subtitle = Led(panelRect, "Subtitle", "Level", body, 20f, new Vector2(0f, 294f), new Vector2(520f, 32f), 0.6f);
 
             var size = new Vector2(450f, 96f);
-            Button resume = LiquidButton(ButtonNode(panelRect, "Resume", new Vector2(0f, 120f), size), "Resume", "play", 0);
-            Button restart = LiquidButton(ButtonNode(panelRect, "Restart level", Vector2.zero, size), "Restart level", "restart", 1);
-            Button quit = LiquidButton(ButtonNode(panelRect, "Quit game", new Vector2(0f, -120f), size), "Quit game", "exit", 2);
+            Button resume = LiquidButton(ButtonNode(panelRect, "Resume", new Vector2(0f, 180f), size), "Resume", "play", 0);
+            Button restart = LiquidButton(ButtonNode(panelRect, "Restart level", new Vector2(0f, 60f), size), "Restart level", "restart", 1);
+            Button quit = LiquidButton(ButtonNode(panelRect, "Quit game", new Vector2(0f, -60f), size), "Quit game", "exit", 2);
 
-            TMP_Text volumeName = Led(panelRect, "VolumeName", "Volume", body, 22f, new Vector2(-115f, -226f), new Vector2(220f, 34f), 0.85f,
-                TextAlignmentOptions.Left);
-            TMP_Text volumeValue = Led(panelRect, "VolumeValue", "100%", body, 22f, new Vector2(115f, -226f), new Vector2(220f, 34f), 0.85f,
-                TextAlignmentOptions.Right);
-            (Slider volume, Graphic[] sliderParts) = MakeSlider(panelRect, new Vector2(0f, -274f), new Vector2(450f, 36f), panel);
+            (TMP_Text musicName, TMP_Text musicValue, Slider music, Graphic[] musicParts) = VolumeRow(panelRect, "Music", -166f, panel);
+            (TMP_Text sfxName, TMP_Text sfxValue, Slider sfx, Graphic[] sfxParts) = VolumeRow(panelRect, "Sfx", -262f, panel);
+            sfxName.text = "Sound effects";
 
-            // The slider has its own canvas (it would sort apart as labels), so the panel's labels are set here.
-            var labels = new List<Graphic> { title, subtitle, volumeName, volumeValue };
+            // The sliders have their own canvases (they would sort apart as labels), so the panel's labels are set here.
+            var labels = new List<Graphic> { title, subtitle, musicName, musicValue, sfxName, sfxValue };
             panel.autoFindLabels = false;
             panel.labels = labels;
             LiquidPanel3D glass = Panel3D(panel);
             glass.fadeWith = new List<Graphic>(labels);
-            glass.fadeWith.AddRange(sliderParts);
+            glass.fadeWith.AddRange(musicParts);
+            glass.fadeWith.AddRange(sfxParts);
             panelRect.gameObject.SetActive(false);
 
             var menu = menuRoot.gameObject.AddComponent<GlassPauseMenu>();
             Wire(menu, ("panel", glass), ("backdrop", backdrop), ("subtitle", subtitle), ("resumeButton", resume), ("restartButton", restart),
-                ("quitButton", quit), ("volume", volume), ("volumeValue", volumeValue));
+                ("quitButton", quit), ("music", music), ("musicValue", musicValue), ("sfx", sfx), ("sfxValue", sfxValue));
             return menu;
+        }
+
+        /// <summary>A volume's name and value above its slider, the name's top at <paramref name="y"/>.</summary>
+        static (TMP_Text name, TMP_Text value, Slider slider, Graphic[] parts) VolumeRow(RectTransform panelRect, string name, float y,
+                                                                                         LiquidSlab panel)
+        {
+            TMP_Text label = Led(panelRect, name + "Name", name, body, 22f, new Vector2(-115f, y), new Vector2(220f, 34f), 0.85f,
+                TextAlignmentOptions.Left);
+            TMP_Text value = Led(panelRect, name + "Value", "100%", body, 22f, new Vector2(115f, y), new Vector2(220f, 34f), 0.85f,
+                TextAlignmentOptions.Right);
+            (Slider slider, Graphic[] parts) = MakeSlider(panelRect, new Vector2(0f, y - 48f), new Vector2(450f, 36f), panel);
+            return (label, value, slider, parts);
         }
 
         /// <summary>

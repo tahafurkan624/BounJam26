@@ -5,10 +5,11 @@ using UnityEngine;
 namespace BounJam
 {
     /// <summary>
-    /// The player's volume settings, kept between sessions: the overall volume (pause menu) and the music and sound
-    /// effects volumes (main menu options). Music plays through <see cref="MusicBus"/> and the sounds through
-    /// <see cref="SfxBus"/> once the FMOD project has those buses. Until then the music event's own volume stands in
-    /// for the music bus and the master bus for the effects bus, so the effects slider turns the music down with it.
+    /// The player's volume settings, kept between sessions: the music and sound effects volumes (pause menu and main
+    /// menu options) and an overall volume. Music plays through <see cref="MusicBus"/> and the sounds through
+    /// <see cref="SfxBus"/> when the FMOD project has that bus. Without an effects bus the effects volume goes on the
+    /// master bus and the music bus (or, without one, the music event's own volume) is raised by as much, so the
+    /// effects slider leaves the music alone.
     /// </summary>
     public static class GameAudio
     {
@@ -17,6 +18,8 @@ namespace BounJam
         const string MasterKey = "BounJam.Volume";
         const string MusicKey = "BounJam.MusicVolume";
         const string SfxKey = "BounJam.SfxVolume";
+        // The lowest the master bus goes for the effects volume, so the music can still be raised back from it.
+        const float MinSfxGain = 1e-4f;
 
         /// <summary>Overall volume, 0-1.</summary>
         public static float Master
@@ -54,10 +57,12 @@ namespace BounJam
             FMOD.Studio.System studio = RuntimeManager.StudioSystem;
             bool hasSfx = studio.getBus(SfxBus, out Bus sfx) == FMOD.RESULT.OK;
             bool hasMusic = studio.getBus(MusicBus, out Bus music) == FMOD.RESULT.OK;
-            if (studio.getBus("bus:/", out Bus master) == FMOD.RESULT.OK) master.setVolume(Master * (hasSfx ? 1f : Sfx));
+            float sfxOnMaster = hasSfx ? 1f : Mathf.Max(Sfx, MinSfxGain);
+            float musicGain = Music / sfxOnMaster;
+            if (studio.getBus("bus:/", out Bus master) == FMOD.RESULT.OK) master.setVolume(Master * sfxOnMaster);
             if (hasSfx) sfx.setVolume(Sfx);
-            if (hasMusic) music.setVolume(Music);
-            GameMusic.EventVolume = hasMusic ? 1f : Music;
+            if (hasMusic) music.setVolume(musicGain);
+            GameMusic.EventVolume = hasMusic ? 1f : musicGain;
         }
     }
 }

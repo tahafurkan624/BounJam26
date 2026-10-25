@@ -4,6 +4,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 using UnityEngine.UI;
 
 namespace BounJam
@@ -11,7 +12,7 @@ namespace BounJam
     /// <summary>
     /// Pause menu on the Player/Pause action (Esc, gamepad Start) or the HUD's pause button: time stops, the blob's
     /// controls are off, and a 3D glass panel pours in with liquid buttons for resume, restart and quit, and the
-    /// overall volume (see GameAudio, kept between sessions). Closing drains the glass away. The HUD hides while it
+    /// music and sound effects volumes (see GameAudio, kept between sessions). Closing drains the glass away. The HUD hides while it
     /// is open. Opening plays event:/UI's PopUp, and its controls play Hover and Click (see <see cref="UISound"/>).
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
@@ -24,8 +25,10 @@ namespace BounJam
         [SerializeField] Button resumeButton;
         [SerializeField] Button restartButton;
         [SerializeField] Button quitButton;
-        [SerializeField] Slider volume;
-        [SerializeField] TMP_Text volumeValue;
+        [SerializeField, FormerlySerializedAs("volume")] Slider music;
+        [SerializeField, FormerlySerializedAs("volumeValue")] TMP_Text musicValue;
+        [SerializeField] Slider sfx;
+        [SerializeField] TMP_Text sfxValue;
         [SerializeField] float fadeTime = 0.25f;
 
         GlassUI owner;
@@ -52,12 +55,18 @@ namespace BounJam
             resumeButton.onClick.AddListener(Close);
             restartButton.onClick.AddListener(RestartLevel);
             quitButton.onClick.AddListener(Quit);
-            UISound.AddTo(resumeButton, restartButton, quitButton, volume);
+            UISound.AddTo(resumeButton, restartButton, quitButton, music);
 
-            float saved = GameAudio.Master;
-            volume.SetValueWithoutNotify(saved);
-            ShowVolume(saved);
-            volume.onValueChanged.AddListener(SetVolume);
+            music.SetValueWithoutNotify(GameAudio.Music);
+            music.onValueChanged.AddListener(value => { GameAudio.Music = value; ShowVolumes(); });
+            // A GlassUI prefab built before the effects slider has only the music one.
+            if (sfx != null)
+            {
+                UISound.AddTo(sfx);
+                sfx.SetValueWithoutNotify(GameAudio.Sfx);
+                sfx.onValueChanged.AddListener(value => { GameAudio.Sfx = value; ShowVolumes(); });
+            }
+            ShowVolumes();
 
             pauseAction = InputSystem.actions != null ? InputSystem.actions.FindAction("Player/Pause") : null;
             if (pauseAction != null) pauseAction.performed += OnPausePressed;
@@ -122,13 +131,13 @@ namespace BounJam
 #endif
         }
 
-        void SetVolume(float value)
+        void ShowVolumes()
         {
-            GameAudio.Master = value;
-            ShowVolume(value);
+            musicValue.text = Percent(GameAudio.Music);
+            if (sfxValue != null) sfxValue.text = Percent(GameAudio.Sfx);
         }
 
-        void ShowVolume(float value) => volumeValue.text = $"{Mathf.RoundToInt(value * 100f)}%";
+        static string Percent(float value) => $"{Mathf.RoundToInt(value * 100f)}%";
 
         void SetBlocking(bool on)
         {
