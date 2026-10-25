@@ -4,10 +4,8 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 using UnityEditor;
-using UnityEditor.Recorder;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
 
@@ -33,7 +31,7 @@ namespace BounJam.EditorTools
         static int startFrame;
         static double startTime;
 
-        static RecorderWindow recorderWindow;
+        static EditorWindow recorderWindow;
         static double nextWindowSearch;
 
         // A take waiting for its video.
@@ -101,38 +99,33 @@ namespace BounJam.EditorTools
             if (FmodCapture.IsRecording)
             {
                 // Unity Recorder stopping stops the take too.
-                if (FollowsRecorder && UnityRecorderIsRecording()) recorderWindow.StopRecording();
+                if (FollowsRecorder && UnityRecorderIsRecording()) UnityRecorderApi.StopRecording(recorderWindow);
                 else StopTake();
             }
             else if (settings.start == FmodRecorderSettings.StartMode.WithUnityRecorder)
             {
+                if (!UnityRecorderApi.Installed)
+                {
+                    Status = "Unity Recorder isn't installed (Package Manager: com.unity.recorder).";
+                    Debug.LogWarning(LogPrefix + Status);
+                    return;
+                }
                 if (RecorderAudioFails())
                 {
                     TurnOffRecorderAudio();
                     Debug.Log(LogPrefix + "Turned off Capture Audio in Unity Recorder: Unity's audio is disabled in this " +
                               "project, so the take would fail. The sound comes from FMOD Recorder instead.");
                 }
-                StartUnityRecorder();
+                UnityRecorderApi.StartRecording(OpenUnityRecorder());
             }
             else if (EditorApplication.isPlaying) StartTake(false);
             else if (settings.start == FmodRecorderSettings.StartMode.EnteringPlayMode) EditorApplication.isPlaying = true;
         }
 
-        public static RecorderWindow OpenUnityRecorder()
+        public static EditorWindow OpenUnityRecorder()
         {
-            recorderWindow = (RecorderWindow)EditorWindow.GetWindow(typeof(RecorderWindow), false, "Recorder", false);
+            recorderWindow = UnityRecorderApi.OpenWindow();
             return recorderWindow;
-        }
-
-        static void StartUnityRecorder()
-        {
-            RecorderWindow window = OpenUnityRecorder();
-            // A take that failed leaves the window in an error state that only its own record button clears, and
-            // until then StartRecording does nothing.
-            FieldInfo state = typeof(RecorderWindow).GetField("m_State", BindingFlags.Instance | BindingFlags.NonPublic);
-            if (state != null && state.FieldType.IsEnum && state.GetValue(window).ToString() == "Error")
-                state.SetValue(window, Enum.Parse(state.FieldType, "Idle"));
-            window.StartRecording();
         }
 
         /// <summary>
@@ -141,33 +134,26 @@ namespace BounJam.EditorTools
         /// </summary>
         public static bool RecorderAudioFails()
         {
-            if (!UnityAudioDisabled()) return false;
-            RecorderControllerSettings saved = RecorderControllerSettings.GetGlobalSettings();
-            bool captures = saved.RecorderSettings.OfType<MovieRecorderSettings>().Any(movie => movie.Enabled && movie.CaptureAudio);
-            Discard(saved);
+            if (!UnityRecorderApi.Installed || !UnityAudioDisabled()) return false;
+            ScriptableObject saved = UnityRecorderApi.LoadSettings();
+            bool captures = UnityRecorderApi.Movies(saved).Any(UnityRecorderApi.CaptureAudio);
+            UnityRecorderApi.Discard(saved);
             return captures;
         }
 
         public static void TurnOffRecorderAudio()
         {
-            RecorderControllerSettings saved = RecorderControllerSettings.GetGlobalSettings();
-            foreach (MovieRecorderSettings movie in saved.RecorderSettings.OfType<MovieRecorderSettings>()) movie.CaptureAudio = false;
-            saved.Save();
+            ScriptableObject saved = UnityRecorderApi.LoadSettings();
+            foreach (ScriptableObject movie in UnityRecorderApi.Movies(saved)) UnityRecorderApi.SetCaptureAudio(movie, false);
+            UnityRecorderApi.SaveSettings(saved);
             // The window records from its own copy, so it takes this one.
-            OpenUnityRecorder().SetRecorderControllerSettings(saved);
+            UnityRecorderApi.UseSettings(OpenUnityRecorder(), saved);
         }
 
         static bool UnityAudioDisabled()
         {
             UnityEngine.Object audioManager = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/AudioManager.asset").FirstOrDefault();
             return audioManager != null && new SerializedObject(audioManager).FindProperty("m_DisableAudio").boolValue;
-        }
-
-        /// <summary>Destroys a copy of the Recorder window's saved settings, with its recorders.</summary>
-        static void Discard(RecorderControllerSettings saved)
-        {
-            foreach (RecorderSettings recorder in saved.RecorderSettings.ToList()) UnityEngine.Object.DestroyImmediate(recorder);
-            UnityEngine.Object.DestroyImmediate(saved);
         }
 
         static void OnPlayModeChanged(PlayModeStateChange state)
@@ -192,12 +178,13 @@ namespace BounJam.EditorTools
 
         static bool UnityRecorderIsRecording()
         {
+            if (!UnityRecorderApi.Installed) return false;
             if (recorderWindow == null && EditorApplication.timeSinceStartup >= nextWindowSearch)
             {
                 nextWindowSearch = EditorApplication.timeSinceStartup + 1.0;
-                recorderWindow = Resources.FindObjectsOfTypeAll<RecorderWindow>().FirstOrDefault();
+                recorderWindow = UnityRecorderApi.FindWindow();
             }
-            return recorderWindow != null && recorderWindow.IsRecording();
+            return recorderWindow != null && UnityRecorderApi.IsRecording(recorderWindow);
         }
 
         public static void StartTake(bool withRecorder)
@@ -264,19 +251,19 @@ namespace BounJam.EditorTools
             {
                 Path.Combine(Path.GetDirectoryName(Application.dataPath), "Recordings"),
             };
+            if (!UnityRecorderApi.Installed) return folders.ToList();
             // A fresh copy of what the Recorder window saved; it's ours to destroy.
-            RecorderControllerSettings saved = RecorderControllerSettings.GetGlobalSettings();
-            foreach (RecorderSettings recorder in saved.RecorderSettings)
+            ScriptableObject saved = UnityRecorderApi.LoadSettings();
+            foreach (ScriptableObject movie in UnityRecorderApi.Movies(saved))
             {
-                if (!recorder.Enabled || !(recorder is MovieRecorderSettings)) continue;
                 // Split by hand: the file name has wildcards like <Take>, which Path won't take.
-                string file = recorder.OutputFile;
+                string file = UnityRecorderApi.OutputFile(movie);
                 int slash = Math.Max(file.LastIndexOf('/'), file.LastIndexOf('\\'));
                 string folder = slash > 0 ? file.Substring(0, slash) : "";
                 // A folder named by a wildcard changes per take; the newest-file search can't follow it.
                 if (folder.Length > 0 && folder.IndexOf('<') < 0) folders.Add(Path.GetFullPath(folder));
             }
-            Discard(saved);
+            UnityRecorderApi.Discard(saved);
             return folders.ToList();
         }
 

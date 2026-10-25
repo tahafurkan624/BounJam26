@@ -157,7 +157,13 @@ namespace BounJam.EditorTools
 
         void DrawVideoOptions(FmodRecorderSettings settings)
         {
-            if (settings.start != FmodRecorderSettings.StartMode.WithUnityRecorder)
+            if (!UnityRecorderApi.Installed)
+            {
+                EditorGUILayout.HelpBox("Unity Recorder isn't installed; add com.unity.recorder in the Package Manager to " +
+                                        "record videos with their sound. Start \"When entering Play mode\" or \"Manually\" " +
+                                        "records the sound on its own.", MessageType.Warning);
+            }
+            else if (settings.start != FmodRecorderSettings.StartMode.WithUnityRecorder)
             {
                 EditorGUILayout.HelpBox("Set Start to \"With Unity Recorder takes\" to record the sound of Unity Recorder's " +
                                         "videos and add it to them.", MessageType.None);
@@ -196,7 +202,8 @@ namespace BounJam.EditorTools
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Open Unity Recorder")) FmodRecorder.OpenUnityRecorder();
+                using (new EditorGUI.DisabledScope(!UnityRecorderApi.Installed))
+                    if (GUILayout.Button("Open Unity Recorder")) FmodRecorder.OpenUnityRecorder();
                 using (new EditorGUI.DisabledScope(ffmpeg == null || FmodRecorder.IsBusy))
                     if (GUILayout.Button(new GUIContent("Add Sound to a Video…", "Pick a video, then the WAV to put in it.")))
                         PickAndCombine();
